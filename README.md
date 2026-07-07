@@ -55,6 +55,22 @@ Validated by exact double-reversal identity (LDE prescription and RMS spot value
 restore digit-for-digit) on 8+ OpticStudio sample systems, plus numeric global-
 geometry mirror-congruence checks via `-georeport`.
 
+### LayoutRender
+
+Solves a long-standing ZOS-API gap: layout windows cannot be saved as images from
+the API (see [Feature Request: Layout Window Exports](https://community.zemax.com/got-a-question-7/feature-request-layout-window-exports-2244)
+and [How do I output the image of an analysis in ZOS-API?](https://community.zemax.com/got-a-question-7/how-do-i-output-the-image-of-an-analysis-in-zos-api-1011) -
+the ZPL EXPORTJPG workaround only works in interactive mode). LayoutRender draws
+the 2D Y-Z layout headlessly and writes a PNG: surface cross-sections are sampled
+from the sag equations and mapped to global coordinates via GetGlobalMatrix
+(coordinate breaks and tilts handled naturally), lens elements are closed over
+glass gaps, and per-field colour-coded ray fans are traced with the batch ray
+tracer and terminated where rays fail. Works in extension mode against the open
+system or fully standalone for batch/scripted use.
+
+Options: `-out <path.png>`, `-rays N` (default 7), `-width W -height H`,
+`-file <path>` (headless batch mode).
+
 ## Building
 
 Requires the .NET SDK and an OpticStudio installation. `ZemaxPaths.props` (in the
