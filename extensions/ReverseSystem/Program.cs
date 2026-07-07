@@ -266,9 +266,6 @@ namespace ReverseSystem
                 var row = lde.GetSurfaceAt(i);
                 if (!IsSupported(row.Type))
                     problems.Add(F("  surface {0}: unsupported type '{1}'", i, row.TypeName));
-                string mat = (row.Material ?? "").Trim();
-                if (mat.Equals("MIRROR", StringComparison.OrdinalIgnoreCase))
-                    problems.Add(F("  surface {0}: MIRROR (reflective systems are not supported)", i));
             }
             if (sys.MCE.NumberOfConfigurations > 1)
             {
@@ -303,7 +300,7 @@ namespace ReverseSystem
             {
                 Say("Cannot reverse this system:");
                 foreach (var p in problems) Say(p);
-                Say("Supported: Standard, Coordinate Break, Even/Odd Asphere, Tilted, Paraxial; refractive only.");
+                Say("Supported: Standard, Coordinate Break, Even/Odd Asphere, Tilted, Paraxial (refractive and reflective).");
                 app.ProgressMessage = "Done. System not reversed (unsupported features).";
                 return;
             }
@@ -386,15 +383,32 @@ namespace ReverseSystem
             }
 
             // Effective medium per gap (resolves '-' continuation on CB rows).
+            // MIRROR is a SURFACE property, not a gap medium: reflection returns
+            // the ray into the incident medium, so a mirror row continues the
+            // previous medium and the MIRROR marker travels with the surface.
             var eff = new string[imgIdx + 1];
+            var isMirror = new bool[imgIdx + 1];
+            int mirrorCount = 0;
             for (int i = 0; i <= imgIdx; i++)
             {
                 string m = snaps[i].Material;
-                if (m == "-" || (snaps[i].Type == ZOSAPI.Editors.LDE.SurfaceType.CoordinateBreak && m.Length == 0))
+                isMirror[i] = m.Equals("MIRROR", StringComparison.OrdinalIgnoreCase);
+                if (isMirror[i] && i >= 1 && i < imgIdx) mirrorCount++;
+                if (m == "-" || isMirror[i] ||
+                    (snaps[i].Type == ZOSAPI.Editors.LDE.SurfaceType.CoordinateBreak && m.Length == 0))
                     eff[i] = i > 0 ? eff[i - 1] : "";
                 else
                     eff[i] = m;
             }
+            // Zemax thickness signs encode the propagation direction, which
+            // alternates with the number of reflections ALONG THE TRAVERSAL.
+            // Reversing the traversal multiplies every interior gap by
+            // (-1)^(total mirrors); virtual propagation survives automatically.
+            double mirrorSign = (mirrorCount % 2 == 1) ? -1.0 : 1.0;
+            if (mirrorCount > 0)
+                Say(F("Reflective system: {0} mirror surface(s) ({1}) - interior gap signs {2}.",
+                    mirrorCount, mirrorCount % 2 == 1 ? "odd" : "even",
+                    mirrorSign < 0 ? "flip" : "are preserved"));
 
             int oldStop = lde.StopSurface;
 
@@ -442,7 +456,10 @@ namespace ReverseSystem
             // larger beam extent, relative to the physical length of the system.
             bool objCollimated = snaps[0].Thickness > 1e10;
             bool imgCollimated = false;
-            double focusFromLast = snaps[imgIdx - 1].Thickness; // image-space focus, from last surface
+            // image-space focus as a PHYSICAL propagation distance from the last
+            // surface: after an odd number of mirrors the beam travels -z, so the
+            // signed z-coordinate must be flipped by (-1)^mirrors
+            double focusFromLast = mirrorSign * snaps[imgIdx - 1].Thickness;
             double sysLen = 0;
             for (int i = 1; i < imgIdx; i++)
                 if (Math.Abs(snaps[i].Thickness) < 1e8) sysLen += Math.Abs(snaps[i].Thickness);
@@ -464,8 +481,8 @@ namespace ReverseSystem
                     double uY = Math.Abs(nY) > 1e-14 ? mY / nY : 0;
                     double uX = Math.Abs(nX) > 1e-14 ? lX / nX : 0;
                     double lastGap = snaps[imgIdx - 1].Thickness;
-                    double focY = Math.Abs(uY) > 1e-14 ? lastGap - yI / uY : double.PositiveInfinity;
-                    double focX = Math.Abs(uX) > 1e-14 ? lastGap - xI / uX : double.PositiveInfinity;
+                    double focY = Math.Abs(uY) > 1e-14 ? mirrorSign * (lastGap - yI / uY) : double.PositiveInfinity;
+                    double focX = Math.Abs(uX) > 1e-14 ? mirrorSign * (lastGap - xI / uX) : double.PositiveInfinity;
                     bool colY = Math.Abs(focY) > collimLimit;
                     bool colX = Math.Abs(focX) > collimLimit;
                     Say("");
@@ -506,6 +523,13 @@ namespace ReverseSystem
             var newEff = new string[imgIdx];
             var srcOf = new int[imgIdx];
 
+            // EVEN mirror count (incl. refractive): reversal = conjugation by the
+            // z-mirror -> radii and sag terms negate, CB decenters and tilt-Z
+            // negate. ODD mirror count: the z-mirror alone would leave the light
+            // entering along -z, so the operator gains a 180-degree rotation and
+            // becomes conjugation by the Y-FLIP mirror -> radii/conic/aspheres
+            // are KEPT, gaps negate, and the CB rule is (-dx,+dy,+tx,-ty,+tz).
+            bool oddMirrors = mirrorSign < 0;
             for (int k = 1; k < imgIdx; k++)
             {
                 var src = snaps[imgIdx - k];
@@ -513,30 +537,46 @@ namespace ReverseSystem
                 newType[k] = src.Type;
                 newComment[k] = src.Comment;
                 newConic[k] = src.Conic;
-                newRadius[k] = (Math.Abs(src.Radius) > 1e10 || src.Radius == 0) ? src.Radius : -src.Radius;
+                newRadius[k] = (oddMirrors || Math.Abs(src.Radius) > 1e10 || src.Radius == 0) ? src.Radius : -src.Radius;
                 var pars = (double[])src.Pars.Clone();
                 switch (src.Type)
                 {
                     case ZOSAPI.Editors.LDE.SurfaceType.CoordinateBreak:
-                        pars[1] = -pars[1];          // decenter X
-                        pars[2] = -pars[2];          // decenter Y
-                        // pars[3], pars[4] (tilt X, tilt Y) unchanged
-                        pars[5] = -pars[5];          // tilt Z
+                        if (oddMirrors)
+                        {
+                            pars[1] = -pars[1];      // decenter X
+                            // pars[2] (decenter Y), pars[3] (tilt X) unchanged
+                            pars[4] = -pars[4];      // tilt Y
+                            // pars[5] (tilt Z) unchanged
+                        }
+                        else
+                        {
+                            pars[1] = -pars[1];      // decenter X
+                            pars[2] = -pars[2];      // decenter Y
+                            // pars[3], pars[4] (tilt X, tilt Y) unchanged
+                            pars[5] = -pars[5];      // tilt Z
+                        }
                         pars[6] = pars[6] == 0 ? 1 : 0; // order flag flips
                         break;
                     case ZOSAPI.Editors.LDE.SurfaceType.EvenAspheric:
                     case ZOSAPI.Editors.LDE.SurfaceType.OddAsphere:
-                        for (int p = 1; p <= 8; p++) pars[p] = -pars[p]; // sag negates
+                        if (!oddMirrors)
+                            for (int p = 1; p <= 8; p++) pars[p] = -pars[p]; // sag negates
                         break;
                     case ZOSAPI.Editors.LDE.SurfaceType.Tilted:
-                        pars[1] = -pars[1];          // x tangent
-                        pars[2] = -pars[2];          // y tangent
+                        if (oddMirrors)
+                            pars[2] = -pars[2];      // y tangent only (y-flip)
+                        else
+                        {
+                            pars[1] = -pars[1];      // x tangent
+                            pars[2] = -pars[2];      // y tangent
+                        }
                         break;
                         // Standard: nothing; Paraxial: focal length/OPD mode kept
                 }
                 newPars[k] = pars;
 
-                newThick[k] = (k <= imgIdx - 2) ? snaps[imgIdx - 1 - k].Thickness : snaps[imgIdx - 1].Thickness;
+                newThick[k] = (k <= imgIdx - 2) ? mirrorSign * snaps[imgIdx - 1 - k].Thickness : snaps[imgIdx - 1].Thickness;
                 newEff[k] = (k <= imgIdx - 2) ? eff[imgIdx - 1 - k] : eff[imgIdx - 1];
             }
             if (!Opts.KeepConjugates)
@@ -547,7 +587,8 @@ namespace ReverseSystem
                 // reversed image space <- original object space state; when the
                 // output is collimated the image plane is only an evaluation
                 // plane, so keep the existing gap for scale
-                newThick[imgIdx - 1] = objCollimated ? snaps[imgIdx - 1].Thickness : snaps[0].Thickness;
+                // the reversed image gap carries the exit-direction parity
+                newThick[imgIdx - 1] = objCollimated ? snaps[imgIdx - 1].Thickness : mirrorSign * snaps[0].Thickness;
                 Say("");
                 Say("Reversed object space  : " + (imgCollimated ? "collimated (object set to infinity)"
                     : F("point source {0:G6} before the first surface", newT0)));
@@ -625,7 +666,8 @@ namespace ReverseSystem
                     WriteAperture(row, snaps[srcOf[k]], writeErrors, k);
                     if (!isCB)
                     {
-                        string want = newEff[k];
+                        // the MIRROR marker travels with the surface geometry
+                        string want = isMirror[srcOf[k]] ? "MIRROR" : newEff[k];
                         string current = (row.Material ?? "").Trim();
                         if (!current.Equals(want, StringComparison.OrdinalIgnoreCase))
                             row.Material = want;
@@ -756,9 +798,10 @@ namespace ReverseSystem
                 if (newType[k] == ZOSAPI.Editors.LDE.SurfaceType.CoordinateBreak)
                     extra = F("  CB(dx={0:g4}, dy={1:g4}, tx={2:g4}, ty={3:g4}, tz={4:g4}, order={5:g1})",
                         newPars[k][1], newPars[k][2], newPars[k][3], newPars[k][4], newPars[k][5], newPars[k][6]);
+                string medium = isMirror[srcOf[k]] ? "MIRROR" + (newEff[k].Length == 0 ? "" : "/" + newEff[k])
+                    : (newEff[k].Length == 0 ? "(air)" : newEff[k]);
                 Say(F("  {0,3} <- {1,3}   {2,-15} {3,12}   {4,12:F4}    {5}{6}",
-                    k, srcOf[k], src.TypeName, rad, newThick[k],
-                    newEff[k].Length == 0 ? "(air)" : newEff[k], extra));
+                    k, srcOf[k], src.TypeName, rad, newThick[k], medium, extra));
             }
 
             if (writeErrors.Count > 0)

@@ -44,8 +44,15 @@ decenter X/Y and tilt-Z, keep tilt X/Y, and flip the order flag. Additionally:
   analysed separately with astigmatism detection) classify the original image space
   as collimated or converging, and the reversed object/image spaces and the
   afocal-image-space flag are set to match
-- reflective systems, unsupported surface types, and multi-configuration systems
-  with surface-referencing MCE operands are refused with explicit messages rather
+- reflective systems are fully supported: MIRROR markers travel with their
+  surfaces, interior gap signs multiply by (-1)^(mirror count), and for odd
+  mirror counts the reversal operator becomes conjugation by the y-flip mirror
+  (radii/conic/sag terms kept, coordinate-break rule (-dx,+dy,+tx,-ty,+tz)) so
+  the reversed light still enters along +z; validated by exact double-reversal
+  identity on 10 mirror systems (Cassegrains, catadioptrics, folds, off-axis
+  and Yolo telescopes, and a double-pass Mangin mirror)
+- unsupported surface types and multi-configuration systems with
+  surface-referencing MCE operands are refused with explicit messages rather
   than silently corrupted
 
 Options: `-save`, `-keepconj`, `-refocus`, `-rayaim`, `-keepaperture`,
