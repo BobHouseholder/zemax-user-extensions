@@ -321,12 +321,16 @@ namespace AthermalScan
             for (int k = 0; k < n; k++) focusShift[k] -= focus0;
 
             // ---- restore ---------------------------------------------------------
+            // measure the check BEFORE restoring the adjust-index flag so it is
+            // compared in the same index state as the baseline
             env.Temperature = t0; env.Pressure = p0;
-            env.AdjustIndexToEnvironment = adjust0;
             ApplyTemperature(sys, snaps, imgIdx, 0);
             double eflCheck = Op(sys, ZOSAPI.Editors.MFE.MeritOperandType.EFFL, 0, primaryWave);
+            env.AdjustIndexToEnvironment = adjust0;
             Say(F("Restoration check: EFFL back to {0:G9} (baseline {1:G9}) -> {2}",
                 eflCheck, efl0, Math.Abs(eflCheck - efl0) < 1e-6 ? "OK" : "MISMATCH - check the system!"));
+            if (!adjust0)
+                Say("NOTE: the file had 'Adjust Index Data To Environment' disabled; it was enabled for the scan and restored.");
 
             // ---- sweep table ------------------------------------------------------
             Say("");
