@@ -1,0 +1,13 @@
+# upstream clone of jaruiz6363/OpticStudioMCPServer - not part of this repo
+repo/
+
+# working/temp artifacts
+.tmp/
+logs/
+
+# build outputs
+**/bin/
+**/obj/
+
+# local-only session settings
+.claude/settings.local.json
