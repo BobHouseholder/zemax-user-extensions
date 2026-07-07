@@ -86,6 +86,27 @@ Options: `-dir <folder>`, `-trace` (with `-nosplit`/`-noscatter`/`-nopol`),
 `-data N` (0 flux / 1 irradiance / 2 intensity), `-nocsv`/`-nopng`/`-nonative`,
 `-file <path>` (headless batch mode).
 
+### AthermalScan
+
+One-command passive athermalization analysis, replacing the manual TEMP/PRES
+multi-configuration workflow (community threads
+[athermal design](https://community.zemax.com/got-a-question-7/athermal-design-3623),
+[groups under different temperatures](https://community.zemax.com/got-a-question-7/how-to-model-a-system-with-groups-under-different-temperatures-and-pressures-2670)).
+Applies OpticStudio's thermal model transiently (indices via the environment,
+radii/thicknesses/asphere terms expanded with the glass catalog TCE, air gaps
+with the LDE TCE mount column), sweeps temperature, fully restores the system,
+and reports: focus shift / EFFL / RMS (fixed and refocused) vs T, the
+diffraction depth of focus and fixed-plane athermal temperature range, the
+required housing CTE with a ranked table of real housing materials (including
+negative-CTE ALLVAR) and their usable ranges, an exact bimetallic mount length
+solution, a per-glass opto-thermal table (n, measured dn/dT, TCE, thermal glass
+constant x_f), approximate per-element thermal defocus shares, and a two-panel
+PNG chart. Validated against thin-lens theory on a germanium singlet
+(dz/dT = -f*x_f within 2%).
+
+Options: `-tmin/-tmax/-steps`, `-track L` (mount length), `-out <prefix>`,
+`-file <path>` (headless batch mode).
+
 ## Building
 
 Requires the .NET SDK and an OpticStudio installation. `ZemaxPaths.props` (in the
