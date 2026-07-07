@@ -27,6 +27,8 @@ namespace DetectorDump
     //                  -noscatter / -nopol given)
     //   -data N        pixel data code for CSV/PNG: 0 flux (default),
     //                  1 irradiance, 2 intensity
+    //   -log           logarithmic heatmap scale (4 decades below peak) - useful
+    //                  for high dynamic range data such as ghost/split paths
     //   -nocsv / -nopng / -nonative   switch off individual outputs
     class Options
     {
@@ -36,6 +38,7 @@ namespace DetectorDump
         public bool Split = true, Scatter = true, Pol = true;
         public int DataCode = 0;
         public bool Csv = true, Png = true, Native = true;
+        public bool Log = false;
     }
 
     class Program
@@ -72,6 +75,7 @@ namespace DetectorDump
                     case "noscatter": Opts.Scatter = false; break;
                     case "nopol": Opts.Pol = false; break;
                     case "data": if (i + 1 < args.Length) int.TryParse(args[++i], out Opts.DataCode); break;
+                    case "log": Opts.Log = true; break;
                     case "nocsv": Opts.Csv = false; break;
                     case "nopng": Opts.Png = false; break;
                     case "nonative": Opts.Native = false; break;
@@ -304,6 +308,7 @@ namespace DetectorDump
 
             int cell = Math.Max(1, 512 / Math.Max(nr, nc));
             int W = nc * cell, H = nr * cell, cap = 24;
+            double floor = peak * 1e-4; // 4 decades for the log display
             using (var bmp = new Bitmap(W, H + cap))
             using (var g = Graphics.FromImage(bmp))
             {
@@ -311,7 +316,11 @@ namespace DetectorDump
                 for (int r = 0; r < nr; r++)
                     for (int c = 0; c < nc; c++)
                     {
-                        using (var b = new SolidBrush(Lut(grid[r, c] / peak)))
+                        double v = grid[r, c];
+                        double t = Opts.Log
+                            ? (v <= floor ? 0 : Math.Log10(v / floor) / 4.0)
+                            : v / peak;
+                        using (var b = new SolidBrush(Lut(t)))
                             g.FillRectangle(b, c * cell, (nr - 1 - r) * cell, cell, cell);
                     }
                 using (var font = new Font("Segoe UI", 9f))
