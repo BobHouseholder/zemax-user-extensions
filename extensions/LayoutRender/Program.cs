@@ -183,15 +183,37 @@ namespace LayoutRender
             }
 
             // ---- surface cross-sections (local sag -> global -> Z/Y plane) -----
+            // decentered apertures (off-axis mirror sections etc.) shift and size
+            // the drawn section so elements appear where the light actually is
             foreach (var s in surfs)
             {
                 if (s.Type == ZOSAPI.Editors.LDE.SurfaceType.CoordinateBreak) continue;
-                if (!s.Frame.Valid || s.SemiDiameter < 1e-9) continue;
+                if (!s.Frame.Valid) continue;
+                double yCen = 0, yHalf = s.SemiDiameter;
+                try
+                {
+                    var ad = lde.GetSurfaceAt(s.Index).ApertureData;
+                    var st = ad.CurrentTypeSettings;
+                    switch (ad.CurrentType)
+                    {
+                        case ZOSAPI.Editors.LDE.SurfaceApertureTypes.RectangularAperture:
+                            var r = (ZOSAPI.Editors.LDE.ISurfaceApertureRectangular)st;
+                            yCen = r.ApertureYDecenter; yHalf = r.YHalfWidth; break;
+                        case ZOSAPI.Editors.LDE.SurfaceApertureTypes.CircularAperture:
+                            var c = (ZOSAPI.Editors.LDE.ISurfaceApertureCircular)st;
+                            yCen = c.ApertureYDecenter; yHalf = c.MaximumRadius; break;
+                        case ZOSAPI.Editors.LDE.SurfaceApertureTypes.EllipticalAperture:
+                            var e = (ZOSAPI.Editors.LDE.ISurfaceApertureElliptical)st;
+                            yCen = e.ApertureYDecenter; yHalf = e.YHalfWidth; break;
+                    }
+                }
+                catch { }
+                if (yHalf < 1e-9) continue;
                 var pts = new List<PointF>();
                 int nSteps = 40;
                 for (int k = 0; k <= nSteps; k++)
                 {
-                    double y = -s.SemiDiameter + 2.0 * s.SemiDiameter * k / nSteps;
+                    double y = yCen - yHalf + 2.0 * yHalf * k / nSteps;
                     double z = Sag(s, y);
                     if (double.IsNaN(z)) continue;
                     var g = s.Frame.ToGlobal(0, y, z);
@@ -290,6 +312,41 @@ namespace LayoutRender
             for (int fi = 0; fi < nf; fi++)
                 for (int r = 0; r < raysPerFan; r++)
                     if (rayPts[fi, r].Count >= 2) fans.Add((rayPts[fi, r], fi));
+
+            // ---- auto-orient: rotate so the dominant beam direction is horizontal.
+            // Reversed/folded systems anchor global coordinates to a possibly
+            // rotated first surface, which would otherwise draw the whole train
+            // diagonally. PCA over the ray points finds the principal axis.
+            var all = fans.SelectMany(f => f.pts).ToList();
+            if (all.Count > 4)
+            {
+                double mz = all.Average(p => p.X), my = all.Average(p => p.Y);
+                double szz = 0, syy = 0, szy = 0;
+                foreach (var p in all)
+                {
+                    szz += (p.X - mz) * (p.X - mz);
+                    syy += (p.Y - my) * (p.Y - my);
+                    szy += (p.X - mz) * (p.Y - my);
+                }
+                double ang = 0.5 * Math.Atan2(2 * szy, szz - syy);
+                if (Math.Abs(ang) > 0.02)
+                {
+                    float ca = (float)Math.Cos(-ang), sa = (float)Math.Sin(-ang);
+                    PointF Rot(PointF p) => new PointF(
+                        (float)(mz + (p.X - mz) * ca - (p.Y - my) * sa),
+                        (float)(my + (p.X - mz) * sa + (p.Y - my) * ca));
+                    foreach (var line in fans.Select(f => f.pts))
+                        for (int i = 0; i < line.Count; i++) line[i] = Rot(line[i]);
+                    // rotating Section also covers surfLines (same list objects);
+                    // edgeLines hold value copies and need their own pass
+                    foreach (var s in surfs)
+                        if (s.Section != null)
+                            for (int i = 0; i < s.Section.Count; i++) s.Section[i] = Rot(s.Section[i]);
+                    foreach (var line in edgeLines)
+                        for (int i = 0; i < line.Count; i++) line[i] = Rot(line[i]);
+                    Console.WriteLine(F("Auto-oriented layout by {0:F1} degrees to level the beam axis.", ang * 180 / Math.PI));
+                }
+            }
 
             // ---- render to PNG --------------------------------------------------
             string outPath = Opts.OutPath;
