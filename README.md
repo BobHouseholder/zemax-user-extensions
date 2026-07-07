@@ -71,6 +71,21 @@ system or fully standalone for batch/scripted use.
 Options: `-out <path.png>`, `-rays N` (default 7), `-width W -height H`,
 `-file <path>` (headless batch mode).
 
+### DetectorDump
+
+Batch-exports EVERY detector in a non-sequential system in one command,
+answering the recurring community ask that saving data from many detectors is
+"tedious to manually save one by one", plus the related request to save detector
+viewer graphics via the API ([thread 1534](https://community.zemax.com/zos-api-12/how-to-save-detector-viewer-graphical-plot-into-image-file-by-zos-api-1534)).
+For each detector it writes the native detector file (.DDR/.DDC/.DDP/.DDV via
+`SaveDetector`), a CSV pixel grid, and a false-colour PNG heatmap, and prints a
+summary table (pixels, total flux, peak, hit count). Optionally runs the NSC
+ray trace first.
+
+Options: `-dir <folder>`, `-trace` (with `-nosplit`/`-noscatter`/`-nopol`),
+`-data N` (0 flux / 1 irradiance / 2 intensity), `-nocsv`/`-nopng`/`-nonative`,
+`-file <path>` (headless batch mode).
+
 ## Building
 
 Requires the .NET SDK and an OpticStudio installation. `ZemaxPaths.props` (in the
