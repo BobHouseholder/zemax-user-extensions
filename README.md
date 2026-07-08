@@ -59,8 +59,10 @@ Options: `-save`, `-keepconj`, `-refocus`, `-rayaim`, `-keepaperture`,
 `-georeport`, `-file <path>` (headless batch mode), `-out <path>`.
 
 Validated by exact double-reversal identity (LDE prescription and RMS spot values
-restore digit-for-digit) on 8+ OpticStudio sample systems, plus numeric global-
-geometry mirror-congruence checks via `-georeport`.
+restore digit-for-digit) on 8 refractive coordinate-break sample systems and 10
+reflective test systems, by numeric global-geometry mirror-congruence checks via
+`-georeport`, and by loading every reversed file in the OpticStudio GUI and
+comparing its native layout against the original.
 
 ### LayoutRender
 
@@ -72,8 +74,13 @@ the 2D Y-Z layout headlessly and writes a PNG: surface cross-sections are sample
 from the sag equations and mapped to global coordinates via GetGlobalMatrix
 (coordinate breaks and tilts handled naturally), lens elements are closed over
 glass gaps, and per-field colour-coded ray fans are traced with the batch ray
-tracer and terminated where rays fail. Works in extension mode against the open
-system or fully standalone for batch/scripted use.
+tracer and terminated where rays fail. The drawing is auto-oriented: a
+principal-component fit of the traced ray points rotates the view so folded and
+tilted systems (fold mirrors, Yolo telescopes, off-axis designs) render along
+their dominant optical axis instead of a skewed Y-Z projection. Decentered
+surface apertures (circular, rectangular, elliptical) are drawn as sections at
+their true offset positions. Works in extension mode against the open system or
+fully standalone for batch/scripted use.
 
 Options: `-out <path.png>`, `-rays N` (default 7), `-width W -height H`,
 `-file <path>` (headless batch mode).
@@ -90,7 +97,9 @@ summary table (pixels, total flux, peak, hit count). Optionally runs the NSC
 ray trace first.
 
 Options: `-dir <folder>`, `-trace` (with `-nosplit`/`-noscatter`/`-nopol`),
-`-data N` (0 flux / 1 irradiance / 2 intensity), `-nocsv`/`-nopng`/`-nonative`,
+`-data N` (0 flux / 1 irradiance / 2 intensity), `-log` (logarithmic heatmap
+scale spanning four decades, for high-dynamic-range detectors where a linear
+scale hides everything but the peak), `-nocsv`/`-nopng`/`-nonative`,
 `-file <path>` (headless batch mode).
 
 ### AthermalScan
