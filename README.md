@@ -78,13 +78,16 @@ glass gaps, and per-field colour-coded ray fans are traced with the batch ray
 tracer and terminated where rays fail. The drawing is auto-oriented: a
 principal-component fit of the traced ray points rotates the view so folded and
 tilted systems (fold mirrors, Yolo telescopes, off-axis designs) render along
-their dominant optical axis instead of a skewed Y-Z projection. Decentered
+their dominant optical axis instead of a skewed Y-Z projection. Purely axial
+systems (no coordinate breaks or tilts, all vertices on the z axis) are never
+rotated — their beam axis is already level and the multi-field fan would bias
+the fit — and `-noorient` forces the rotation off entirely. Decentered
 surface apertures (circular, rectangular, elliptical) are drawn as sections at
 their true offset positions. Works in extension mode against the open system or
 fully standalone for batch/scripted use.
 
 Options: `-out <path.png>`, `-rays N` (default 7), `-width W -height H`,
-`-file <path>` (headless batch mode).
+`-noorient`, `-file <path>` (headless batch mode).
 
 ### DetectorDump
 

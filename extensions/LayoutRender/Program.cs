@@ -29,6 +29,7 @@ namespace LayoutRender
     //   -rays N           rays per fan (default 7)
     //   -width W -height H  image size in pixels (default 1400 x 900)
     //   -file <path>      standalone mode: load <path> and render it
+    //   -noorient         never auto-rotate the layout to level the beam axis
     class Options
     {
         public string FilePath = null;
@@ -36,6 +37,7 @@ namespace LayoutRender
         public int Rays = 7;
         public int Width = 1400;
         public int Height = 900;
+        public bool NoOrient = false;
     }
 
     class Program
@@ -70,6 +72,7 @@ namespace LayoutRender
                     case "rays": if (i + 1 < args.Length) int.TryParse(args[++i], out Opts.Rays); break;
                     case "width": if (i + 1 < args.Length) int.TryParse(args[++i], out Opts.Width); break;
                     case "height": if (i + 1 < args.Length) int.TryParse(args[++i], out Opts.Height); break;
+                    case "noorient": Opts.NoOrient = true; break;
                 }
             }
             if (Opts.Rays < 2) Opts.Rays = 2;
@@ -317,8 +320,11 @@ namespace LayoutRender
             // Reversed/folded systems anchor global coordinates to a possibly
             // rotated first surface, which would otherwise draw the whole train
             // diagonally. PCA over the ray points finds the principal axis.
+            // Skipped for purely axial systems: there the beam axis is already
+            // level, and the multi-field ray fan would bias the PCA into a
+            // spurious tilt.
             var all = fans.SelectMany(f => f.pts).ToList();
-            if (all.Count > 4)
+            if (!Opts.NoOrient && !IsAxialSystem(surfs) && all.Count > 4)
             {
                 double mz = all.Average(p => p.X), my = all.Average(p => p.Y);
                 double szz = 0, syy = 0, szy = 0;
@@ -360,6 +366,25 @@ namespace LayoutRender
             string title = Path.GetFileName(string.IsNullOrEmpty(sys.SystemFile) ? "(untitled)" : sys.SystemFile);
             Draw(surfLines, edgeLines, fans, outPath, title);
             Console.WriteLine("Layout written to: " + outPath);
+        }
+
+        // a system is axial when nothing bends or shifts the optical axis:
+        // no coordinate breaks or tilted surfaces, every global vertex on the
+        // z axis, and every local z axis parallel to global z
+        static bool IsAxialSystem(List<SurfInfo> surfs)
+        {
+            double posTol = 1e-6, dirTol = 1e-9;
+            foreach (var s in surfs)
+            {
+                if (s.Type == ZOSAPI.Editors.LDE.SurfaceType.CoordinateBreak ||
+                    s.Type == ZOSAPI.Editors.LDE.SurfaceType.Tilted)
+                    return false;
+                if (!s.Frame.Valid) continue;
+                posTol = Math.Max(posTol, 1e-9 * Math.Abs(s.Frame.Z));
+                if (Math.Abs(s.Frame.X) > posTol || Math.Abs(s.Frame.Y) > posTol) return false;
+                if (Math.Abs(s.Frame.R[0, 2]) > dirTol || Math.Abs(s.Frame.R[1, 2]) > dirTol) return false;
+            }
+            return true;
         }
 
         static Frame GetFrame(ZOSAPI.Editors.LDE.ILensDataEditor lde, int surf)
