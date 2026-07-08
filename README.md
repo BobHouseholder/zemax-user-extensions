@@ -24,9 +24,10 @@ Options: `-catalog NAME`, `-includeObsolete`, `-report`, `-reopt`, `-save`,
 
 ### ReverseSystem
 
-Reverses any refractive sequential system in place - including systems with
-coordinate breaks and negative-thickness virtual propagation, which the built-in
-Reverse Elements tool cannot handle (see community threads
+Reverses any sequential system in place - refractive or reflective, including
+systems with coordinate breaks, negative-thickness virtual propagation, fold
+mirrors, and double-pass Mangin elements, which the built-in Reverse Elements
+tool cannot handle (see community threads
 [How to flip the whole optical system](https://community.zemax.com/got-a-question-7/how-to-flip-the-whole-optical-system-1367),
 [Reverse elements erases materials](https://community.zemax.com/got-a-question-7/reverse-elements-erases-materials-3682)).
 
