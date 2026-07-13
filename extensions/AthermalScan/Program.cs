@@ -94,15 +94,34 @@ namespace AthermalScan
             {
                 switch (args[i].TrimStart('-', '/').ToLowerInvariant())
                 {
-                    case "tmin": if (i + 1 < args.Length) double.TryParse(args[++i], NumberStyles.Float, CultureInfo.InvariantCulture, out Opts.TMin); break;
-                    case "tmax": if (i + 1 < args.Length) double.TryParse(args[++i], NumberStyles.Float, CultureInfo.InvariantCulture, out Opts.TMax); break;
-                    case "steps": if (i + 1 < args.Length) int.TryParse(args[++i], out Opts.Steps); break;
-                    case "track": if (i + 1 < args.Length) double.TryParse(args[++i], NumberStyles.Float, CultureInfo.InvariantCulture, out Opts.Track); break;
+                    case "tmin": if (i + 1 < args.Length) Opts.TMin = ParseDouble(args[++i], Opts.TMin); break;
+                    case "tmax": if (i + 1 < args.Length) Opts.TMax = ParseDouble(args[++i], Opts.TMax); break;
+                    case "steps": if (i + 1 < args.Length) Opts.Steps = ParseInt(args[++i], Opts.Steps); break;
+                    case "track": if (i + 1 < args.Length) Opts.Track = ParseDouble(args[++i], Opts.Track); break;
                     case "out": if (i + 1 < args.Length) Opts.OutPrefix = args[++i]; break;
                     case "file": if (i + 1 < args.Length) Opts.FilePath = args[++i]; break;
                 }
             }
             if (Opts.Steps < 3) Opts.Steps = 3;
+        }
+
+        // TryParse zeroes its out parameter on failure, which would silently
+        // replace the documented defaults; keep the default instead and warn.
+        static int ParseInt(string s, int keep)
+        {
+            int v;
+            if (int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out v)) return v;
+            Console.WriteLine("WARNING: '" + s + "' is not a valid integer - keeping " + keep + ".");
+            return keep;
+        }
+
+        static double ParseDouble(string s, double keep)
+        {
+            double v;
+            if (double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out v)) return v;
+            Console.WriteLine("WARNING: '" + s + "' is not a valid number - keeping " +
+                keep.ToString(CultureInfo.InvariantCulture) + ".");
+            return keep;
         }
 
         static void Say(string s) { Console.WriteLine(s); Report.Add(s); }

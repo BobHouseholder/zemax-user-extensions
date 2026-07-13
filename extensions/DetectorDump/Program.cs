@@ -74,13 +74,23 @@ namespace DetectorDump
                     case "nosplit": Opts.Split = false; break;
                     case "noscatter": Opts.Scatter = false; break;
                     case "nopol": Opts.Pol = false; break;
-                    case "data": if (i + 1 < args.Length) int.TryParse(args[++i], out Opts.DataCode); break;
+                    case "data": if (i + 1 < args.Length) Opts.DataCode = ParseInt(args[++i], Opts.DataCode); break;
                     case "log": Opts.Log = true; break;
                     case "nocsv": Opts.Csv = false; break;
                     case "nopng": Opts.Png = false; break;
                     case "nonative": Opts.Native = false; break;
                 }
             }
+        }
+
+        // TryParse zeroes its out parameter on failure, which would silently
+        // replace the documented defaults; keep the default instead and warn.
+        static int ParseInt(string s, int keep)
+        {
+            int v;
+            if (int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out v)) return v;
+            Console.WriteLine("WARNING: '" + s + "' is not a valid integer - keeping " + keep + ".");
+            return keep;
         }
 
         static string F(string fmt, params object[] a) => string.Format(CultureInfo.InvariantCulture, fmt, a);

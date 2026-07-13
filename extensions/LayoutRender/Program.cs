@@ -67,12 +67,24 @@ namespace LayoutRender
                 {
                     case "file": if (i + 1 < args.Length) Opts.FilePath = args[++i]; break;
                     case "out": if (i + 1 < args.Length) Opts.OutPath = args[++i]; break;
-                    case "rays": if (i + 1 < args.Length) int.TryParse(args[++i], out Opts.Rays); break;
-                    case "width": if (i + 1 < args.Length) int.TryParse(args[++i], out Opts.Width); break;
-                    case "height": if (i + 1 < args.Length) int.TryParse(args[++i], out Opts.Height); break;
+                    case "rays": if (i + 1 < args.Length) Opts.Rays = ParseInt(args[++i], Opts.Rays); break;
+                    case "width": if (i + 1 < args.Length) Opts.Width = ParseInt(args[++i], Opts.Width); break;
+                    case "height": if (i + 1 < args.Length) Opts.Height = ParseInt(args[++i], Opts.Height); break;
                 }
             }
             if (Opts.Rays < 2) Opts.Rays = 2;
+            if (Opts.Width < 200) Opts.Width = 200;
+            if (Opts.Height < 200) Opts.Height = 200;
+        }
+
+        // TryParse zeroes its out parameter on failure, which would silently
+        // replace the documented defaults; keep the default instead and warn.
+        static int ParseInt(string s, int keep)
+        {
+            int v;
+            if (int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out v)) return v;
+            Console.WriteLine("WARNING: '" + s + "' is not a valid integer - keeping " + keep + ".");
+            return keep;
         }
 
         static string F(string fmt, params object[] a) => string.Format(CultureInfo.InvariantCulture, fmt, a);

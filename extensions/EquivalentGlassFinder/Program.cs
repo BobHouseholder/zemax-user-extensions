@@ -96,12 +96,31 @@ namespace EquivalentGlassFinder
                     case "report": Opts.ReportOnly = true; break;
                     case "reopt": Opts.ReOptimize = true; break;
                     case "save": Opts.SaveCopy = true; break;
-                    case "top": if (i + 1 < args.Length) int.TryParse(args[++i], out Opts.TopN); break;
-                    case "wnd": if (i + 1 < args.Length) double.TryParse(args[++i], NumberStyles.Float, CultureInfo.InvariantCulture, out Opts.WeightNd); break;
-                    case "wvd": if (i + 1 < args.Length) double.TryParse(args[++i], NumberStyles.Float, CultureInfo.InvariantCulture, out Opts.WeightVd); break;
-                    case "wpgf": if (i + 1 < args.Length) double.TryParse(args[++i], NumberStyles.Float, CultureInfo.InvariantCulture, out Opts.WeightPgF); break;
+                    case "top": if (i + 1 < args.Length) Opts.TopN = ParseInt(args[++i], Opts.TopN); break;
+                    case "wnd": if (i + 1 < args.Length) Opts.WeightNd = ParseDouble(args[++i], Opts.WeightNd); break;
+                    case "wvd": if (i + 1 < args.Length) Opts.WeightVd = ParseDouble(args[++i], Opts.WeightVd); break;
+                    case "wpgf": if (i + 1 < args.Length) Opts.WeightPgF = ParseDouble(args[++i], Opts.WeightPgF); break;
                 }
             }
+        }
+
+        // TryParse zeroes its out parameter on failure, which would silently
+        // replace the documented defaults; keep the default instead and warn.
+        static int ParseInt(string s, int keep)
+        {
+            int v;
+            if (int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out v)) return v;
+            Console.WriteLine("WARNING: '" + s + "' is not a valid integer - keeping " + keep + ".");
+            return keep;
+        }
+
+        static double ParseDouble(string s, double keep)
+        {
+            double v;
+            if (double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out v)) return v;
+            Console.WriteLine("WARNING: '" + s + "' is not a valid number - keeping " +
+                keep.ToString(CultureInfo.InvariantCulture) + ".");
+            return keep;
         }
 
         static void Say(string line)
