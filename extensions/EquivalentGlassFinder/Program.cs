@@ -29,6 +29,7 @@ namespace EquivalentGlassFinder
     //   -save             save the modified system as <file>_EquivGlass.zmx
     //   -top N            number of candidates to list per glass (default 3)
     //   -wnd/-wvd/-wpgf W distance weights (defaults 100 / 1 / 500)
+    //   -quiet            do not auto-open the report after a ribbon (GUI) run
     class Options
     {
         public string TargetCatalog = null;
@@ -40,6 +41,7 @@ namespace EquivalentGlassFinder
         public double WeightNd = 100.0;
         public double WeightVd = 1.0;
         public double WeightPgF = 500.0;
+        public bool Quiet = false;
     }
 
     class GlassInfo
@@ -100,6 +102,7 @@ namespace EquivalentGlassFinder
                     case "wnd": if (i + 1 < args.Length) Opts.WeightNd = ParseDouble(args[++i], Opts.WeightNd); break;
                     case "wvd": if (i + 1 < args.Length) Opts.WeightVd = ParseDouble(args[++i], Opts.WeightVd); break;
                     case "wpgf": if (i + 1 < args.Length) Opts.WeightPgF = ParseDouble(args[++i], Opts.WeightPgF); break;
+                    case "quiet": Opts.Quiet = true; break;
                 }
             }
         }
@@ -160,6 +163,8 @@ namespace EquivalentGlassFinder
                 return;
             }
             Say("Connected to OpticStudio (mode: " + app.Mode + ")");
+            // let the user watch the glasses swap in the LDE during the run
+            try { app.ShowChangesInUI = true; } catch { }
 
             try
             {
@@ -257,7 +262,12 @@ namespace EquivalentGlassFinder
 
                     foreach (string n in names)
                     {
-                        if (app.TerminateRequested) { Say("Cancelled by user."); return; }
+                        if (app.TerminateRequested)
+                        {
+                            Say("Cancelled by user.");
+                            app.ProgressMessage = "Done. Cancelled by user - no changes made.";
+                            return;
+                        }
                         matTool.SelectedMaterial = n;
                         var gi = new GlassInfo
                         {
@@ -344,23 +354,33 @@ namespace EquivalentGlassFinder
             {
                 Say("No replacements to apply.");
                 PrintMetrics("BEFORE (unchanged)", before, null, null, sys);
-                WriteReportFile(app, sys);
-                app.ProgressMessage = "Done. No replacements needed.";
+                string rp0 = WriteReportFile(app, sys);
+                app.ProgressMessage = "Done. No replacements needed. Report: " + ShortName(rp0);
+                OpenOutputs(app, rp0);
                 return;
             }
             if (Opts.ReportOnly)
             {
                 Say(F("Report-only mode: {0} replacement(s) suggested but NOT applied.", replacements.Count));
                 PrintMetrics("BEFORE (unchanged)", before, null, null, sys);
-                WriteReportFile(app, sys);
-                app.ProgressMessage = "Done. Report written (no changes made).";
+                string rp1 = WriteReportFile(app, sys);
+                app.ProgressMessage = F("Done. {0} replacement(s) suggested, none applied. Report: {1}",
+                    replacements.Count, ShortName(rp1));
+                OpenOutputs(app, rp1);
                 return;
             }
 
             app.ProgressPercent = 65;
             app.ProgressMessage = "Applying replacements...";
+            bool terminated = false;
             foreach (var kv in replacements)
             {
+                if (app.TerminateRequested)
+                {
+                    Say("Terminated by user - remaining replacements skipped.");
+                    terminated = true;
+                    break;
+                }
                 foreach (int surfIdx in surfacesByGlass[kv.Key])
                 {
                     try
@@ -382,7 +402,7 @@ namespace EquivalentGlassFinder
 
             // ---- optional re-optimization ------------------------------------
             Dictionary<string, double[]> reopt = null;
-            if (Opts.ReOptimize)
+            if (Opts.ReOptimize && !terminated && !app.TerminateRequested)
             {
                 app.ProgressPercent = 80;
                 app.ProgressMessage = "Re-optimizing existing variables...";
@@ -419,8 +439,27 @@ namespace EquivalentGlassFinder
                 Say("Saved modified system to: " + path);
             }
 
-            WriteReportFile(app, sys);
-            app.ProgressMessage = F("Done. Replaced {0} glass type(s).", replacements.Count);
+            string rp = WriteReportFile(app, sys);
+            app.ProgressMessage = F("Done. Replaced {0} glass type(s){1}. Report: {2}",
+                replacements.Count, terminated ? " (terminated early)" : "", ShortName(rp));
+            OpenOutputs(app, rp);
+        }
+
+        static string ShortName(string path) => string.IsNullOrEmpty(path) ? "(not written)" : Path.GetFileName(path);
+
+        // Plugin-mode (ribbon) runs lose their console the moment the process
+        // exits, so the written report is the only surviving output - open it
+        // with its default app unless -quiet.
+        static void OpenOutputs(ZOSAPI.IZOSAPI_Application app, params string[] paths)
+        {
+            if (Opts.Quiet) return;
+            try { if (app.Mode != ZOSAPI.ZOSAPI_Mode.Plugin) return; } catch { return; }
+            foreach (var p in paths)
+            {
+                if (string.IsNullOrEmpty(p) || !File.Exists(p)) continue;
+                try { System.Diagnostics.Process.Start(p); }
+                catch (Exception ex) { Console.WriteLine("WARNING: could not open " + p + ": " + ex.Message); }
+            }
         }
 
         static double Distance(GlassInfo a, GlassInfo b)
@@ -514,7 +553,7 @@ namespace EquivalentGlassFinder
             return Path.Combine(app.ZemaxDataDir, "Untitled" + suffix);
         }
 
-        static void WriteReportFile(ZOSAPI.IZOSAPI_Application app, ZOSAPI.IOpticalSystem sys)
+        static string WriteReportFile(ZOSAPI.IZOSAPI_Application app, ZOSAPI.IOpticalSystem sys)
         {
             try
             {
@@ -522,10 +561,12 @@ namespace EquivalentGlassFinder
                 File.WriteAllLines(path, Report);
                 Console.WriteLine();
                 Console.WriteLine("Report written to: " + path);
+                return path;
             }
             catch (Exception ex)
             {
                 Console.WriteLine("WARNING: could not write report file: " + ex.Message);
+                return null;
             }
         }
     }

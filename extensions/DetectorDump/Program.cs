@@ -30,6 +30,7 @@ namespace DetectorDump
     //   -log           logarithmic heatmap scale (4 decades below peak) - useful
     //                  for high dynamic range data such as ghost/split paths
     //   -nocsv / -nopng / -nonative   switch off individual outputs
+    //   -quiet         do not auto-open the summary after a ribbon (GUI) run
     class Options
     {
         public string FilePath = null;
@@ -39,6 +40,7 @@ namespace DetectorDump
         public int DataCode = 0;
         public bool Csv = true, Png = true, Native = true;
         public bool Log = false;
+        public bool Quiet = false;
     }
 
     class Program
@@ -79,6 +81,7 @@ namespace DetectorDump
                     case "nocsv": Opts.Csv = false; break;
                     case "nopng": Opts.Png = false; break;
                     case "nonative": Opts.Native = false; break;
+                    case "quiet": Opts.Quiet = true; break;
                 }
             }
         }
@@ -129,7 +132,27 @@ namespace DetectorDump
             finally
             {
                 if (standalone) app.CloseApplication();
-                else { app.ProgressPercent = 100; app.ProgressMessage = "Detector dump complete."; }
+                else
+                {
+                    app.ProgressPercent = 100;
+                    if (string.IsNullOrEmpty(app.ProgressMessage) || !app.ProgressMessage.StartsWith("Done"))
+                        app.ProgressMessage = "Detector dump complete.";
+                }
+            }
+        }
+
+        // Plugin-mode (ribbon) runs lose their console the moment the process
+        // exits, so the written files are the only surviving report - open
+        // them with their default apps unless -quiet.
+        static void OpenOutputs(ZOSAPI.IZOSAPI_Application app, params string[] paths)
+        {
+            if (Opts.Quiet) return;
+            try { if (app.Mode != ZOSAPI.ZOSAPI_Mode.Plugin) return; } catch { return; }
+            foreach (var p in paths)
+            {
+                if (string.IsNullOrEmpty(p) || !File.Exists(p)) continue;
+                try { System.Diagnostics.Process.Start(p); }
+                catch (Exception ex) { Console.WriteLine("WARNING: could not open " + p + ": " + ex.Message); }
             }
         }
 
@@ -181,6 +204,14 @@ namespace DetectorDump
 
             for (int i = 1; i <= nce.NumberOfObjects; i++)
             {
+                if (app.TerminateRequested)
+                {
+                    Console.WriteLine("Terminated by user - export is partial.");
+                    summary.Add("(terminated by user - export is partial)");
+                    break;
+                }
+                app.ProgressPercent = 10 + 85.0 * i / nce.NumberOfObjects;
+                app.ProgressMessage = F("Exporting detector object {0}/{1}...", i, nce.NumberOfObjects);
                 uint ur, uc;
                 if (!nce.GetDetectorDimensions(i, out ur, out uc)) continue;
                 int rows = (int)ur, cols = (int)uc;
@@ -256,12 +287,15 @@ namespace DetectorDump
             summary.Add(F("{0} detector(s) found, {1} with pixel data exported. Data code {2} ({3}).",
                 found, exported, Opts.DataCode,
                 Opts.DataCode == 0 ? "flux" : Opts.DataCode == 1 ? "irradiance" : "intensity"));
-            File.WriteAllLines(Path.Combine(outDir, "detectors_summary.txt"), summary);
+            string summaryPath = Path.Combine(outDir, "detectors_summary.txt");
+            File.WriteAllLines(summaryPath, summary);
 
             Console.WriteLine();
             foreach (var line in summary) Console.WriteLine(line);
             if (found == 0)
                 Console.WriteLine("NOTE: no detectors with data found. Did you run a trace? (pass -trace)");
+            app.ProgressMessage = F("Done. {0} detector(s) found, {1} exported to {2}", found, exported, outDir);
+            OpenOutputs(app, summaryPath);
         }
 
         static string Sanitize(string s)

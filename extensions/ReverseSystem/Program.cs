@@ -38,6 +38,7 @@ namespace ReverseSystem
     //   -file <path>   standalone mode: load <path>, reverse, save _Reversed copy
     //   -out <path>    standalone mode: explicit output path
     //   -keepaperture  do NOT convert the system aperture to Float By Stop Size
+    //   -quiet         do not auto-open the report after a ribbon (GUI) run
     //
     // Aperture handling: EPD / F-number / NA aperture definitions describe the
     // beam entering the ORIGINAL front of the system, so they no longer define
@@ -57,6 +58,7 @@ namespace ReverseSystem
         public bool KeepAperture = false;
         public bool GeoReport = false;
         public bool RayAim = false;
+        public bool Quiet = false;
         public string FilePath = null;   // standalone test mode
         public string OutPath = null;
     }
@@ -138,6 +140,7 @@ namespace ReverseSystem
                     case "keepaperture": Opts.KeepAperture = true; break;
                     case "georeport": Opts.GeoReport = true; break;
                     case "rayaim": Opts.RayAim = true; break;
+                    case "quiet": Opts.Quiet = true; break;
                     case "file": if (i + 1 < args.Length) Opts.FilePath = args[++i]; break;
                     case "out": if (i + 1 < args.Length) Opts.OutPath = args[++i]; break;
                 }
@@ -192,6 +195,8 @@ namespace ReverseSystem
                     return;
                 }
                 Say("Connected to OpticStudio (mode: " + app.Mode + ")");
+                // let the user watch the LDE rows rewrite during the reversal
+                try { app.ShowChangesInUI = true; } catch { }
             }
 
             try
@@ -836,8 +841,26 @@ namespace ReverseSystem
                 Say("Saved reversed system to: " + savedTo);
             }
 
-            WriteReportFile(app, sys, savedTo);
-            app.ProgressMessage = "Done. System reversed.";
+            string rp = WriteReportFile(app, sys, savedTo);
+            app.ProgressMessage = F("Done. System reversed - EFFL {0:F4} -> {1:F4}. Report: {2}",
+                before["EFFL"][0], after["EFFL"][0],
+                rp == null ? "(not written)" : Path.GetFileName(rp));
+            OpenOutputs(app, rp);
+        }
+
+        // Plugin-mode (ribbon) runs lose their console the moment the process
+        // exits, so the written report is the only surviving output - open it
+        // with its default app unless -quiet.
+        static void OpenOutputs(ZOSAPI.IZOSAPI_Application app, params string[] paths)
+        {
+            if (Opts.Quiet) return;
+            try { if (app.Mode != ZOSAPI.ZOSAPI_Mode.Plugin) return; } catch { return; }
+            foreach (var p in paths)
+            {
+                if (string.IsNullOrEmpty(p) || !File.Exists(p)) continue;
+                try { System.Diagnostics.Process.Start(p); }
+                catch (Exception ex) { Console.WriteLine("WARNING: could not open " + p + ": " + ex.Message); }
+            }
         }
 
         static IEnumerable<int> ParamsUsed(ZOSAPI.Editors.LDE.SurfaceType t)
@@ -1014,7 +1037,7 @@ namespace ReverseSystem
             Say(" reversing twice must reproduce the original values exactly.)");
         }
 
-        static void WriteReportFile(ZOSAPI.IZOSAPI_Application app, ZOSAPI.IOpticalSystem sys, string savedTo)
+        static string WriteReportFile(ZOSAPI.IZOSAPI_Application app, ZOSAPI.IOpticalSystem sys, string savedTo)
         {
             try
             {
@@ -1026,10 +1049,12 @@ namespace ReverseSystem
                 File.WriteAllLines(path, Report);
                 Console.WriteLine();
                 Console.WriteLine("Report written to: " + path);
+                return path;
             }
             catch (Exception ex)
             {
                 Console.WriteLine("WARNING: could not write report file: " + ex.Message);
+                return null;
             }
         }
     }

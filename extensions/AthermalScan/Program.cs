@@ -45,6 +45,7 @@ namespace AthermalScan
     //   -track L       housing/mount length in lens units (default: total track)
     //   -out <prefix>  output prefix for report/chart (default <lens>_athermal)
     //   -file <path>   standalone mode: load the file first
+    //   -quiet         do not auto-open report/chart after a ribbon (GUI) run
     class Options
     {
         public double TMin = -20, TMax = 60;
@@ -52,6 +53,7 @@ namespace AthermalScan
         public double Track = 0;
         public string OutPrefix = null;
         public string FilePath = null;
+        public bool Quiet = false;
     }
 
     class RowSnap
@@ -100,6 +102,7 @@ namespace AthermalScan
                     case "track": if (i + 1 < args.Length) Opts.Track = ParseDouble(args[++i], Opts.Track); break;
                     case "out": if (i + 1 < args.Length) Opts.OutPrefix = args[++i]; break;
                     case "file": if (i + 1 < args.Length) Opts.FilePath = args[++i]; break;
+                    case "quiet": Opts.Quiet = true; break;
                 }
             }
             if (Opts.Steps < 3) Opts.Steps = 3;
@@ -161,7 +164,27 @@ namespace AthermalScan
             finally
             {
                 if (standalone) app.CloseApplication();
-                else { app.ProgressPercent = 100; app.ProgressMessage = "Athermal scan complete."; }
+                else
+                {
+                    app.ProgressPercent = 100;
+                    if (string.IsNullOrEmpty(app.ProgressMessage) || !app.ProgressMessage.StartsWith("Done"))
+                        app.ProgressMessage = "Athermal scan complete.";
+                }
+            }
+        }
+
+        // Plugin-mode (ribbon) runs lose their console the moment the process
+        // exits, so the written files are the only surviving report - open
+        // them with their default apps unless -quiet.
+        static void OpenOutputs(ZOSAPI.IZOSAPI_Application app, params string[] paths)
+        {
+            if (Opts.Quiet) return;
+            try { if (app.Mode != ZOSAPI.ZOSAPI_Mode.Plugin) return; } catch { return; }
+            foreach (var p in paths)
+            {
+                if (string.IsNullOrEmpty(p) || !File.Exists(p)) continue;
+                try { System.Diagnostics.Process.Start(p); }
+                catch (Exception ex) { Console.WriteLine("WARNING: could not open " + p + ": " + ex.Message); }
             }
         }
 
@@ -305,6 +328,16 @@ namespace AthermalScan
             double focus0 = double.NaN;
             for (int k = 0; k < n; k++)
             {
+                if (app.TerminateRequested)
+                {
+                    // the sweep mutates the live prescription - restore before bailing
+                    env.Temperature = t0; env.Pressure = p0;
+                    ApplyTemperature(sys, snaps, imgIdx, 0);
+                    env.AdjustIndexToEnvironment = adjust0;
+                    Say("Terminated by user - system restored, no analysis performed.");
+                    app.ProgressMessage = "Done. Terminated by user - system restored.";
+                    return;
+                }
                 double T = Opts.TMin + (Opts.TMax - Opts.TMin) * k / (n - 1);
                 temps[k] = T;
                 app.ProgressMessage = F("Evaluating T = {0:F1} C...", T);
@@ -465,6 +498,9 @@ namespace AthermalScan
             Console.WriteLine();
             Console.WriteLine("Report written to: " + prefix + "_report.txt");
             Console.WriteLine("Chart  written to: " + prefix + "_chart.png");
+            app.ProgressMessage = F("Done. dz/dT = {0:+0.000000;-0.000000}/C, athermal +/-{1:F1} C - report: {2}",
+                slope, dtAthermal, Path.GetFileName(prefix + "_report.txt"));
+            OpenOutputs(app, prefix + "_report.txt", prefix + "_chart.png");
         }
 
         // apply the thermal model relative to the snapshot (dT = 0 restores)

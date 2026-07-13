@@ -29,6 +29,7 @@ namespace LayoutRender
     //   -rays N           rays per fan (default 7)
     //   -width W -height H  image size in pixels (default 1400 x 900)
     //   -file <path>      standalone mode: load <path> and render it
+    //   -quiet            do not auto-open the image after a ribbon (GUI) run
     class Options
     {
         public string FilePath = null;
@@ -36,6 +37,7 @@ namespace LayoutRender
         public int Rays = 7;
         public int Width = 1400;
         public int Height = 900;
+        public bool Quiet = false;
     }
 
     class Program
@@ -70,6 +72,7 @@ namespace LayoutRender
                     case "rays": if (i + 1 < args.Length) Opts.Rays = ParseInt(args[++i], Opts.Rays); break;
                     case "width": if (i + 1 < args.Length) Opts.Width = ParseInt(args[++i], Opts.Width); break;
                     case "height": if (i + 1 < args.Length) Opts.Height = ParseInt(args[++i], Opts.Height); break;
+                    case "quiet": Opts.Quiet = true; break;
                 }
             }
             if (Opts.Rays < 2) Opts.Rays = 2;
@@ -126,7 +129,27 @@ namespace LayoutRender
             finally
             {
                 if (standalone) app.CloseApplication();
-                else { app.ProgressPercent = 100; app.ProgressMessage = "Layout rendered."; }
+                else
+                {
+                    app.ProgressPercent = 100;
+                    if (string.IsNullOrEmpty(app.ProgressMessage) || !app.ProgressMessage.StartsWith("Done"))
+                        app.ProgressMessage = "Layout rendered.";
+                }
+            }
+        }
+
+        // Plugin-mode (ribbon) runs lose their console the moment the process
+        // exits, so the written files are the only surviving report - open
+        // them with their default apps unless -quiet.
+        static void OpenOutputs(ZOSAPI.IZOSAPI_Application app, params string[] paths)
+        {
+            if (Opts.Quiet) return;
+            try { if (app.Mode != ZOSAPI.ZOSAPI_Mode.Plugin) return; } catch { return; }
+            foreach (var p in paths)
+            {
+                if (string.IsNullOrEmpty(p) || !File.Exists(p)) continue;
+                try { System.Diagnostics.Process.Start(p); }
+                catch (Exception ex) { Console.WriteLine("WARNING: could not open " + p + ": " + ex.Message); }
             }
         }
 
@@ -262,6 +285,14 @@ namespace LayoutRender
 
             for (int surf = 1; surf <= imgIdx; surf++)
             {
+                if (app.TerminateRequested)
+                {
+                    Console.WriteLine("Terminated by user - no image written.");
+                    app.ProgressMessage = "Done. Terminated by user - no image written.";
+                    return;
+                }
+                app.ProgressPercent = 5 + 85.0 * surf / imgIdx;
+                app.ProgressMessage = F("Tracing rays through surface {0}/{1}...", surf, imgIdx);
                 var frame = surfs[surf - 1].Frame;
                 var trace = sys.Tools.OpenBatchRayTrace();
                 try
@@ -372,6 +403,8 @@ namespace LayoutRender
             string title = Path.GetFileName(string.IsNullOrEmpty(sys.SystemFile) ? "(untitled)" : sys.SystemFile);
             Draw(surfLines, edgeLines, fans, outPath, title);
             Console.WriteLine("Layout written to: " + outPath);
+            app.ProgressMessage = "Done. Layout written to " + Path.GetFileName(outPath);
+            OpenOutputs(app, outPath);
         }
 
         static Frame GetFrame(ZOSAPI.Editors.LDE.ILensDataEditor lde, int surf)

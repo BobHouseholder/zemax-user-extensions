@@ -7,6 +7,12 @@ and appear under **Programming > User Extensions** in the OpticStudio ribbon; th
 also be run from a shell against a session waiting in
 **Programming > Interactive Extension** mode.
 
+Ribbon (GUI) runs report progress and results through OpticStudio's extension
+progress display, honor the **Terminate** button in their long-running loops,
+and auto-open their report/image outputs when finished, since the console
+window closes with the process (pass `-quiet` to disable the auto-open).
+Tools that modify the system show their edits live in the editors.
+
 ## Extensions
 
 ### EquivalentGlassFinder
@@ -20,7 +26,7 @@ By default it replaces only obsolete glasses from the catalogs in use; pass
 `-catalog NAME` to convert an entire design to another vendor's nearest equivalents.
 
 Options: `-catalog NAME`, `-includeObsolete`, `-report`, `-reopt`, `-save`,
-`-top N`, `-wnd/-wvd/-wpgf` (distance weights).
+`-top N`, `-wnd/-wvd/-wpgf` (distance weights), `-quiet`.
 
 ### ReverseSystem
 
@@ -57,7 +63,7 @@ decenter X/Y and tilt-Z, keep tilt X/Y, and flip the order flag. Additionally:
   than silently corrupted
 
 Options: `-save`, `-keepconj`, `-refocus`, `-rayaim`, `-keepaperture`,
-`-georeport`, `-file <path>` (headless batch mode), `-out <path>`.
+`-georeport`, `-file <path>` (headless batch mode), `-out <path>`, `-quiet`.
 
 Validated by exact double-reversal identity (LDE prescription and RMS spot values
 restore digit-for-digit) on 8 refractive coordinate-break sample systems and 10
@@ -84,7 +90,7 @@ their true offset positions. Works in extension mode against the open system or
 fully standalone for batch/scripted use.
 
 Options: `-out <path.png>`, `-rays N` (default 7), `-width W -height H`,
-`-file <path>` (headless batch mode).
+`-file <path>` (headless batch mode), `-quiet`.
 
 ### DetectorDump
 
@@ -101,7 +107,7 @@ Options: `-dir <folder>`, `-trace` (with `-nosplit`/`-noscatter`/`-nopol`),
 `-data N` (0 flux / 1 irradiance / 2 intensity), `-log` (logarithmic heatmap
 scale spanning four decades, for high-dynamic-range detectors where a linear
 scale hides everything but the peak), `-nocsv`/`-nopng`/`-nonative`,
-`-file <path>` (headless batch mode).
+`-file <path>` (headless batch mode), `-quiet`.
 
 ### AthermalScan
 
@@ -122,7 +128,7 @@ PNG chart. Validated against thin-lens theory on a germanium singlet
 (dz/dT = -f*x_f within 2%).
 
 Options: `-tmin/-tmax/-steps`, `-track L` (mount length), `-out <prefix>`,
-`-file <path>` (headless batch mode).
+`-file <path>` (headless batch mode), `-quiet`.
 
 ## Building
 
