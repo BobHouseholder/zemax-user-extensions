@@ -133,6 +133,36 @@ PNG chart. Validated against thin-lens theory on a germanium singlet
 Options: `-tmin/-tmax/-steps`, `-track L` (mount length), `-out <prefix>`,
 `-file <path>` (headless batch mode), `-quiet`.
 
+### CryoGlass
+
+Generates OpticStudio glass catalogs from the NASA GSFC **CHARMS** cryogenic
+refractive-index dataset (Leviton & Frey temperature-dependent Sellmeier
+fits — absolute n(λ,T) measured to ~1e-4/1e-5 class accuracy, ~20–300 K).
+OpticStudio's catalog dn/dT model is a room-temperature-anchored
+perturbation that degrades at cryogenic temperatures; CHARMS is the measured
+ground truth there, but OpticStudio has no native support and the ZOS-API
+cannot override index computation — so CryoGlass freezes the CHARMS model at
+a working temperature T0, where it IS a three-term Sellmeier, and writes an
+`.AGF` with **exact** Sellmeier1 coefficients plus a locally-fitted Schott
+thermal model (fit error reported per glass) valid near T0. Materials so
+far: Si (1.1–5.6 µm) and Ge (1.9–5.5 µm), both 20–300 K, from the free NTRS
+full texts.
+
+A built-in self-test checks the evaluator against the papers' own published
+measured-index tables before every run and refuses on disagreement, so a
+coefficient transcription error can never silently reach a design.
+Out-of-range requests are refused by name — CHARMS stops at ~5.6 µm (LWIR is
+not covered) and below 20 K; the tool never extrapolates. Generated indices
+are ABSOLUTE (vacuum): set the system environment to the working temperature
+at 0 atm. CHARMS carries no thermal-expansion data, so TCE is written as 0
+with a warning — source it separately before AthermalScan-style analyses.
+
+Options: `-temp T` (Kelvin; pure generation, no OpticStudio needed),
+`-range T1:T2:N` (catalog set for STOP sweeps), `-materials "SI,GE"`,
+`-fitbox K`, `-out <agf>`, `-file <zmx>` (read the lens's environment
+temperature), `-selftest`, `-quiet`. Ribbon runs read the open system's
+environment temperature and generate beside the lens file.
+
 ## Building
 
 Requires the .NET SDK and an OpticStudio installation. `ZemaxPaths.props` (in the
