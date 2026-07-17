@@ -7,10 +7,14 @@ using System.Text;
 namespace CryoGlass
 {
     // Emits an OpticStudio .AGF glass catalog frozen at a working temperature
-    // T0. Because the CHARMS model at fixed T IS a three-term Sellmeier, the
-    // catalog dispersion coefficients are exact - no refit, no refit error:
+    // T0. OpticStudio interprets catalog dispersion data as RELATIVE to air
+    // at the glass reference temperature at 1 atm (verified empirically via
+    // the INDX operand: absolute coefficients read ~n_air(T0) high, ~8e-4 at
+    // 100 K). So the absolute CHARMS indices are pre-divided by OpticStudio's
+    // air model at (T0, 1 atm) and the Sellmeier1 K_i are least-squares
+    // refitted with the CHARMS resonances L_i held fixed; the worst refit
+    // error over the material's lambda range is reported per glass:
     //   Sellmeier1: n^2 - 1 = SUM K_i lambda^2 / (lambda^2 - L_i)
-    //   K_i = S_i(T0),  L_i = lambda_i(T0)^2
     //
     // A LOCAL Schott thermal model (D0,D1,D2,E0,E1; lambda_tk = 0) is least-
     // squares fitted to the TSM surface over T0 +- dT so OpticStudio's own
@@ -44,17 +48,17 @@ namespace CryoGlass
                 string name = F("{0}_{1:0}K", m.Name, t0K);
 
                 double[] td = FitSchottLocal(m, t0K, tLo, tHi, out double worstFit);
-                report.Add(F("{0}: exact Sellmeier1 at {1:0.##} K; local dn/dT fit over {2:0}-{3:0} K worst |dn|={4:0.0E+0}",
-                    name, t0K, tLo, tHi, worstFit));
+                double[] cd = ConvertRelative(m, t0K, out double worstConv);
+                report.Add(F("{0}: exact Sellmeier5 (relative-to-air at {1:0.##} K) residual |dn|={2:0.0E+0}; local dn/dT fit over {3:0}-{4:0} K worst |dn|={5:0.0E+0}",
+                    name, t0K, worstConv, tLo, tHi, worstFit));
 
                 double nMid = Tsm.Index(m, 0.5 * (m.LambdaMinUm + m.LambdaMaxUm), t0K);
-                sb.Append(F("NM {0} 2 0 {1:0.000000} 0.0 0 -1 -1 -1 -1\r\n", name, nMid));
-                sb.Append(F("GC CHARMS absolute index at {0:0.##} K; {1}; valid {2:0.###}-{3:0.###} um, fit box {4:0}-{5:0} K\r\n",
+                sb.Append(F("NM {0} 11 0 {1:0.000000} 0.0 0 -1 -1 -1 -1\r\n", name, nMid));
+                sb.Append(F("GC CHARMS index at {0:0.##} K (relative-to-air convention); {1}; valid {2:0.###}-{3:0.###} um, fit box {4:0}-{5:0} K\r\n",
                     t0K, m.Source, m.LambdaMinUm, m.LambdaMaxUm, tLo, tHi));
-                double k1 = Tsm.SAt(m, 0, t0K), l1 = Sq(Tsm.LAt(m, 0, t0K));
-                double k2 = Tsm.SAt(m, 1, t0K), l2 = Sq(Tsm.LAt(m, 1, t0K));
-                double k3 = Tsm.SAt(m, 2, t0K), l3 = Sq(Tsm.LAt(m, 2, t0K));
-                sb.Append(F("CD {0:E9} {1:E9} {2:E9} {3:E9} {4:E9} {5:E9}\r\n", k1, l1, k2, l2, k3, l3));
+                sb.Append(F("CD {0:E9} {1:E9} {2:E9} {3:E9} {4:E9} {5:E9} {6:E9} {7:E9} {8:E9} {9:E9}\r\n",
+                    cd[0], Sq(Tsm.LAt(m, 0, t0K)), cd[1], Sq(Tsm.LAt(m, 1, t0K)), cd[2], Sq(Tsm.LAt(m, 2, t0K)),
+                    cd[3], -1e-9, 0.0, 0.0));
                 sb.Append(F("TD {0:E6} {1:E6} {2:E6} {3:E6} {4:E6} {5:E6} {6:0.###}\r\n",
                     td[0], td[1], td[2], td[3], td[4], 0.0, t0K - 273.15));
                 sb.Append("ED 0.000000E+000 0.000000E+000 0 0 -\r\n");
@@ -66,6 +70,51 @@ namespace CryoGlass
         }
 
         static double Sq(double v) => v * v;
+
+        // OpticStudio's air-index model (Kohlrausch/Edlen form from the manual):
+        // lambda in um, T in Celsius, P in atm.
+        public static double NAir(double lamUm, double tC, double pAtm)
+        {
+            double s2 = 1.0 / (lamUm * lamUm);
+            double nref = 1.0 + 1e-8 * (6432.8 + 2949810.0 / (146.0 - s2) + 25540.0 / (41.0 - s2));
+            return 1.0 + (nref - 1.0) * pAtm / (1.0 + (tC - 15.0) * 3.4785e-3);
+        }
+
+        // Exact conversion of the CHARMS absolute Sellmeier to OpticStudio's
+        // relative-to-air convention. n_air is constant in lambda to ~2e-6
+        // across each material's band, so with c = n_air(mid-band, T0, 1 atm):
+        //   n_rel^2 - 1 = SUM (S_i/c^2) lam^2/(lam^2 - L_i)  +  (1 - c^2)/c^2
+        // and the constant is carried exactly by a 4th Sellmeier term with a
+        // vanishing resonance (L4 = -1e-9 => term = K4 to ~1e-12). The
+        // reported residual is the true remaining error, dominated by the
+        // lambda-dependence of n_air itself.
+        static double[] ConvertRelative(CharmsMaterial m, double t0K, out double worst)
+        {
+            double tC = t0K - 273.15;
+            double lamMid = 0.5 * (m.LambdaMinUm + m.LambdaMaxUm);
+            double c = NAir(lamMid, tC, 1.0);
+            double c2 = c * c;
+            var k = new double[4];
+            for (int i = 0; i < 3; i++) k[i] = Tsm.SAt(m, i, t0K) / c2;
+            k[3] = (1.0 - c2) / c2;
+
+            var l2s = new double[3];
+            for (int i = 0; i < 3; i++) l2s[i] = Sq(Tsm.LAt(m, i, t0K));
+            worst = 0;
+            for (int p = 0; p <= 60; p++)
+            {
+                double lam = m.LambdaMinUm + (m.LambdaMaxUm - m.LambdaMinUm) * p / 60.0;
+                double lam2 = lam * lam;
+                double sum = k[3] * lam2 / (lam2 + 1e-9);
+                for (int i = 0; i < 3; i++) sum += k[i] * lam2 / (lam2 - l2s[i]);
+                double nModel = Math.Sqrt(1.0 + sum);
+                double nTrue = Tsm.Index(m, lam, t0K) / NAir(lam, tC, 1.0);
+                worst = Math.Max(worst, Math.Abs(nModel - nTrue));
+            }
+            return k;
+        }
+
+
 
         // Least-squares fit of the Schott thermal model to the TSM surface:
         //   dn_abs(lambda, dT) = (n0^2-1)/(2 n0) * [D0 dT + D1 dT^2 + D2 dT^3
