@@ -157,6 +157,10 @@ are ABSOLUTE (vacuum): set the system environment to the working temperature
 at 0 atm. CHARMS carries no thermal-expansion data, so TCE is written as 0
 with a warning — source it separately before AthermalScan-style analyses.
 
+Validated against the source papers' full published tables, H.H. Li 1980,
+OpticStudio's built-in infrared catalog, and the traced index across
+50-295 K - see [extensions/CryoGlass/VALIDATION.md](extensions/CryoGlass/VALIDATION.md).
+
 Options: `-temp T` (Kelvin; pure generation, no OpticStudio needed),
 `-range T1:T2:N` (catalog set for STOP sweeps), `-materials "SI,GE"`,
 `-fitbox K`, `-out <agf>`, `-file <zmx>` (read the lens's environment
