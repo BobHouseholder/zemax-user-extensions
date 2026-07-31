@@ -114,13 +114,13 @@ scale hides everything but the peak), `-nocsv`/`-nopng`/`-nonative`,
 
 ### AthermalScan
 
-One-command passive athermalization analysis, replacing the manual TEMP/PRES
-multi-configuration workflow (community threads
-[athermal design](https://community.zemax.com/got-a-question-7/athermal-design-3623),
-[groups under different temperatures](https://community.zemax.com/got-a-question-7/how-to-model-a-system-with-groups-under-different-temperatures-and-pressures-2670)).
+One-command passive athermalization analysis for a uniform-environment system,
+replacing the manual TEMP/PRES multi-configuration setup (community thread
+[athermal design](https://community.zemax.com/got-a-question-7/athermal-design-3623)).
 Applies OpticStudio's thermal model transiently (indices via the environment,
 radii/thicknesses/asphere terms expanded with the glass catalog TCE, air gaps
-with the LDE TCE mount column), sweeps temperature, fully restores the system,
+with the LDE TCE mount column), sweeps temperature — optionally with pressure,
+for an altitude or vacuum soak — fully restores the system including on error,
 and reports: focus shift / EFFL / RMS (fixed and refocused) vs T, the
 diffraction depth of focus and fixed-plane athermal temperature range, the
 required housing CTE with a ranked table of real housing materials (including
@@ -130,8 +130,38 @@ constant x_f), approximate per-element thermal defocus shares, and a two-panel
 PNG chart. Validated against thin-lens theory on a germanium singlet
 (dz/dT = -f*x_f within 2%).
 
-Options: `-tmin/-tmax/-steps`, `-track L` (mount length), `-out <prefix>`,
-`-file <path>` (headless batch mode), `-quiet`.
+**Index convention.** OpticStudio always traces *relative* index — air at the
+system temperature and pressure is exactly 1.0 — so the system pressure alone
+decides whether the reported n, dn/dT and x_f are relative-to-air or absolute
+(vacuum). The difference in dn/dT is n·|dn_air/dT|, ~1.4e-6/K at n = 1.5 and
+1 atm, which is the whole value for a low-dn/dT crown and can flip the sign of
+x_f. The convention in force is printed in the report; `-vacuum` / `-pressure`
+/ `-psweep` select it explicitly, and the pressure term in the focus shift is
+reported separately from dz/dT. Absolute-index catalogs such as those written
+by CryoGlass need `-vacuum`.
+
+**Refuses rather than guessing** when the environment isn't the scan's to own:
+`TEMP`/`PRES` operands in the multi-configuration editor (those govern every
+operand after them, even in a single configuration, so a group would keep its
+own pressure and index reference); value-computing solves on the radii,
+thicknesses or parameters it must write (a marginal ray height solve on the
+last thickness auto-refocuses and would report a focus shift of zero — pass
+`-freezesolves` to freeze them instead); and a file with *Adjust Index Data To
+Environment* switched off, where OpticStudio pins index data to 20 °C / 1 atm
+and the stored temperature and pressure are not the design environment — pass
+`-temp0` (and `-pressure`) to declare it.
+
+**Known model gap.** Non-glass thicknesses are scaled at the centre. Make
+Thermal's pickup solves instead expand along the *edge* thickness, using the
+mechanical semi-diameters plus a radial mount and contact-point model, so even
+a TCE of 0 moves an air gap when the adjacent radii change. Semi-diameters and
+non-asphere length parameters (toroidal/biconic radii, Zernike normalisation
+radii) are not expanded either. Expect a difference on steeply curved elements
+and on gaps whose TCE column is 0.
+
+Options: `-tmin/-tmax/-steps`, `-track L` (mount length), `-pressure P`,
+`-vacuum`, `-psweep P1:P2` (paired T/P soak), `-temp0 T`, `-freezesolves`,
+`-out <prefix>`, `-file <path>` (headless batch mode), `-quiet`.
 
 ### CryoGlass
 
