@@ -217,7 +217,17 @@ namespace AthermalScan
             return keep;
         }
 
-        static void Say(string s) { Console.WriteLine(s); Report.Add(s); }
+        static readonly Results R = new Results();
+
+        static void Say(string s)
+        {
+            Console.WriteLine(s);
+            Report.Add(s);
+            // Every caution the scan raises already goes through here, so collect them
+            // once rather than remembering to add each new one to the structured output.
+            if (s.StartsWith("WARNING", StringComparison.Ordinal) ||
+                s.StartsWith("NOTE:", StringComparison.Ordinal)) R.Warnings.Add(s);
+        }
         static string F(string fmt, params object[] a) => string.Format(CultureInfo.InvariantCulture, fmt, a);
 
         static void Run()
@@ -376,6 +386,11 @@ namespace AthermalScan
             double pEnd = Opts.PressureEnd ?? pStart;
             bool pVaries = Math.Abs(pEnd - pStart) > 1e-12;
             bool pShifted = Math.Abs(pStart - p0) > 1e-12 || pVaries;
+
+            R.LensFile = sys.SystemFile ?? "";
+            R.DesignTempC = t0; R.DesignPressAtm = p0; R.AdjustIndexWasOn = adjust0;
+            R.ScanPressStart = pStart; R.ScanPressEnd = pEnd;
+            R.TMin = Opts.TMin; R.TMax = Opts.TMax; R.Steps = Opts.Steps;
 
             Say(F("Design environment: {0:F1} C, {1:F3} atm", t0, p0));
             Say(F("Scan              : {0:F0}..{1:F0} C, {2} steps, {3}",
@@ -585,6 +600,8 @@ namespace AthermalScan
                     efl0, wfno, totr, track));
                 Say(F("Diffraction depth of focus: +/- {0:F4} lens units  (2*lambda*N^2, lambda={1:F4} um)",
                     dofMm, lambdaUm));
+                R.Efl0 = efl0; R.Wfno = wfno; R.TotalTrack = totr;
+                R.MountTrack = track; R.DofMm = dofMm; R.LambdaUm = lambdaUm;
 
                 for (int k = 0; k < n; k++)
                 {
@@ -666,6 +683,12 @@ namespace AthermalScan
                 return;
             }
 
+            R.Temps = temps; R.Press = press; R.FocusShift = focusShift;
+            R.RmsFixed = rmsFixed; R.RmsRefoc = rmsRefoc; R.Efl = efl;
+            R.PressureTerms = pressureTerms;
+            R.EflCheck = eflCheck;
+            R.EdgeFallbackSurfaces = EdgeFallbackRows.OrderBy(i => i).ToList();
+
             Say(F("Restoration check: EFFL back to {0:G9} (baseline {1:G9}) -> {2}",
                 eflCheck, efl0, Math.Abs(eflCheck - efl0) < 1e-6 ? "OK" : "MISMATCH - check the system!"));
             if (EdgeFallbackRows.Count > 0)
@@ -711,7 +734,9 @@ namespace AthermalScan
             Say(F("Fixed-plane athermal range: +/- {0:F1} C about the design temperature (defocus within the DOF)",
                 dtAthermal));
 
+            R.DzDt = slope; R.AthermalRangeC = dtAthermal;
             double alphaReq = slope / track * 1e6; // required housing CTE in 1e-6/K
+            R.RequiredCte = alphaReq;
             Say("");
             Say(F("PASSIVE HOUSING COMPENSATION over mount track L = {0:F3}:", track));
             Say(F("  required housing CTE = dz/dT / L = {0:+0.00;-0.00} x 1e-6/K", alphaReq));
@@ -726,6 +751,7 @@ namespace AthermalScan
                 double resid = slope - h.Cte * 1e-6 * track;
                 double range = Math.Abs(resid) > 1e-12 ? dofMm / Math.Abs(resid) : double.PositiveInfinity;
                 Say(F("  {0,-18}   {1,8:F1}      {2,12:+0.000000;-0.000000}    {3,8:F1} C", h.Name, h.Cte, resid, range));
+                R.Housings.Add(new Results.HousingRow { Name = h.Name, Cte = h.Cte, ResidualDzDt = resid, UsableRangeC = range });
             }
 
             // exact bimetallic solution using the two materials bracketing alphaReq
@@ -738,6 +764,7 @@ namespace AthermalScan
                 double L2 = track * (alphaReq - a.Cte) / (b.Cte - a.Cte);
                 double L1 = track - L2;
                 Say("");
+                R.Bimetallic = F("{0:F3} of {1} + {2:F3} of {3} (total {4:F3})", L1, a.Name, L2, b.Name, track);
                 Say(F("  exact bimetallic mount: {0:F3} of {1} + {2:F3} of {3} (total {4:F3})",
                     L1, a.Name, L2, b.Name, track));
             }
@@ -772,6 +799,8 @@ namespace AthermalScan
                 double nT0 = nMin + (nMax - nMin) * (t0 - Opts.TMin) / (Opts.TMax - Opts.TMin);
                 double x = dndt / (nT0 - 1) - glassTce[g];
                 xf[g] = x;
+                R.Glasses.Add(new Results.GlassRow { Name = g, NAtT0 = nT0, DnDt = dndt, Tce = glassTce[g], Xf = x,
+                    NoThermalIndexData = noThermalIndex.Contains(g) });
                 Say(F("  {0,-12}  {1,7:F5}   {2,10:F2}     {3,8:F2}     {4,10:+0.00;-0.00}{5}",
                     g, nT0, dndt, glassTce[g], x,
                     noThermalIndex.Contains(g) ? "   <- no thermal index data: not physical" : ""));
@@ -803,8 +832,12 @@ namespace AthermalScan
             }
             double totalC = contrib.Sum(c => Math.Abs(c.val)) + 1e-30;
             foreach (var c in contrib.OrderByDescending(c => Math.Abs(c.val)))
+            {
                 Say(F("  {0,-28}  weight*x_f = {1,8:+0.00;-0.00}   ({2,5:F1}% of total magnitude)",
                     c.label, c.val, 100.0 * Math.Abs(c.val) / totalC));
+                R.Contributions.Add(new Results.ContribRow
+                { Label = c.label, WeightedXf = c.val, PercentOfTotal = 100.0 * Math.Abs(c.val) / totalC });
+            }
 
             // ---- outputs -----------------------------------------------------------
             string prefix = Opts.OutPrefix;
@@ -815,15 +848,32 @@ namespace AthermalScan
                     ? Path.Combine(app.ZemaxDataDir, "athermal")
                     : Path.Combine(Path.GetDirectoryName(src), Path.GetFileNameWithoutExtension(src) + "_athermal");
             }
+            if (string.IsNullOrEmpty(R.LensFile)) R.LensFile = Opts.FilePath ?? "";
             File.WriteAllLines(prefix + "_report.txt", Report);
             Chart(temps, focusShift, rmsFixed, rmsRefoc, dofMm, prefix + "_chart.png",
                 Path.GetFileName(sys.SystemFile ?? ""));
+            // The HTML report is the one meant to be read - the chart is inline SVG, so
+            // it is a single file that scales and prints. The CSV and JSON are for
+            // diffing runs against each other, which the text transcript cannot support.
+            try { Reports.WriteHtml(prefix + "_report.html", R); }
+            catch (Exception ex) { Console.WriteLine("WARNING: could not write the HTML report: " + ex.Message); }
+            try { Reports.WriteCsv(prefix + "_sweep.csv", R); }
+            catch (Exception ex) { Console.WriteLine("WARNING: could not write the CSV: " + ex.Message); }
+            try { Reports.WriteJson(prefix + "_summary.json", R); }
+            catch (Exception ex) { Console.WriteLine("WARNING: could not write the JSON summary: " + ex.Message); }
             Console.WriteLine();
-            Console.WriteLine("Report written to: " + prefix + "_report.txt");
+            Console.WriteLine("Report written to: " + prefix + "_report.html");
+            Console.WriteLine("             and: " + prefix + "_report.txt");
+            Console.WriteLine("Sweep  written to: " + prefix + "_sweep.csv");
+            Console.WriteLine("Summary written to: " + prefix + "_summary.json");
             Console.WriteLine("Chart  written to: " + prefix + "_chart.png");
-            app.ProgressMessage = F("Done. dz/dT = {0:+0.000000;-0.000000}/C, athermal +/-{1:F1} C - report: {2}",
-                slope, dtAthermal, Path.GetFileName(prefix + "_report.txt"));
-            OpenOutputs(app, prefix + "_report.txt", prefix + "_chart.png");
+            // The progress line is the only text that survives in the GUI after a ribbon
+            // run, so it names the file actually worth opening.
+            app.ProgressMessage = F("Done. dz/dT = {0:+0.000000;-0.000000}/C, athermal +/-{1:F1} C, {2} - report: {3} (+ .txt, .csv, .json, .png)",
+                slope, dtAthermal, Convention(pStart), Path.GetFileName(prefix + "_report.html"));
+            // Only the HTML is opened: it already contains the chart, so opening the PNG
+            // as well would just put a second window in front of the user.
+            OpenOutputs(app, prefix + "_report.html");
         }
 
         // Which index reference the reported numbers are in. OpticStudio always traces

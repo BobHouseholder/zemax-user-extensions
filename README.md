@@ -180,6 +180,15 @@ Zernike normalisation radii) are not scaled. A gap bounded by a surface whose
 sag the tool cannot evaluate falls back to centre scaling and is named in the
 report rather than silently differing.
 
+**Outputs.** `_report.html` is the one to read — self-contained, chart as inline
+SVG so it scales and prints, warnings as callouts, index convention as a header
+badge — and it is the only file auto-opened after a ribbon run. `_sweep.csv`
+(one row per temperature, full round-trip precision) and `_summary.json`
+(everything else: environments, dz/dT, pressure terms, per-glass and housing
+tables, restoration check, warnings) exist so runs can be diffed against each
+other; the text transcript never supported that. `_report.txt` and `_chart.png`
+are still written for anything that already consumed them.
+
 **Ribbon runs get a settings window.** OpticStudio launches a user extension with
 no command line and offers no way to supply one, so with no arguments in Plugin
 mode AthermalScan asks: sweep range and steps, the design temperature and
