@@ -1,6 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <PropertyGroup>
-    <ZEMAX_ROOT>C:\Program Files\Ansys Zemax OpticStudio 2026 R1.01\</ZEMAX_ROOT>
+  <!--
+    Where the ZOSAPI assemblies live. A command line or environment override wins
+    (dotnet build -p:ZEMAX_ROOT="C:\...\"); otherwise the first candidate that
+    actually contains ZOSAPI.dll is used, newest first. Pinning a single version
+    here silently breaks every project on a machine with any other release
+    installed - the reference fails to resolve and the build dies in CS0246.
+  -->
+  <PropertyGroup Condition="'$(ZEMAX_ROOT)' == ''">
+    <ZEMAX_ROOT Condition="Exists('C:\Program Files\Ansys Zemax OpticStudio 2026 R1.01\ZOSAPI.dll')">C:\Program Files\Ansys Zemax OpticStudio 2026 R1.01\</ZEMAX_ROOT>
+    <ZEMAX_ROOT Condition="'$(ZEMAX_ROOT)' == '' And Exists('C:\Program Files\Ansys Zemax OpticStudio 2026 R1.00\ZOSAPI.dll')">C:\Program Files\Ansys Zemax OpticStudio 2026 R1.00\</ZEMAX_ROOT>
+    <ZEMAX_ROOT Condition="'$(ZEMAX_ROOT)' == '' And Exists('C:\Program Files\Ansys Zemax OpticStudio 2025 R2.00\ZOSAPI.dll')">C:\Program Files\Ansys Zemax OpticStudio 2025 R2.00\</ZEMAX_ROOT>
+    <ZEMAX_ROOT Condition="'$(ZEMAX_ROOT)' == '' And Exists('C:\Program Files\Zemax OpticStudio\ZOSAPI.dll')">C:\Program Files\Zemax OpticStudio\</ZEMAX_ROOT>
   </PropertyGroup>
+
+  <Target Name="_CheckZemaxRoot" BeforeTargets="ResolveAssemblyReferences"
+          Condition="!Exists('$(ZEMAX_ROOT)ZOSAPI.dll')">
+    <Error Text="ZOSAPI.dll not found under ZEMAX_ROOT='$(ZEMAX_ROOT)'. Add your install directory to ZemaxPaths.props, or build with -p:ZEMAX_ROOT=&quot;C:\Path\To\OpticStudio\&quot;." />
+  </Target>
 </Project>
