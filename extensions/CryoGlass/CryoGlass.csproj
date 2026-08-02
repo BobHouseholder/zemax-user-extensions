@@ -28,4 +28,8 @@
       <Private>true</Private>
     </Reference>
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../Shared/ZemaxLocator.cs" />
+  </ItemGroup>
+
 </Project>

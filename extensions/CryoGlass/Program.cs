@@ -67,7 +67,7 @@ namespace CryoGlass
                     RunStandalone();
                     return;
                 }
-                if (!ZOSAPI_NetHelper.ZOSAPI_Initializer.Initialize())
+                if (!ZemaxLocator.Initialize())
                 {
                     Console.WriteLine("FATAL: failed to locate an OpticStudio installation.");
                     Environment.ExitCode = 1;

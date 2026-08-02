@@ -66,7 +66,7 @@ namespace EquivalentGlassFinder
         {
             ParseArgs(args);
 
-            bool isInitialized = ZOSAPI_NetHelper.ZOSAPI_Initializer.Initialize();
+            bool isInitialized = ZemaxLocator.Initialize();
             if (!isInitialized)
             {
                 Console.WriteLine("FATAL: failed to locate an OpticStudio installation.");

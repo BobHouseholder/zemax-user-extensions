@@ -107,7 +107,7 @@ namespace AthermalScan
         static void Main(string[] args)
         {
             ParseArgs(args);
-            if (!ZOSAPI_NetHelper.ZOSAPI_Initializer.Initialize())
+            if (!ZemaxLocator.Initialize())
             {
                 Console.WriteLine("FATAL: failed to locate an OpticStudio installation.");
                 Environment.ExitCode = 1;
