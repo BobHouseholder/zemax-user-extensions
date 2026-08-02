@@ -155,14 +155,24 @@ Environment* switched off, where OpticStudio pins index data to 20 °C / 1 atm
 and the stored temperature and pressure are not the design environment — pass
 `-temp0` (and `-pressure`) to declare it.
 
-**Non-glass gaps expand along the edge**, as Make Thermal's pickup solves do
-(manual §2.1.1.4.4.2): the spacer runs from one rim to the next, the contact
-point walks radially as spacer and lens rim expand at different rates (clamped
-to the lens mechanical semi-diameter so the mount can never bear on air), and
-the result is transferred back onto the centre thickness. A TCE of 0 therefore
-still moves a gap when the adjacent radii move — on the Cooke triplet, whose air
-gaps carry TCE 0, this shifts dz/dT by 4.6% and the required housing CTE from
-4.32 to 4.52e-6/K against naive centre scaling.
+**Non-glass gaps expand along the edge**, matching Make Thermal's pickup solves
+exactly. The edge length runs from the rim of one surface to the rim of the
+next, expands with the mount TCE, and is transferred back onto the centre
+thickness — so the sag change of both bounding surfaces feeds into the gap and a
+TCE of 0 still moves a gap when the adjacent radii move.
+
+Two details are taken from measurement rather than from manual §2.1.1.4.4.2,
+which is wrong about both. The edge is measured at the **clear** semi-diameter,
+not the mechanical one — changing a mechanical semi-diameter from 14 to 20 with
+the clear one held at 12 moves OpticStudio's answer by exactly nothing. And
+there is **no contact-point walk**: the manual describes the mount contact point
+migrating radially with a clamp to keep it on the lens, but modelling that
+leaves a ~0.85 µm residual, while evaluating both sags at the same unexpanded
+height reproduces OpticStudio to the last displayed digit.
+
+Verified against `TEMP` + thermal-pickup ground truth on a two-singlet system at
+ΔT = 50 K, across curved/plano faces, mount TCE 23.6 and 0, and two mechanical
+semi-diameters — air gaps agree to all 14 significant figures in every case.
 
 Still short of Make Thermal: semi-diameters are not expanded, and length
 parameters outside the even/odd asphere terms (toroidal and biconic radii,

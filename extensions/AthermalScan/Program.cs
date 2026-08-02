@@ -98,6 +98,7 @@ namespace AthermalScan
         public double? Temp0 = null;         // declared design temperature, C
         public double? Press0 = null;        // declared design pressure, atm
         public bool FreezeSolves = false;
+        public double? DumpAt = null;        // -dump T: print the expanded prescription and stop
         public bool NoArgs = true;           // launched with no command line at all
         public bool NoDialog = false;        // -nodialog: never put up the settings window
         public bool ForceDialog = false;     // -dialog: put it up even outside Plugin mode
@@ -106,7 +107,8 @@ namespace AthermalScan
     class RowSnap
     {
         public double Radius, Thickness, Conic;
-        public double MechSemiDia;   // mechanical semi-diameter: where a mount touches
+        public double SemiDia;       // clear semi-diameter: where the edge is measured
+        public double MechSemiDia;   // mechanical semi-diameter (fallback only)
         public double[] Pars = new double[9];
         public ZOSAPI.Editors.LDE.SurfaceType Type;
         public string Material = "";
@@ -157,6 +159,7 @@ namespace AthermalScan
                     case "temp0": if (i + 1 < args.Length) Opts.Temp0 = ParseDouble(args[++i], 20.0); break;
                     case "press0": if (i + 1 < args.Length) Opts.Press0 = ParseDouble(args[++i], 1.0); break;
                     case "freezesolves": Opts.FreezeSolves = true; break;
+                    case "dump": if (i + 1 < args.Length) Opts.DumpAt = ParseDouble(args[++i], 20.0); break;
                     case "nodialog": Opts.NoDialog = true; break;
                     case "dialog": Opts.ForceDialog = true; break;
                     case "out": if (i + 1 < args.Length) Opts.OutPrefix = args[++i]; break;
@@ -405,8 +408,9 @@ namespace AthermalScan
                 try { s.Radius = row.Radius; } catch { s.Radius = double.PositiveInfinity; }
                 s.Thickness = row.Thickness;
                 try { s.Conic = row.Conic; } catch { s.Conic = 0; }
-                // The nominal contact radius for the edge-thickness model. Taken from
-                // the snapshot, so it stays the as-built value while the sweep runs.
+                // The radius the edge thickness is measured at. Taken from the
+                // snapshot, so it stays the as-built value while the sweep runs.
+                try { s.SemiDia = row.SemiDiameter; } catch { s.SemiDia = 0; }
                 try { s.MechSemiDia = row.MechanicalSemiDiameter; } catch { s.MechSemiDia = 0; }
                 string mat = (row.Material ?? "").Trim();
                 s.Material = mat;
@@ -504,6 +508,39 @@ namespace AthermalScan
                     s.AlphaRadius = (i > 0 && snaps[i - 1] != null && snaps[i - 1].IsGlass)
                         ? glassTce[snaps[i - 1].Material] : mount;
                 }
+            }
+
+            // ---- -dump: expanded prescription at one temperature, then stop ------
+            // Exists so the thermal model can be checked surface by surface against
+            // OpticStudio's own thermal pickup solves, which is the only external
+            // ground truth for the geometry side of this tool.
+            if (Opts.DumpAt.HasValue)
+            {
+                double td = Opts.DumpAt.Value;
+                env.AdjustIndexToEnvironment = true;
+                try
+                {
+                    env.Temperature = t0; env.Pressure = p0;
+                    ApplyTemperature(sys, snaps, imgIdx, td - t0);
+                    env.Temperature = td;
+                    Say(F("PRESCRIPTION AT {0:F4} C  (dT = {1:+0.####;-0.####} from the design point)", td, td - t0));
+                    Say("  surf                radius             thickness   material");
+                    for (int i = 1; i < imgIdx; i++)
+                    {
+                        var row = lde.GetSurfaceAt(i);
+                        double r;
+                        try { r = row.Radius; } catch { r = double.PositiveInfinity; }
+                        Say(F("  {0,4}   {1,20:G14}   {2,18:G14}   {3}", i, r, row.Thickness, snaps[i - 1].Material));
+                    }
+                    if (EdgeFallbackRows.Count > 0)
+                        Say("  (centre-scaled fallback on surface(s) " +
+                            string.Join(", ", EdgeFallbackRows.OrderBy(r => r)) + ")");
+                }
+                finally
+                {
+                    RestoreSystem(sys, env, snaps, imgIdx, t0, p0, tRaw, pRaw, adjust0, primaryWave);
+                }
+                return;
             }
 
             // ---- the sweep -------------------------------------------------------
@@ -916,10 +953,24 @@ namespace AthermalScan
         //
         //   * the sag change of both bounding surfaces feeds into the gap, so even a
         //     TCE of 0 moves an air space when the adjacent radii move - the manual
-        //     is explicit that a 0 TCE is not the way to freeze a thickness;
-        //   * the spacer and the lens rim expand at different rates, so the contact
-        //     point walks radially. OpticStudio clamps it to the lens mechanical
-        //     semi-diameter so the mount can never bear on thin air.
+        //     is explicit that a 0 TCE is not the way to freeze a thickness.
+        //
+        // Two details here are measured against Make Thermal's own pickup solves
+        // rather than taken from the manual, because the manual's account of them
+        // does not survive contact with the numbers:
+        //
+        //   * the edge is measured at the CLEAR semi-diameter, not the mechanical
+        //     one. The manual says "the mechanical semi diameters for each surface
+        //     are what determine this edge thickness", but changing a mechanical
+        //     semi-diameter from 14 to 20 with the clear semi-diameter held at 12
+        //     moves OpticStudio's answer by exactly nothing;
+        //   * there is NO contact-point walk. The manual describes the mount and
+        //     rim expanding at different rates so the contact point migrates
+        //     radially, with a clamp to keep it on the lens. Modelling that walk
+        //     leaves a residual of ~0.85 um on the test gap; evaluating both sags
+        //     at the same unexpanded height reproduces OpticStudio to ~0.02 um
+        //     across curved/plano and TCE 23.6/0 variants. Whatever the walk is
+        //     for, it does not show up in a THIC thermal pickup.
         //
         // Sag is evaluated on the snapshot, analytically, for the surface forms this
         // tool already expands (standard/conic, even and odd asphere). Anything else
@@ -929,17 +980,10 @@ namespace AthermalScan
             ok = false;
             var s = snaps[i - 1];
             RowSnap next = i <= imgIdx - 2 ? snaps[i] : null;   // null => the image plane
-            double h0 = s.MechSemiDia;
+            double h0 = s.SemiDia > 0 ? s.SemiDia : s.MechSemiDia;
             if (!(h0 > 0) || double.IsNaN(h0) || double.IsInfinity(h0)) return 0;
 
             double aMount = s.AlphaThick;    // the spacer / mount material
-            double aLens = s.AlphaRadius;    // the glass this rim belongs to, if any
-
-            // Contact radius: the mount expands radially, but never past the rim.
-            // Compare the radii themselves, not the coefficients - which of the two
-            // is smaller swaps over when dT changes sign.
-            double h = Math.Min(h0 * (1 + aMount * 1e-6 * dT), h0 * (1 + aLens * 1e-6 * dT));
-            if (!(h > 0)) return 0;
 
             // the image plane closes the last gap and is treated as flat
             bool o1, o3, o2 = true, o4 = true;
@@ -948,8 +992,8 @@ namespace AthermalScan
 
             double eRa = 1 + s.AlphaRadius * 1e-6 * dT;
             double eRb = next == null ? 1 : 1 + next.AlphaRadius * 1e-6 * dT;
-            double zA1 = Sag(s, h, eRa, out o3);
-            double zB1 = next == null ? 0 : Sag(next, h, eRb, out o4);
+            double zA1 = Sag(s, h0, eRa, out o3);
+            double zB1 = next == null ? 0 : Sag(next, h0, eRb, out o4);
 
             if (!(o1 && o2 && o3 && o4)) return 0;
 
