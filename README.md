@@ -151,13 +151,20 @@ Environment* switched off, where OpticStudio pins index data to 20 °C / 1 atm
 and the stored temperature and pressure are not the design environment — pass
 `-temp0` (and `-pressure`) to declare it.
 
-**Known model gap.** Non-glass thicknesses are scaled at the centre. Make
-Thermal's pickup solves instead expand along the *edge* thickness, using the
-mechanical semi-diameters plus a radial mount and contact-point model, so even
-a TCE of 0 moves an air gap when the adjacent radii change. Semi-diameters and
-non-asphere length parameters (toroidal/biconic radii, Zernike normalisation
-radii) are not expanded either. Expect a difference on steeply curved elements
-and on gaps whose TCE column is 0.
+**Non-glass gaps expand along the edge**, as Make Thermal's pickup solves do
+(manual §2.1.1.4.4.2): the spacer runs from one rim to the next, the contact
+point walks radially as spacer and lens rim expand at different rates (clamped
+to the lens mechanical semi-diameter so the mount can never bear on air), and
+the result is transferred back onto the centre thickness. A TCE of 0 therefore
+still moves a gap when the adjacent radii move — on the Cooke triplet, whose air
+gaps carry TCE 0, this shifts dz/dT by 4.6% and the required housing CTE from
+4.32 to 4.52e-6/K against naive centre scaling.
+
+Still short of Make Thermal: semi-diameters are not expanded, and length
+parameters outside the even/odd asphere terms (toroidal and biconic radii,
+Zernike normalisation radii) are not scaled. A gap bounded by a surface whose
+sag the tool cannot evaluate falls back to centre scaling and is named in the
+report rather than silently differing.
 
 **Ribbon runs get a settings window.** OpticStudio launches a user extension with
 no command line and offers no way to supply one, so with no arguments in Plugin

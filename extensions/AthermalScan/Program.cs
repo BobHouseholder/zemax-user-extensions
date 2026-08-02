@@ -24,16 +24,18 @@ namespace AthermalScan
     // original prescription and environment are snapshot and fully restored,
     // including on error.
     //
-    // Where this model differs from the Make Thermal tool's pickup solves
-    // (manual 2.1.1.4.4, "Defining Which Parameters Consider Thermal Effects"):
-    // OpticStudio expands a non-glass THIC along the EDGE thickness, using the
-    // mechanical semi-diameters plus a radial mount-expansion and contact-point
-    // model, and then transfers the result onto the centre thickness - so even
-    // a TCE of 0 changes an air gap when the adjacent radii change. This
-    // extension scales centre thicknesses only, and does not expand
-    // semi-diameters or non-asphere length parameters (toroidal/biconic radii,
-    // Zernike normalisation radii). Expect a difference on steeply curved
-    // elements and on gaps whose TCE column is 0.
+    // Non-glass gaps follow the Make Thermal rule (manual 2.1.1.4.4.2): they
+    // expand along the EDGE, from the rim of one surface to the rim of the next,
+    // with the mount contact point walking radially as spacer and lens rim expand
+    // at different rates and clamped to the lens mechanical semi-diameter; the
+    // result is transferred back onto the centre thickness. So a TCE of 0 still
+    // moves a gap when the adjacent radii move, as it should.
+    //
+    // Still short of Make Thermal: semi-diameters are not expanded, and length
+    // parameters outside the even/odd asphere terms (toroidal and biconic radii,
+    // Zernike normalisation radii) are not scaled. Gaps bounded by a surface
+    // whose sag this tool cannot evaluate fall back to centre scaling and are
+    // named in the report.
     //
     // Index convention: OpticStudio always traces RELATIVE index - air at the
     // system temperature and pressure is exactly 1.0, and glass indices are
@@ -103,7 +105,8 @@ namespace AthermalScan
 
     class RowSnap
     {
-        public double Radius, Thickness;
+        public double Radius, Thickness, Conic;
+        public double MechSemiDia;   // mechanical semi-diameter: where a mount touches
         public double[] Pars = new double[9];
         public ZOSAPI.Editors.LDE.SurfaceType Type;
         public string Material = "";
@@ -401,6 +404,10 @@ namespace AthermalScan
                 var s = new RowSnap { Type = row.Type };
                 try { s.Radius = row.Radius; } catch { s.Radius = double.PositiveInfinity; }
                 s.Thickness = row.Thickness;
+                try { s.Conic = row.Conic; } catch { s.Conic = 0; }
+                // The nominal contact radius for the edge-thickness model. Taken from
+                // the snapshot, so it stays the as-built value while the sweep runs.
+                try { s.MechSemiDia = row.MechanicalSemiDiameter; } catch { s.MechSemiDia = 0; }
                 string mat = (row.Material ?? "").Trim();
                 s.Material = mat;
                 s.IsGlass = mat.Length > 0 && mat != "-" &&
@@ -624,6 +631,11 @@ namespace AthermalScan
 
             Say(F("Restoration check: EFFL back to {0:G9} (baseline {1:G9}) -> {2}",
                 eflCheck, efl0, Math.Abs(eflCheck - efl0) < 1e-6 ? "OK" : "MISMATCH - check the system!"));
+            if (EdgeFallbackRows.Count > 0)
+                Say("NOTE: surface(s) " + string.Join(", ", EdgeFallbackRows.OrderBy(r => r)) +
+                    " have no usable mechanical semi-diameter or a surface form this tool cannot take the " +
+                    "sag of, so their gaps were expanded at the centre instead of along the edge. Those " +
+                    "gaps will not match Make Thermal where the adjacent radii change.");
             if (pressureTerms.Count > 0)
             {
                 Say("");
@@ -890,6 +902,94 @@ namespace AthermalScan
             return check;
         }
 
+        // Rows whose gap could not use the edge model and fell back to centre
+        // scaling - reported once, since silently using a different physics than
+        // the one documented is exactly what this replaced.
+        static readonly HashSet<int> EdgeFallbackRows = new HashSet<int>();
+
+        // OpticStudio does NOT scale a non-glass thickness at the centre. The
+        // thermal pickup expands the material along a length running from the edge
+        // of this surface to the edge of the next, because a mount touches the
+        // lenses at their rims, and the result is then transferred back onto the
+        // centre thickness (manual 2.1.1.4.4.2). Two consequences the centre-scaling
+        // approximation misses entirely:
+        //
+        //   * the sag change of both bounding surfaces feeds into the gap, so even a
+        //     TCE of 0 moves an air space when the adjacent radii move - the manual
+        //     is explicit that a 0 TCE is not the way to freeze a thickness;
+        //   * the spacer and the lens rim expand at different rates, so the contact
+        //     point walks radially. OpticStudio clamps it to the lens mechanical
+        //     semi-diameter so the mount can never bear on thin air.
+        //
+        // Sag is evaluated on the snapshot, analytically, for the surface forms this
+        // tool already expands (standard/conic, even and odd asphere). Anything else
+        // bounding the gap falls back to centre scaling and is named in the report.
+        static double EdgeExpandedThickness(RowSnap[] snaps, int i, int imgIdx, double dT, out bool ok)
+        {
+            ok = false;
+            var s = snaps[i - 1];
+            RowSnap next = i <= imgIdx - 2 ? snaps[i] : null;   // null => the image plane
+            double h0 = s.MechSemiDia;
+            if (!(h0 > 0) || double.IsNaN(h0) || double.IsInfinity(h0)) return 0;
+
+            double aMount = s.AlphaThick;    // the spacer / mount material
+            double aLens = s.AlphaRadius;    // the glass this rim belongs to, if any
+
+            // Contact radius: the mount expands radially, but never past the rim.
+            // Compare the radii themselves, not the coefficients - which of the two
+            // is smaller swaps over when dT changes sign.
+            double h = Math.Min(h0 * (1 + aMount * 1e-6 * dT), h0 * (1 + aLens * 1e-6 * dT));
+            if (!(h > 0)) return 0;
+
+            // the image plane closes the last gap and is treated as flat
+            bool o1, o3, o2 = true, o4 = true;
+            double zA0 = Sag(s, h0, 1.0, out o1);
+            double zB0 = next == null ? 0 : Sag(next, h0, 1.0, out o2);
+
+            double eRa = 1 + s.AlphaRadius * 1e-6 * dT;
+            double eRb = next == null ? 1 : 1 + next.AlphaRadius * 1e-6 * dT;
+            double zA1 = Sag(s, h, eRa, out o3);
+            double zB1 = next == null ? 0 : Sag(next, h, eRb, out o4);
+
+            if (!(o1 && o2 && o3 && o4)) return 0;
+
+            double edge0 = s.Thickness + zB0 - zA0;              // as-built edge length
+            double edge1 = edge0 * (1 + aMount * 1e-6 * dT);     // it is the edge that expands
+            double t = edge1 - zB1 + zA1;                        // transferred to the centre
+            if (double.IsNaN(t) || double.IsInfinity(t)) return 0;
+            ok = true;
+            return t;
+        }
+
+        // Sag of a snapshotted surface at radial height h, with its radius and
+        // polynomial terms expanded by eR (eR = 1 gives the as-built surface). The
+        // conic is dimensionless and does not scale.
+        static double Sag(RowSnap s, double h, double eR, out bool ok)
+        {
+            ok = false;
+            bool even = s.Type == ZOSAPI.Editors.LDE.SurfaceType.EvenAspheric;
+            bool odd = s.Type == ZOSAPI.Editors.LDE.SurfaceType.OddAsphere;
+            if (s.Type != ZOSAPI.Editors.LDE.SurfaceType.Standard && !even && !odd) return 0;
+
+            double z = 0, R = s.Radius * eR;
+            if (!(double.IsInfinity(R) || Math.Abs(R) > 1e10 || R == 0))
+            {
+                double c = 1.0 / R;
+                double u = 1 - (1 + s.Conic) * c * c * h * h;
+                if (u < 0) return 0;                 // h is off the surface
+                z = c * h * h / (1 + Math.Sqrt(u));
+            }
+            if (even || odd)
+                for (int p = 1; p <= 8; p++)
+                {
+                    if (s.Pars[p] == 0) continue;
+                    int powr = even ? 2 * p : p;
+                    z += s.Pars[p] * Math.Pow(eR, 1 - powr) * Math.Pow(h, powr);
+                }
+            ok = !double.IsNaN(z) && !double.IsInfinity(z);
+            return z;
+        }
+
         // apply the thermal model relative to the snapshot (dT = 0 restores)
         static void ApplyTemperature(ZOSAPI.IOpticalSystem sys, RowSnap[] snaps, int imgIdx, double dT)
         {
@@ -900,7 +1000,19 @@ namespace AthermalScan
                 var row = lde.GetSurfaceAt(i);
                 double eT = 1 + s.AlphaThick * 1e-6 * dT;
                 double eR = 1 + s.AlphaRadius * 1e-6 * dT;
-                row.Thickness = s.Thickness * eT;
+
+                if (s.IsGlass)
+                {
+                    // A catalog glass expands as a solid: centre thickness scales.
+                    row.Thickness = s.Thickness * eT;
+                }
+                else
+                {
+                    bool ok;
+                    double t = EdgeExpandedThickness(snaps, i, imgIdx, dT, out ok);
+                    if (!ok) { t = s.Thickness * eT; EdgeFallbackRows.Add(i); }
+                    row.Thickness = t;
+                }
                 if (s.Type != ZOSAPI.Editors.LDE.SurfaceType.CoordinateBreak)
                 {
                     if (!(Math.Abs(s.Radius) > 1e10 || s.Radius == 0))
