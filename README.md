@@ -127,8 +127,12 @@ required housing CTE with a ranked table of real housing materials (including
 negative-CTE ALLVAR) and their usable ranges, an exact bimetallic mount length
 solution, a per-glass opto-thermal table (n, measured dn/dT, TCE, thermal glass
 constant x_f), approximate per-element thermal defocus shares, and a two-panel
-PNG chart. Validated against thin-lens theory on a germanium singlet
-(dz/dT = -f*x_f within 2%).
+PNG chart. Validated against thin-lens theory on an f/4 germanium singlet at
+10 µm: measured dz/dT = -0.013274 against -f·x_f = -0.013292 lens units/K
+(f = 99.954, x_f = +132.98e-6/K), agreeing to 0.14%. Note that this case is
+insensitive to the edge-thickness model below — its rear face is plano, its
+image plane flat and its back gap TCE 0, so every sag term vanishes; the edge
+model is measured separately on the Cooke triplet.
 
 **Index convention.** OpticStudio always traces *relative* index — air at the
 system temperature and pressure is exactly 1.0 — so the system pressure alone
