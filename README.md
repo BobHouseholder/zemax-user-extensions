@@ -159,9 +159,26 @@ non-asphere length parameters (toroidal/biconic radii, Zernike normalisation
 radii) are not expanded either. Expect a difference on steeply curved elements
 and on gaps whose TCE column is 0.
 
+**Ribbon runs get a settings window.** OpticStudio launches a user extension with
+no command line and offers no way to supply one, so with no arguments in Plugin
+mode AthermalScan asks: sweep range and steps, the design temperature and
+pressure (prefilled from the system, and called out in amber when the file has
+*Adjust Index Data To Environment* off, since its stored values then mean
+nothing), the analysis pressure, mount track and solve handling. The last run is
+remembered in `%APPDATA%\AthermalScan\lastrun.txt`. `-nodialog` suppresses it for
+scripted no-argument runs; `-dialog` forces it elsewhere.
+
+Design point and scan environment are separate: `-temp0 T` / `-press0 P` declare
+what the prescription was measured in, `-pressure` / `-vacuum` / `-psweep` say
+what to analyse it at. "Built in air, flown in vacuum" is `-press0 1 -vacuum`,
+and the resulting focus step is reported as its own PRESSURE TERM line — at
+every scan pressure that differs from the design pressure — separately from
+`dz/dT`.
+
 Options: `-tmin/-tmax/-steps`, `-track L` (mount length), `-pressure P`,
-`-vacuum`, `-psweep P1:P2` (paired T/P soak), `-temp0 T`, `-freezesolves`,
-`-out <prefix>`, `-file <path>` (headless batch mode), `-quiet`.
+`-vacuum`, `-psweep P1:P2` (paired T/P soak), `-temp0 T`, `-press0 P`,
+`-freezesolves`, `-out <prefix>`, `-file <path>` (headless batch mode),
+`-quiet`.
 
 ### CryoGlass
 

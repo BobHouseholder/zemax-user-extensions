@@ -63,13 +63,23 @@ namespace AthermalScan
     //   -tmax C        sweep end (default +60)
     //   -steps N       sweep points (default 9)
     //   -track L       housing/mount length in lens units (default: total track)
-    //   -pressure P    run the scan at P atm instead of the file's pressure
+    //   -pressure P    run the SCAN at P atm instead of the design pressure
     //   -vacuum        shorthand for -pressure 0 (absolute/vacuum indices)
     //   -psweep P1:P2  paired temperature/pressure soak: P ramps with T
-    //   -temp0 T       declare the design temperature (required when the file
+    //   -temp0 T       declare the DESIGN temperature (required when the file
     //                  has Adjust Index Data To Environment switched off)
+    //   -press0 P      declare the DESIGN pressure, separately from the scan
+    //                  pressure - "built in air, flown in vacuum" is
+    //                  -press0 1 -vacuum
     //   -freezesolves  freeze value-computing solves on radius/thickness/params
     //                  instead of refusing to run; NOT undone on restore
+    //   -nodialog      never put up the settings window (scripted no-argument runs)
+    //   -dialog        put the settings window up even outside a ribbon run
+    //
+    // A ribbon run has no command line and OpticStudio provides no way to give it
+    // one, so with no arguments in Plugin mode the settings window collects the
+    // sweep, the design environment and the analysis pressure, remembering the last
+    // run in %APPDATA%\AthermalScan\lastrun.txt.
     //   -out <prefix>  output prefix for report/chart (default <lens>_athermal)
     //   -file <path>   standalone mode: load the file first
     //   -quiet         do not auto-open report/chart after a ribbon (GUI) run
@@ -81,10 +91,14 @@ namespace AthermalScan
         public string OutPrefix = null;
         public string FilePath = null;
         public bool Quiet = false;
-        public double? Pressure = null;      // scan pressure, atm (null = use the file's)
+        public double? Pressure = null;      // scan pressure, atm (null = the design pressure)
         public double? PressureEnd = null;   // -psweep end pressure, atm
         public double? Temp0 = null;         // declared design temperature, C
+        public double? Press0 = null;        // declared design pressure, atm
         public bool FreezeSolves = false;
+        public bool NoArgs = true;           // launched with no command line at all
+        public bool NoDialog = false;        // -nodialog: never put up the settings window
+        public bool ForceDialog = false;     // -dialog: put it up even outside Plugin mode
     }
 
     class RowSnap
@@ -104,6 +118,8 @@ namespace AthermalScan
         static Options Opts = new Options();
         static readonly List<string> Report = new List<string>();
 
+        // STA because a ribbon run puts up the settings window (ScanSettingsDialog).
+        [STAThread]
         static void Main(string[] args)
         {
             ParseArgs(args);
@@ -123,6 +139,7 @@ namespace AthermalScan
 
         static void ParseArgs(string[] args)
         {
+            Opts.NoArgs = args == null || args.Length == 0;
             for (int i = 0; i < args.Length; i++)
             {
                 switch (args[i].TrimStart('-', '/').ToLowerInvariant())
@@ -135,7 +152,10 @@ namespace AthermalScan
                     case "vacuum": Opts.Pressure = 0.0; break;
                     case "psweep": if (i + 1 < args.Length) ParsePSweep(args[++i]); break;
                     case "temp0": if (i + 1 < args.Length) Opts.Temp0 = ParseDouble(args[++i], 20.0); break;
+                    case "press0": if (i + 1 < args.Length) Opts.Press0 = ParseDouble(args[++i], 1.0); break;
                     case "freezesolves": Opts.FreezeSolves = true; break;
+                    case "nodialog": Opts.NoDialog = true; break;
+                    case "dialog": Opts.ForceDialog = true; break;
                     case "out": if (i + 1 < args.Length) Opts.OutPrefix = args[++i]; break;
                     case "file": if (i + 1 < args.Length) Opts.FilePath = args[++i]; break;
                     case "quiet": Opts.Quiet = true; break;
@@ -151,6 +171,11 @@ namespace AthermalScan
             {
                 Console.WriteLine("WARNING: negative pressure is meaningless - clamping to 0 (vacuum).");
                 Opts.PressureEnd = 0.0;
+            }
+            if (Opts.Press0.HasValue && Opts.Press0.Value < 0)
+            {
+                Console.WriteLine("WARNING: negative pressure is meaningless - clamping to 0 (vacuum).");
+                Opts.Press0 = 0.0;
             }
         }
 
@@ -198,8 +223,17 @@ namespace AthermalScan
             if (standalone)
             {
                 app = connection.CreateNewApplication();
-                if (app == null || !app.IsValidLicenseForAPI)
-                    throw new Exception("could not start a standalone OpticStudio instance");
+                // Kept apart: "no instance" and "instance but no API licence" have
+                // completely different causes, and conflating them sent a real
+                // debugging session chasing a licence problem that was actually the
+                // ZOS-API assemblies resolving to a decade-old install.
+                if (app == null)
+                    throw new Exception("could not start a standalone OpticStudio instance " +
+                                        "(CreateNewApplication returned nothing)");
+                if (!app.IsValidLicenseForAPI)
+                    throw new Exception("a standalone instance started but its license is not valid for " +
+                                        "ZOS-API: " + app.LicenseStatus + " (loaded from " +
+                                        (ZemaxLocator.ResolvedDirectory ?? "an unknown directory") + ")");
                 if (!app.PrimarySystem.LoadFile(Opts.FilePath, false))
                 {
                     app.CloseApplication();
@@ -216,7 +250,29 @@ namespace AthermalScan
                 if (app == null)
                     throw new Exception("could not connect to OpticStudio (use the Programming ribbon or Interactive Extension)");
                 if (!app.IsValidLicenseForAPI)
-                    throw new Exception("license is not valid for ZOS-API: " + app.LicenseStatus);
+                    throw new Exception("license is not valid for ZOS-API: " + app.LicenseStatus +
+                                        " (loaded from " + (ZemaxLocator.ResolvedDirectory ?? "an unknown directory") + ")");
+            }
+
+            // A ribbon run has no command line and no way to supply one, so ask.
+            // Restricted to Plugin mode by default: anything else may be a scripted
+            // no-argument run that must not block on a modal window. -dialog forces
+            // it, -nodialog suppresses it.
+            if (!standalone && !Opts.NoDialog && (Opts.NoArgs || Opts.ForceDialog))
+            {
+                bool plugin = false;
+                try { plugin = app.Mode == ZOSAPI.ZOSAPI_Mode.Plugin; } catch { }
+                if (plugin || Opts.ForceDialog)
+                {
+                    var envNow = app.PrimarySystem.SystemData.Environment;
+                    if (!ScanSettingsDialog.Show(envNow.Temperature, envNow.Pressure,
+                                                 envNow.AdjustIndexToEnvironment, Opts))
+                    {
+                        app.ProgressMessage = "Done. Cancelled - the system was not touched.";
+                        Console.WriteLine("Cancelled - the system was not touched.");
+                        return;
+                    }
+                }
             }
 
             try { Analyze(app); }
@@ -299,11 +355,15 @@ namespace AthermalScan
                         "-pressure <atm> or -vacuum if the design is not at 1 atm) to declare the environment " +
                         "the radii and thicknesses were measured in.");
                 t0 = Opts.Temp0.Value;
-                p0 = Opts.Pressure ?? 1.0;
+                // -press0 names the design pressure outright; -pressure alone still
+                // means "the design is at this pressure and so is the scan", which is
+                // the common case for a file that was never given an environment.
+                p0 = Opts.Press0 ?? Opts.Pressure ?? 1.0;
             }
-            else if (Opts.Temp0.HasValue)
+            else
             {
-                t0 = Opts.Temp0.Value;
+                if (Opts.Temp0.HasValue) t0 = Opts.Temp0.Value;
+                if (Opts.Press0.HasValue) p0 = Opts.Press0.Value;
             }
 
             double pStart = Opts.Pressure ?? p0;
@@ -321,9 +381,10 @@ namespace AthermalScan
                 Say("NOTE: the file had 'Adjust Index Data To Environment' OFF, which pins index data to " +
                     "20 C / 1.0 atm; the design environment above was taken from the command line. The " +
                     "switch is enabled for the scan and restored afterwards.");
-            if (!adjust0 && !Opts.Pressure.HasValue)
-                Say("NOTE: no -pressure given with -temp0, so the design pressure is assumed to be 1.0 atm " +
-                    "(the adjust-off convention). Pass -vacuum for a vacuum design.");
+            if (!adjust0 && !Opts.Pressure.HasValue && !Opts.Press0.HasValue)
+                Say("NOTE: neither -press0 nor -pressure was given with -temp0, so the design pressure is " +
+                    "assumed to be 1.0 atm (the adjust-off convention). Use -vacuum for a vacuum design, or " +
+                    "-press0 1 -vacuum for one built in air and flown in vacuum.");
             if (Opts.Temp0.HasValue && adjust0 && Math.Abs(Opts.Temp0.Value - tRaw) > 1e-9)
                 Say(F("NOTE: -temp0 {0:F1} C overrides the file's system temperature of {1:F1} C as the " +
                       "design point.", t0, tRaw));
@@ -455,7 +516,10 @@ namespace AthermalScan
             var indexAtMax = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
 
             double efl0 = 0, wfno = 0, totr = 0, track = 0, dofMm = 0;
-            double focus0 = double.NaN, pressureOffset = double.NaN, eflCheck = double.NaN;
+            double focus0 = double.NaN, eflCheck = double.NaN;
+            // one entry per distinct scan pressure that differs from the design
+            // pressure: (pressure, focus offset from the design state)
+            var pressureTerms = new List<KeyValuePair<double, double>>();
             bool terminated = false;
 
             // Everything from here to the finally mutates the live prescription and
@@ -515,11 +579,17 @@ namespace AthermalScan
                     // is the relative -> absolute index step (every glass index scales
                     // by n_air; air itself is 1.0 at the system pressure by definition),
                     // and it is a constant offset on the sweep, so it never enters dz/dT.
-                    if (pShifted)
+                    // Measure it at every scan pressure that actually differs from the
+                    // design pressure. Measuring only at pStart reports ~0 for the
+                    // common -psweep case, where the ramp begins at the design
+                    // pressure and it is the far end that carries the whole term.
+                    foreach (double pp in new[] { pStart, pEnd })
                     {
-                        env.Pressure = pStart;
-                        pressureOffset = MarginalFocus(sys, imgIdx, primaryWave,
-                            snaps[imgIdx - 2].Thickness) - focus0;
+                        if (Math.Abs(pp - p0) <= 1e-12) continue;
+                        if (pressureTerms.Any(kv => Math.Abs(kv.Key - pp) <= 1e-12)) continue;
+                        env.Pressure = pp;
+                        pressureTerms.Add(new KeyValuePair<double, double>(pp,
+                            MarginalFocus(sys, imgIdx, primaryWave, snaps[imgIdx - 2].Thickness) - focus0));
                     }
 
                     // ---- per-glass indices, both points at the SAME pressure ------
@@ -554,14 +624,14 @@ namespace AthermalScan
 
             Say(F("Restoration check: EFFL back to {0:G9} (baseline {1:G9}) -> {2}",
                 eflCheck, efl0, Math.Abs(eflCheck - efl0) < 1e-6 ? "OK" : "MISMATCH - check the system!"));
-            if (pShifted && !double.IsNaN(pressureOffset))
+            if (pressureTerms.Count > 0)
             {
                 Say("");
-                Say(F("PRESSURE TERM at the design temperature ({0:F3} -> {1:F3} atm): {2:+0.00000;-0.00000} lens units",
-                    p0, pStart, pressureOffset));
-                Say(F("  ({0:F1} x the depth of focus; a fixed offset carried by every point of the sweep,",
-                    dofMm > 0 ? Math.Abs(pressureOffset) / dofMm : 0));
-                Say("   from the relative -> absolute index change, and not part of dz/dT)");
+                Say("PRESSURE TERM at the design temperature (from the relative -> absolute index change;");
+                Say("carried by the sweep at that pressure, and not part of dz/dT):");
+                foreach (var kv in pressureTerms)
+                    Say(F("  {0:F3} -> {1:F3} atm: {2:+0.00000;-0.00000} lens units   ({3:F1} x the depth of focus)",
+                        p0, kv.Key, kv.Value, dofMm > 0 ? Math.Abs(kv.Value) / dofMm : 0));
             }
 
             // ---- sweep table ------------------------------------------------------
