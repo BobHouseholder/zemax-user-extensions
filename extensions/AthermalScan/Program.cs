@@ -102,6 +102,7 @@ namespace AthermalScan
         public bool NoArgs = true;           // launched with no command line at all
         public bool NoDialog = false;        // -nodialog: never put up the settings window
         public bool ForceDialog = false;     // -dialog: put it up even outside Plugin mode
+        public bool HostLaunched = false;    // -zpid/-zplt/-zsid present: OpticStudio launched us
         public bool NoFiles = false;         // suppress report/chart/csv/json (User Analysis renders in-window)
     }
 
@@ -144,16 +145,39 @@ namespace AthermalScan
             }
         }
 
+        // Every option this program accepts. Membership here is what decides whether a
+        // command line was supplied - see ParseArgs.
+        static readonly HashSet<string> KnownOptions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "tmin", "tmax", "steps", "track", "pressure", "vacuum", "psweep", "temp0", "press0",
+            "freezesolves", "dump", "nodialog", "dialog", "out", "file", "quiet"
+        };
+
         static void ParseArgs(string[] args)
         {
-            // "No arguments" has to mean "no OPTIONS", not "no argv entries". A ribbon
-            // launch is not guaranteed to hand the process an empty command line - a
-            // host is free to pass an instance id or a path - and treating any such
-            // token as a command line silently suppressed the settings window, which
-            // is the only way a ribbon user can configure anything.
+            // "No arguments" must mean "no OPTIONS OF OURS", not "no argv entries" and
+            // not "nothing dash-prefixed". OpticStudio launches a ribbon extension as
+            //     -zpid={30712} -zplt={Extension} -zsid={100002}
+            // so both of those weaker tests conclude a command line was supplied and
+            // suppress the settings window - the only way a ribbon user can configure
+            // anything. Only a recognised option counts.
             LaunchArgs = args;
-            Opts.NoArgs = args == null ||
-                !args.Any(a => !string.IsNullOrEmpty(a) && (a[0] == '-' || a[0] == '/'));
+            bool sawOption = false;
+            for (int i = 0; args != null && i < args.Length; i++)
+            {
+                string a = args[i] ?? "";
+                string k = a.TrimStart('-', '/');
+                if (KnownOptions.Contains(k)) sawOption = true;
+                // -zpid / -zplt / -zsid identify a launch by OpticStudio itself. They
+                // are also the only evidence available here that a GUI is present, so
+                // they gate the settings window alongside app.Mode.
+                if (k.StartsWith("zpid", StringComparison.OrdinalIgnoreCase) ||
+                    k.StartsWith("zplt", StringComparison.OrdinalIgnoreCase) ||
+                    k.StartsWith("zsid", StringComparison.OrdinalIgnoreCase))
+                    Opts.HostLaunched = true;
+            }
+            Opts.NoArgs = !sawOption;
+
             for (int i = 0; i < args.Length; i++)
             {
                 switch (args[i].TrimStart('-', '/').ToLowerInvariant())
@@ -257,8 +281,11 @@ namespace AthermalScan
         static void Run()
         {
             ZOSAPI.IZOSAPI_Application app = null;
+            // Logged before the connection is attempted, so the parse is on record even
+            // when the connection is what fails.
             LaunchLog("launch argc=" + (LaunchArgs == null ? -1 : LaunchArgs.Length) +
-                      " argv=[" + string.Join(" ", LaunchArgs ?? new string[0]) + "]");
+                      " argv=[" + string.Join(" ", LaunchArgs ?? new string[0]) + "]" +
+                      " -> noArgs=" + Opts.NoArgs + " hostLaunched=" + Opts.HostLaunched);
             var connection = new ZOSAPI.ZOSAPI_Connection();
             bool standalone = !string.IsNullOrEmpty(Opts.FilePath);
 
@@ -305,13 +332,15 @@ namespace AthermalScan
                 bool plugin = false;
                 string modeName = "(unreadable)";
                 try { modeName = app.Mode.ToString(); plugin = app.Mode == ZOSAPI.ZOSAPI_Mode.Plugin; } catch { }
+                bool gui = plugin || Opts.HostLaunched;
                 // A ribbon run loses its console instantly, so when the settings window
                 // does not appear there is nothing at all to look at. Record what the
                 // gate actually saw - this exists because "I ran it and saw no
                 // settings" was otherwise undiagnosable without another user attempt.
-                LaunchLog("mode=" + modeName + " plugin=" + plugin + " noArgs=" + Opts.NoArgs +
-                          " forceDialog=" + Opts.ForceDialog + " -> dialog=" + (plugin || Opts.ForceDialog));
-                if (plugin || Opts.ForceDialog)
+                LaunchLog("mode=" + modeName + " plugin=" + plugin + " hostLaunched=" + Opts.HostLaunched +
+                          " noArgs=" + Opts.NoArgs + " forceDialog=" + Opts.ForceDialog +
+                          " -> dialog=" + (gui || Opts.ForceDialog));
+                if (gui || Opts.ForceDialog)
                 {
                     var envNow = app.PrimarySystem.SystemData.Environment;
                     if (!ScanSettingsDialog.Show(envNow.Temperature, envNow.Pressure,
