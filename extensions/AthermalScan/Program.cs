@@ -578,10 +578,16 @@ namespace AthermalScan
                 if (!glassTce.ContainsKey(g))
                 {
                     // Model glasses, MIL-number glasses and GRIN media land here.
+                    // Measured on the stock "Doublet using MIL number glasses": dn/dT
+                    // comes back as EXACTLY zero at 1 atm, not merely small. The manual
+                    // says the relative index of such media is still adjusted for the
+                    // surrounding air; in practice no adjustment is applied at all, so
+                    // do not promise the reader even that much.
                     Say("WARNING: glass '" + g + "' was not found in the catalogs in use. Assuming TCE = 0, " +
                         "and note that OpticStudio models no dn/dT for model, MIL-number or gradient-index " +
-                        "media (manual 2.1.1.4.2) - the index change it does apply is only the air " +
-                        "normalisation, so this glass's opto-thermal row below is not physical.");
+                        "media (manual 2.1.1.4.2) - measured, such a glass reports dn/dT of exactly zero, so " +
+                        "this glass's opto-thermal row below is not physical and any dz/dT resting on it is " +
+                        "an artefact of that.");
                     glassTce[g] = 0;
                     noThermalIndex.Add(g);
                 }
@@ -687,6 +693,22 @@ namespace AthermalScan
                     efl0, wfno, totr, track));
                 Say(F("Diffraction depth of focus: +/- {0:F4} lens units  (2*lambda*N^2, lambda={1:F4} um)",
                     dofMm, lambdaUm));
+
+                // Everything this tool reports is a defocus compared against the depth
+                // of focus, so an image space that is not converging makes the whole
+                // report meaningless rather than merely imprecise. Caught on the stock
+                // "Cooke 40 degree field_zadj" sample, whose image space is near
+                // collimated: working F/# 6669, depth of focus +/-48921 on a 17.97
+                // total track, and a required housing CTE of -1.9e7 x 1e-6/K reported
+                // without a murmur. Refuse instead of emitting numbers like that.
+                if (double.IsNaN(wfno) || double.IsInfinity(wfno) || dofMm > Math.Abs(totr))
+                    throw new Exception(F(
+                        "the image space is not converging - working F/# is {0:G6} and the diffraction depth " +
+                        "of focus comes out at +/-{1:G6} lens units against a total track of {2:G6}. Focus " +
+                        "shift, athermal range and required housing CTE are all defocus measured against that " +
+                        "depth of focus, so none of them means anything here. Check that the image surface is " +
+                        "at or near focus; an afocal system needs an angular metric, not a focus shift.",
+                        wfno, dofMm, totr));
                 R.Efl0 = efl0; R.Wfno = wfno; R.TotalTrack = totr;
                 R.MountTrack = track; R.DofMm = dofMm; R.LambdaUm = lambdaUm;
 
