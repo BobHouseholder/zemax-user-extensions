@@ -142,8 +142,32 @@ namespace AthermalScan
                 // Settings come from the same file the dialog writes; ScanSettingsDialog
                 // loads them, so an unconfigured analysis just gets the documented
                 // defaults (-20..60 C, 9 steps, the file's own environment).
-                Program.Opts = new Options { NoFiles = true, NoDialog = true, Quiet = true };
+                Program.Opts = new Options { NoFiles = true, NoDialog = true, Quiet = true, HostLaunched = true };
                 ScanSettingsDialog.LoadInto(Program.Opts);
+
+                // The two guards below are right for the EXTENSION and wrong here, and
+                // the difference is the clone. Both exist to stop a silently wrong
+                // model being computed against the user's own system; this sweep runs
+                // on a throwaway copy, so there is nothing to protect and refusing is
+                // pure loss. Worse, both refusals name command-line flags, and an
+                // analysis window has no command line at all - the same dead end the
+                // ribbon had. Neither can fire from here now.
+                //
+                // Freezing solves on a clone that is closed seconds later cannot
+                // damage anything: the user's prescription is never touched.
+                Program.Opts.FreezeSolves = true;
+
+                // With Adjust Index Data To Environment off, OpticStudio itself
+                // evaluates index data as though the system were at 20 C / 1.0 atm, so
+                // that convention is the honest reading of such a file rather than a
+                // guess. The report says so in full, and the settings window overrides
+                // it for anyone who knows the real design point.
+                var liveEnv = live.SystemData.Environment;
+                if (!liveEnv.AdjustIndexToEnvironment && !Program.Opts.Temp0.HasValue)
+                {
+                    Program.Opts.Temp0 = 20.0;
+                    if (!Program.Opts.Press0.HasValue) Program.Opts.Press0 = 1.0;
+                }
 
                 work = live.CopySystem();
                 if (work == null)
