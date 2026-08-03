@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using ZOSAPI;
 using ZOSAPI.Analysis;
@@ -26,38 +27,82 @@ namespace AthermalScan
     static class AnalysisProgram
     {
         [STAThread]
-        static void Main()
+        static void Main(string[] args)
         {
+            // FIRST statement, before anything that can fail. The previous version
+            // logged only after locating OpticStudio, connecting, and checking the
+            // licence - so all four of those failure paths exited silently and an
+            // absent log could not be distinguished from the host never launching the
+            // process at all. Both happened; only this tells them apart.
+            Program.LaunchLog("AthermalAnalysis Main: argc=" + (args == null ? 0 : args.Length) +
+                              " argv=[" + string.Join(" ", args ?? new string[0]) + "]");
+
             if (!ZemaxLocator.Initialize())
             {
+                Program.LaunchLog("  FATAL: no OpticStudio installation found");
                 Console.WriteLine("FATAL: failed to locate an OpticStudio installation.");
                 return;
             }
+            Program.LaunchLog("  ZOSAPI from " + (ZemaxLocator.ResolvedDirectory ?? "(unknown)"));
+            Begin();
+        }
 
+        // Every ZOSAPI type is confined below this line, in a method the JIT does not
+        // compile until it is called. Main must not so much as DECLARE a ZOSAPI-typed
+        // local: the JIT resolves a method's types when it compiles that method, so a
+        // ZOSAPI reference in Main forces the assembly to load BEFORE
+        // ZemaxLocator.Initialize() has installed the resolver that finds it. The
+        // symptom is brutal - FileNotFoundException on ZOSAPI_Interfaces before the
+        // first statement of Main runs, so not even a log line is written, and the
+        // process looks like it never started. NoInlining stops the optimiser undoing
+        // the split.
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static void Begin()
+        {
             IZOSAPI_Application app;
             try { app = new ZOSAPI_Connection().ConnectToApplication(); }
             catch (Exception ex)
             {
                 // Thrown verbatim when the exe is double-clicked instead of being
                 // launched from Programming > User Analyses.
+                Program.LaunchLog("  FATAL: ConnectToApplication threw: " + ex.Message);
                 Console.WriteLine("FATAL: " + ex.Message);
                 return;
             }
-            if (app == null) { Console.WriteLine("FATAL: no connection to OpticStudio."); return; }
+            if (app == null)
+            {
+                Program.LaunchLog("  FATAL: ConnectToApplication returned null");
+                Console.WriteLine("FATAL: no connection to OpticStudio."); return;
+            }
             if (!app.IsValidLicenseForAPI)
             {
+                Program.LaunchLog("  FATAL: licence not valid for ZOS-API: " + app.LicenseStatus);
                 Console.WriteLine("FATAL: license is not valid for ZOS-API: " + app.LicenseStatus +
                                   " (loaded from " + (ZemaxLocator.ResolvedDirectory ?? "an unknown directory") + ")");
                 return;
             }
 
-            switch (app.Mode)
+            // An analysis writes no files and its console goes nowhere, so without
+            // this a failure on someone else's machine leaves nothing to look at.
+            // AthermalScan-launch.log lands beside this .exe in the User Analysis
+            // folder; the extension writes its own copy beside itself in Extensions.
+            Program.LaunchLog("AthermalAnalysis start: mode=" + app.Mode);
+            try
             {
-                case ZOSAPI_Mode.UserAnalysis: RunAnalysis(app); break;
-                case ZOSAPI_Mode.UserAnalysisSettings: ShowSettings(app); break;
-                default:
-                    Console.WriteLine("FATAL: started in the wrong mode: expected UserAnalysis, found " + app.Mode);
-                    break;
+                switch (app.Mode)
+                {
+                    case ZOSAPI_Mode.UserAnalysis: RunAnalysis(app); break;
+                    case ZOSAPI_Mode.UserAnalysisSettings: ShowSettings(app); break;
+                    default:
+                        Program.LaunchLog("FATAL: wrong mode - expected UserAnalysis, found " + app.Mode);
+                        Console.WriteLine("FATAL: started in the wrong mode: expected UserAnalysis, found " + app.Mode);
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                Program.LaunchLog("FATAL (unhandled): " + ex.GetType().Name + ": " + ex.Message);
+                throw;
             }
         }
 
@@ -108,10 +153,15 @@ namespace AthermalScan
                 }
 
                 Program.Report.Clear();
+                Program.LaunchLog("  analysing a CopySystem() clone of " +
+                                  (string.IsNullOrEmpty(live.SystemFile) ? "(untitled)" : live.SystemFile));
                 Program.Analyze(app, work);
 
                 var r = Program.R;
                 Emit(data, string.Join("\r\n", Program.Report));
+                Program.LaunchLog("  ok: dz/dT=" + r.DzDt + " over " +
+                                  (r.Temps == null ? 0 : r.Temps.Length) + " points, " +
+                                  Program.Report.Count + " report lines");
 
                 // The text carries the whole report - it is the part that must survive.
                 // The plots are attempted afterwards and guarded separately, because
@@ -135,12 +185,14 @@ namespace AthermalScan
                     }
                     catch (Exception ex)
                     {
+                        Program.LaunchLog("  plots NOT rendered: " + ex.Message);
                         Console.WriteLine("plots not rendered: " + ex.Message);
                     }
                 }
             }
             catch (Exception ex)
             {
+                Program.LaunchLog("  FAILED: " + ex.Message);
                 Emit(data, "Athermal Scan failed: " + ex.Message);
             }
             finally

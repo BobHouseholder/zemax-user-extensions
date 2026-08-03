@@ -280,17 +280,40 @@ namespace AthermalScan
 
         // One line per launch, next to the deployed .exe. Cheap, bounded, and the only
         // evidence that survives a ribbon run - whose console dies with the process.
-        static void LaunchLog(string message)
+        //
+        // Falls back to %TEMP% if the deployment directory cannot be written or the
+        // assembly location cannot be read. An absent log then means the process did
+        // not start, rather than meaning it started somewhere unwritable - which is
+        // the difference between "the host never launched it" and "it launched and
+        // died", and those need opposite investigations.
+        internal static void LaunchLog(string message)
         {
-            try
+            string line = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss ", CultureInfo.InvariantCulture)
+                          + message + Environment.NewLine;
+            foreach (var dir in LogDirs())
             {
-                string dir = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
-                string path = Path.Combine(dir, "AthermalScan-launch.log");
-                if (File.Exists(path) && new FileInfo(path).Length > 64 * 1024) File.Delete(path);
-                File.AppendAllText(path, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss ",
-                    CultureInfo.InvariantCulture) + message + Environment.NewLine);
+                try
+                {
+                    if (string.IsNullOrEmpty(dir)) continue;
+                    string path = Path.Combine(dir, "AthermalScan-launch.log");
+                    if (File.Exists(path) && new FileInfo(path).Length > 64 * 1024) File.Delete(path);
+                    File.AppendAllText(path, line);
+                    return;
+                }
+                catch { /* try the next location */ }
             }
-            catch { /* diagnostics must never be the reason a run fails */ }
+            /* diagnostics must never be the reason a run fails */
+        }
+
+        static IEnumerable<string> LogDirs()
+        {
+            string asm = null;
+            try { asm = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location); }
+            catch { }
+            yield return asm;
+            string tmp = null;
+            try { tmp = Path.GetTempPath(); } catch { }
+            yield return tmp;
         }
 
         static void Run()
