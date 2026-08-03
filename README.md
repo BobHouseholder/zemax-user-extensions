@@ -212,7 +212,7 @@ every scan pressure that differs from the design pressure — separately from
 
 Options: `-tmin/-tmax/-steps`, `-track L` (mount length), `-pressure P`,
 `-vacuum`, `-psweep P1:P2` (paired T/P soak), `-temp0 T`, `-press0 P`,
-`-freezesolves`, `-out <prefix>`, `-file <path>` (headless batch mode),
+`-freezesolves`, `-out <prefix>`, `-outdir <dir>`, `-file <path>` (headless batch mode),
 `-quiet`.
 
 ### CryoGlass

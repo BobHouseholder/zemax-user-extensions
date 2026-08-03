@@ -22,7 +22,7 @@ namespace AthermalScan
     // the silent defaults-only behaviour for scripted runs.
     class ScanSettingsDialog : Form
     {
-        readonly TextBox _tmin, _tmax, _steps, _t0, _p0, _pfixed, _pramp, _track;
+        readonly TextBox _tmin, _tmax, _steps, _t0, _p0, _pfixed, _pramp, _track, _outDir;
         readonly RadioButton _pSame, _pVac, _pFixed, _pRamp;
         readonly CheckBox _freeze;
         readonly bool _adjustOn;
@@ -119,19 +119,41 @@ namespace AthermalScan
             _pramp = AddBox(gAt, 250, LBL + 68, 70, "0");
             SelectPressureMode(o);
 
-            var gOpt = AddGroup("Options", ref y, GW, hasSolves ? 142 : 80);
+            var gOpt = AddGroup("Options", ref y, GW, hasSolves ? 172 : 110);
             _track = AddField(gOpt, "Mount track L (blank = total track)", 16, LBL, 220,
                 o.Track > 0 ? o.Track.ToString(CultureInfo.InvariantCulture) : "");
+
+            // Blank means beside the lens, which for a stock sample writes into the
+            // vendor's Samples tree - fine once, unwelcome as a habit.
+            gOpt.Controls.Add(new Label { Left = 16, Top = LBL + 32, AutoSize = true, Text = "Output folder" });
+            _outDir = new TextBox
+            {
+                Left = 108, Top = LBL + 28, Width = 258, Text = o.OutDir ?? "",
+                Anchor = AnchorStyles.Top | AnchorStyles.Left
+            };
+            gOpt.Controls.Add(_outDir);
+            var browse = new Button { Left = 372, Top = LBL + 27, Width = 48, Height = 23, Text = "..." };
+            browse.Click += (s, e) =>
+            {
+                using (var fb = new FolderBrowserDialog { Description = "Where AthermalScan should write its report" })
+                {
+                    if (!string.IsNullOrWhiteSpace(_outDir.Text) && Directory.Exists(_outDir.Text))
+                        fb.SelectedPath = _outDir.Text;
+                    if (fb.ShowDialog() == DialogResult.OK) _outDir.Text = fb.SelectedPath;
+                }
+            };
+            gOpt.Controls.Add(browse);
+
             _freeze = new CheckBox
             {
-                Left = 16, Top = LBL + 30, Width = GW - 36, Checked = o.FreezeSolves,
+                Left = 16, Top = LBL + 58, Width = GW - 36, Checked = o.FreezeSolves,
                 Text = "Freeze value-computing solves (not undone afterwards)"
             };
             gOpt.Controls.Add(_freeze);
             if (hasSolves)
                 gOpt.Controls.Add(new Label
                 {
-                    Left = 34, Top = LBL + 52, Width = GW - 58, Height = 58,
+                    Left = 34, Top = LBL + 80, Width = GW - 58, Height = 58,
                     ForeColor = Color.FromArgb(150, 70, 0),
                     Text = "Found " + solves.Count + ": " + string.Join("; ", solves.Take(3)) +
                            (solves.Count > 3 ? "; and " + (solves.Count - 3) + " more" : "") +
@@ -214,6 +236,7 @@ namespace AthermalScan
             if (int.TryParse(_steps.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out steps))
                 o.Steps = steps < 3 ? 3 : steps;
             o.Track = string.IsNullOrWhiteSpace(_track.Text) ? 0 : Num(_track, 0);
+            o.OutDir = string.IsNullOrWhiteSpace(_outDir.Text) ? null : _outDir.Text.Trim();
             o.FreezeSolves = _freeze.Checked;
 
             // The design point is always declared explicitly from here: with the
@@ -264,6 +287,7 @@ namespace AthermalScan
                         case "pressure": if (isNum) o.Pressure = d; break;
                         case "pressureEnd": if (isNum) o.PressureEnd = d; break;
                         case "freeze": o.FreezeSolves = v == "1"; break;
+                        case "outdir": o.OutDir = string.IsNullOrWhiteSpace(v) ? null : v; break;
                     }
                 }
             }
@@ -280,6 +304,7 @@ namespace AthermalScan
                     F("tmin", o.TMin), F("tmax", o.TMax), "steps=" + o.Steps,
                     F("track", o.Track), "freeze=" + (o.FreezeSolves ? "1" : "0"),
                 };
+                if (!string.IsNullOrWhiteSpace(o.OutDir)) lines.Add("outdir=" + o.OutDir);
                 if (o.Temp0.HasValue) lines.Add(F("temp0", o.Temp0.Value));
                 if (o.Press0.HasValue) lines.Add(F("press0", o.Press0.Value));
                 if (o.Pressure.HasValue) lines.Add(F("pressure", o.Pressure.Value));

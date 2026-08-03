@@ -83,6 +83,8 @@ namespace AthermalScan
     // sweep, the design environment and the analysis pressure, remembering the last
     // run in %APPDATA%\AthermalScan\lastrun.txt.
     //   -out <prefix>  output prefix for report/chart (default <lens>_athermal)
+    //   -outdir <dir>  write the report into this folder instead of beside the lens
+    //                  (the settings window sets the same thing)
     //   -file <path>   standalone mode: load the file first
     //   -quiet         do not auto-open report/chart after a ribbon (GUI) run
     class Options
@@ -102,6 +104,10 @@ namespace AthermalScan
         public bool NoArgs = true;           // launched with no command line at all
         public bool NoDialog = false;        // -nodialog: never put up the settings window
         public bool ForceDialog = false;     // -dialog: put it up even outside Plugin mode
+        // Output FOLDER, as chosen in the settings window. -out takes a full prefix
+        // because a shell user wants to name the files; a dialog user means "put them
+        // somewhere else", so the two are kept separate and OutPrefix still wins.
+        public string OutDir = null;
         public bool HostLaunched = false;    // -zpid/-zplt/-zsid present: OpticStudio launched us
         public bool NoFiles = false;         // suppress report/chart/csv/json (User Analysis renders in-window)
     }
@@ -165,7 +171,7 @@ namespace AthermalScan
         static readonly HashSet<string> KnownOptions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "tmin", "tmax", "steps", "track", "pressure", "vacuum", "psweep", "temp0", "press0",
-            "freezesolves", "dump", "nodialog", "dialog", "out", "file", "quiet"
+            "freezesolves", "dump", "nodialog", "dialog", "out", "outdir", "file", "quiet"
         };
 
         static void ParseArgs(string[] args)
@@ -211,6 +217,7 @@ namespace AthermalScan
                     case "nodialog": Opts.NoDialog = true; break;
                     case "dialog": Opts.ForceDialog = true; break;
                     case "out": if (i + 1 < args.Length) Opts.OutPrefix = args[++i]; break;
+                    case "outdir": if (i + 1 < args.Length) Opts.OutDir = args[++i]; break;
                     case "file": if (i + 1 < args.Length) Opts.FilePath = args[++i]; break;
                     case "quiet": Opts.Quiet = true; break;
                 }
@@ -980,9 +987,31 @@ namespace AthermalScan
             if (string.IsNullOrEmpty(prefix))
             {
                 string src = !string.IsNullOrEmpty(Opts.FilePath) ? Opts.FilePath : sys.SystemFile;
-                prefix = string.IsNullOrEmpty(src)
-                    ? Path.Combine(app.ZemaxDataDir, "athermal")
-                    : Path.Combine(Path.GetDirectoryName(src), Path.GetFileNameWithoutExtension(src) + "_athermal");
+                string stem = string.IsNullOrEmpty(src)
+                    ? "athermal" : Path.GetFileNameWithoutExtension(src) + "_athermal";
+
+                // Default is beside the lens, which for a stock sample means writing
+                // into the vendor's own Samples tree. The settings window can name a
+                // folder instead; create it if it does not exist, and fall back rather
+                // than lose a completed sweep to an unwritable path.
+                string dir = null;
+                if (!string.IsNullOrWhiteSpace(Opts.OutDir))
+                {
+                    try
+                    {
+                        Directory.CreateDirectory(Opts.OutDir);
+                        dir = Opts.OutDir;
+                    }
+                    catch (Exception ex)
+                    {
+                        Say("WARNING: could not use the chosen output folder '" + Opts.OutDir + "' (" +
+                            ex.Message + "). Writing beside the lens instead.");
+                    }
+                }
+                if (dir == null)
+                    dir = string.IsNullOrEmpty(src) ? app.ZemaxDataDir : Path.GetDirectoryName(src);
+
+                prefix = Path.Combine(dir, stem);
             }
             if (string.IsNullOrEmpty(R.LensFile)) R.LensFile = Opts.FilePath ?? "";
             File.WriteAllLines(prefix + "_report.txt", Report);
