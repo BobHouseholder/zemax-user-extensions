@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Windows.Forms;
 
 namespace AthermalScan
@@ -33,9 +34,19 @@ namespace AthermalScan
         // Returns false if the user cancelled - the caller must then do nothing at
         // all, since the scan mutates the live prescription.
         public static bool Show(double sysTemp, double sysPress, bool adjustOn, Options o)
+            => Show(sysTemp, sysPress, adjustOn, o, null);
+
+        /// <param name="solves">
+        /// Value-computing solves found on cells the scan must write, or null/empty.
+        /// When present the freeze checkbox arrives already ticked and says what it
+        /// found: the scan refuses to run otherwise, and being refused AFTER filling
+        /// the form in - with a remedy the user cannot carry out - is a dead end.
+        /// </param>
+        public static bool Show(double sysTemp, double sysPress, bool adjustOn, Options o,
+                                System.Collections.Generic.List<string> solves)
         {
             Application.EnableVisualStyles();
-            using (var dlg = new ScanSettingsDialog(sysTemp, sysPress, adjustOn, o))
+            using (var dlg = new ScanSettingsDialog(sysTemp, sysPress, adjustOn, o, solves))
             {
                 if (dlg.ShowDialog() != DialogResult.OK) return false;
                 dlg.Apply(o);
@@ -44,8 +55,10 @@ namespace AthermalScan
             }
         }
 
-        ScanSettingsDialog(double sysTemp, double sysPress, bool adjustOn, Options o)
+        ScanSettingsDialog(double sysTemp, double sysPress, bool adjustOn, Options o,
+                           System.Collections.Generic.List<string> solves)
         {
+            bool hasSolves = solves != null && solves.Count > 0;
             _adjustOn = adjustOn;
             Text = "Athermal Scan";
             FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -54,6 +67,11 @@ namespace AthermalScan
             Font = new Font("Segoe UI", 9f);
 
             LoadLastRun(o); // last run's values, if any, override the built-in defaults
+
+            // AFTER the load, deliberately: freezing is the only setting that lets a
+            // system with value-computing solves run at all, so a saved freeze=0 must
+            // not quietly put the user back in front of a refusal.
+            if (hasSolves) o.FreezeSolves = true;
 
             // Every control is a CHILD of its group box, positioned in the group's own
             // coordinates. The first version made them siblings at absolute
@@ -101,7 +119,7 @@ namespace AthermalScan
             _pramp = AddBox(gAt, 250, LBL + 68, 70, "0");
             SelectPressureMode(o);
 
-            var gOpt = AddGroup("Options", ref y, GW, 80);
+            var gOpt = AddGroup("Options", ref y, GW, hasSolves ? 142 : 80);
             _track = AddField(gOpt, "Mount track L (blank = total track)", 16, LBL, 220,
                 o.Track > 0 ? o.Track.ToString(CultureInfo.InvariantCulture) : "");
             _freeze = new CheckBox
@@ -110,6 +128,16 @@ namespace AthermalScan
                 Text = "Freeze value-computing solves (not undone afterwards)"
             };
             gOpt.Controls.Add(_freeze);
+            if (hasSolves)
+                gOpt.Controls.Add(new Label
+                {
+                    Left = 34, Top = LBL + 52, Width = GW - 58, Height = 58,
+                    ForeColor = Color.FromArgb(150, 70, 0),
+                    Text = "Found " + solves.Count + ": " + string.Join("; ", solves.Take(3)) +
+                           (solves.Count > 3 ? "; and " + (solves.Count - 3) + " more" : "") +
+                           ". A solve recomputes its cell after every write, so the scan cannot run " +
+                           "unless they are frozen first. Freezing is not undone afterwards."
+                });
 
             var ok = new Button { Text = "Run scan", Left = PAD + GW - 188, Top = y, Width = 92, DialogResult = DialogResult.OK };
             var cancel = new Button { Text = "Cancel", Left = PAD + GW - 90, Top = y, Width = 90, DialogResult = DialogResult.Cancel };

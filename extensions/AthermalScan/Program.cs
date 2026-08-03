@@ -141,6 +141,21 @@ namespace AthermalScan
             catch (Exception ex)
             {
                 Console.WriteLine("FATAL: " + ex.Message);
+                LaunchLog("FATAL: " + ex.Message);
+                // A ribbon run's console dies with the process, so an error printed to
+                // it is invisible - and the environment guards exist precisely to
+                // refuse loudly. Refusing invisibly is worse than not refusing at all,
+                // because the user is left with no scan and no reason.
+                if (Opts.HostLaunched && !Opts.Quiet)
+                {
+                    try
+                    {
+                        System.Windows.Forms.MessageBox.Show(ex.Message, "Athermal Scan",
+                            System.Windows.Forms.MessageBoxButtons.OK,
+                            System.Windows.Forms.MessageBoxIcon.Warning);
+                    }
+                    catch { /* no desktop - the log still has it */ }
+                }
                 Environment.ExitCode = 1;
             }
         }
@@ -342,12 +357,21 @@ namespace AthermalScan
                           " -> dialog=" + (gui || Opts.ForceDialog));
                 if (gui || Opts.ForceDialog)
                 {
-                    var envNow = app.PrimarySystem.SystemData.Environment;
+                    var sysNow = app.PrimarySystem;
+                    var envNow = sysNow.SystemData.Environment;
+                    // Ask about solves BEFORE the user fills the form in. Discovering
+                    // them afterwards means refusing a run that has already been
+                    // configured, and the refusal used to name a command-line flag no
+                    // ribbon user can pass.
+                    List<string> solvesNow = null;
+                    try { solvesNow = FindComputingSolves(sysNow.LDE, sysNow.LDE.NumberOfSurfaces - 1); }
+                    catch { }
                     if (!ScanSettingsDialog.Show(envNow.Temperature, envNow.Pressure,
-                                                 envNow.AdjustIndexToEnvironment, Opts))
+                                                 envNow.AdjustIndexToEnvironment, Opts, solvesNow))
                     {
                         app.ProgressMessage = "Done. Cancelled - the system was not touched.";
                         Console.WriteLine("Cancelled - the system was not touched.");
+                        LaunchLog("cancelled at the settings window - nothing run");
                         return;
                     }
                 }
@@ -940,6 +964,7 @@ namespace AthermalScan
                 slope, dtAthermal, Convention(pStart), Path.GetFileName(prefix + "_report.html"));
             // Only the HTML is opened: it already contains the chart, so opening the PNG
             // as well would just put a second window in front of the user.
+            LaunchLog("wrote " + prefix + "_report.html (+ .txt, .csv, .json, .png)");
             OpenOutputs(app, prefix + "_report.html");
         }
 
@@ -988,7 +1013,7 @@ namespace AthermalScan
         // silently wrong - most visibly a marginal ray height solve on the last
         // thickness, which auto-refocuses and reports a focus shift of zero. Variables
         // are harmless: they mark a cell for optimisation, they do not compute it.
-        static void CheckSolves(ZOSAPI.Editors.LDE.ILensDataEditor lde, int imgIdx)
+        static List<ZOSAPI.Editors.LDE.SurfaceColumn> WritableColumns()
         {
             var cols = new List<ZOSAPI.Editors.LDE.SurfaceColumn>
             {
@@ -997,40 +1022,69 @@ namespace AthermalScan
             };
             for (int p = 1; p <= 8; p++)
                 cols.Add((ZOSAPI.Editors.LDE.SurfaceColumn)Enum.Parse(typeof(ZOSAPI.Editors.LDE.SurfaceColumn), "Par" + p));
+            return cols;
+        }
 
-            var offenders = new List<string>();
-            int frozen = 0;
-            for (int i = 1; i < imgIdx; i++)
-            {
-                var row = lde.GetSurfaceAt(i);
-                foreach (var col in cols)
+        /// <summary>
+        /// Value-computing solves on cells the scan must write, described one per entry.
+        /// Pure - it reports, it does not freeze or throw, so the settings window can
+        /// ask this BEFORE the user commits to a run.
+        /// </summary>
+        internal static List<string> FindComputingSolves(ZOSAPI.Editors.LDE.ILensDataEditor lde, int imgIdx)
+        {
+            var found = new List<string>();
+            foreach (var col in WritableColumns())
+                for (int i = 1; i < imgIdx; i++)
                 {
                     ZOSAPI.Editors.SolveType st;
-                    ZOSAPI.Editors.IEditorCell cell;
-                    try { cell = row.GetSurfaceCell(col); st = cell.Solve; }
+                    try { st = lde.GetSurfaceAt(i).GetSurfaceCell(col).Solve; }
                     catch { continue; } // locked or non-existent cell for this surface type
                     if (st == ZOSAPI.Editors.SolveType.None || st == ZOSAPI.Editors.SolveType.Fixed ||
                         st == ZOSAPI.Editors.SolveType.Variable || st == ZOSAPI.Editors.SolveType.Automatic)
                         continue;
-                    if (Opts.FreezeSolves)
-                    {
-                        try { if (cell.MakeSolveFixed()) frozen++; } catch { }
-                    }
-                    else offenders.Add(F("surface {0} {1} ({2})", i, col, st));
+                    found.Add(F("surface {0} {1} ({2})", i, col, st));
                 }
+            return found;
+        }
+
+        static void CheckSolves(ZOSAPI.Editors.LDE.ILensDataEditor lde, int imgIdx)
+        {
+            if (!Opts.FreezeSolves)
+            {
+                var offenders = FindComputingSolves(lde, imgIdx);
+                if (offenders.Count == 0) return;
+                throw new Exception(
+                    "value-computing solves sit on cells this scan must write - " +
+                    string.Join("; ", offenders.Take(8)) +
+                    (offenders.Count > 8 ? F("; and {0} more", offenders.Count - 8) : "") +
+                    ". A solve recomputes its cell after every assignment, so the thermal model would be " +
+                    "silently overridden: a marginal ray height solve on the last thickness, for instance, " +
+                    "auto-refocuses and reports a focus shift of zero. " +
+                    // The remedy has to be one the reader can actually carry out. A
+                    // ribbon user cannot pass a flag - OpticStudio gives them no way to
+                    // - so point them at the checkbox that does the same thing.
+                    (Opts.HostLaunched
+                        ? "Tick 'Freeze value-computing solves' in the settings window, or remove the solves."
+                        : "Remove them, or re-run with -freezesolves to freeze them to their current values " +
+                          "first (not undone on restore)."));
             }
+
+            int frozen = 0;
+            foreach (var col in WritableColumns())
+                for (int i = 1; i < imgIdx; i++)
+                {
+                    ZOSAPI.Editors.IEditorCell cell;
+                    ZOSAPI.Editors.SolveType st;
+                    try { cell = lde.GetSurfaceAt(i).GetSurfaceCell(col); st = cell.Solve; }
+                    catch { continue; }
+                    if (st == ZOSAPI.Editors.SolveType.None || st == ZOSAPI.Editors.SolveType.Fixed ||
+                        st == ZOSAPI.Editors.SolveType.Variable || st == ZOSAPI.Editors.SolveType.Automatic)
+                        continue;
+                    try { if (cell.MakeSolveFixed()) frozen++; } catch { }
+                }
             if (frozen > 0)
                 Say(F("Froze {0} value-computing solve(s) to their current values. This is NOT undone by " +
                       "the restore - do not save the file unless that is what you want.", frozen));
-            if (offenders.Count == 0) return;
-            throw new Exception(
-                "value-computing solves sit on cells this scan must write - " +
-                string.Join("; ", offenders.Take(8)) +
-                (offenders.Count > 8 ? F("; and {0} more", offenders.Count - 8) : "") +
-                ". A solve recomputes its cell after every assignment, so the thermal model would be " +
-                "silently overridden: a marginal ray height solve on the last thickness, for instance, " +
-                "auto-refocuses and reports a focus shift of zero. Remove them, or re-run with " +
-                "-freezesolves to freeze them to their current values first (not undone on restore).");
         }
 
         // Undo everything the scan touched. Called from a finally, so it must not throw:
