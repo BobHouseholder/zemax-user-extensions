@@ -174,6 +174,11 @@ Verified against `TEMP` + thermal-pickup ground truth on a two-singlet system at
 ΔT = 50 K, across curved/plano faces, mount TCE 23.6 and 0, and two mechanical
 semi-diameters — air gaps agree to all 14 significant figures in every case.
 
+It changes answers, not just digits. On the Cooke triplet in air, whose air gaps
+carry TCE 0, dz/dT goes from +0.000260 under naive centre scaling to +0.000296,
+and the required housing CTE from 4.32 to 4.92e-6/K — 14%, which redistributes
+about 5 mm of length between the two metals of the bimetallic mount.
+
 Still short of Make Thermal: semi-diameters are not expanded, and length
 parameters outside the even/odd asphere terms (toroidal and biconic radii,
 Zernike normalisation radii) are not scaled. A gap bounded by a surface whose
