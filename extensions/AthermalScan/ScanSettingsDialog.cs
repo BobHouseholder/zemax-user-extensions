@@ -206,6 +206,13 @@ namespace AthermalScan
         }
 
         // ---- last-run persistence -------------------------------------------------
+        /// <summary>
+        /// Apply the last run's saved settings without showing the dialog. The User
+        /// Analysis needs this: OpticStudio runs it and shows its settings form as two
+        /// separate launches, so the run has to read what the form last wrote.
+        /// </summary>
+        internal static void LoadInto(Options o) => LoadLastRun(o);
+
         static void LoadLastRun(Options o)
         {
             try

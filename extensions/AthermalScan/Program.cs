@@ -102,6 +102,7 @@ namespace AthermalScan
         public bool NoArgs = true;           // launched with no command line at all
         public bool NoDialog = false;        // -nodialog: never put up the settings window
         public bool ForceDialog = false;     // -dialog: put it up even outside Plugin mode
+        public bool NoFiles = false;         // suppress report/chart/csv/json (User Analysis renders in-window)
     }
 
     class RowSnap
@@ -118,10 +119,11 @@ namespace AthermalScan
         public bool IsGlass;
     }
 
-    class Program
+    partial class Program
     {
-        static Options Opts = new Options();
-        static readonly List<string> Report = new List<string>();
+        internal static Options Opts = new Options();
+        internal static string[] LaunchArgs;
+        internal static readonly List<string> Report = new List<string>();
 
         // STA because a ribbon run puts up the settings window (ScanSettingsDialog).
         [STAThread]
@@ -144,7 +146,14 @@ namespace AthermalScan
 
         static void ParseArgs(string[] args)
         {
-            Opts.NoArgs = args == null || args.Length == 0;
+            // "No arguments" has to mean "no OPTIONS", not "no argv entries". A ribbon
+            // launch is not guaranteed to hand the process an empty command line - a
+            // host is free to pass an instance id or a path - and treating any such
+            // token as a command line silently suppressed the settings window, which
+            // is the only way a ribbon user can configure anything.
+            LaunchArgs = args;
+            Opts.NoArgs = args == null ||
+                !args.Any(a => !string.IsNullOrEmpty(a) && (a[0] == '-' || a[0] == '/'));
             for (int i = 0; i < args.Length; i++)
             {
                 switch (args[i].TrimStart('-', '/').ToLowerInvariant())
@@ -217,7 +226,7 @@ namespace AthermalScan
             return keep;
         }
 
-        static readonly Results R = new Results();
+        internal static readonly Results R = new Results();
 
         static void Say(string s)
         {
@@ -230,9 +239,26 @@ namespace AthermalScan
         }
         static string F(string fmt, params object[] a) => string.Format(CultureInfo.InvariantCulture, fmt, a);
 
+        // One line per launch, next to the deployed .exe. Cheap, bounded, and the only
+        // evidence that survives a ribbon run - whose console dies with the process.
+        static void LaunchLog(string message)
+        {
+            try
+            {
+                string dir = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
+                string path = Path.Combine(dir, "AthermalScan-launch.log");
+                if (File.Exists(path) && new FileInfo(path).Length > 64 * 1024) File.Delete(path);
+                File.AppendAllText(path, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss ",
+                    CultureInfo.InvariantCulture) + message + Environment.NewLine);
+            }
+            catch { /* diagnostics must never be the reason a run fails */ }
+        }
+
         static void Run()
         {
             ZOSAPI.IZOSAPI_Application app = null;
+            LaunchLog("launch argc=" + (LaunchArgs == null ? -1 : LaunchArgs.Length) +
+                      " argv=[" + string.Join(" ", LaunchArgs ?? new string[0]) + "]");
             var connection = new ZOSAPI.ZOSAPI_Connection();
             bool standalone = !string.IsNullOrEmpty(Opts.FilePath);
 
@@ -277,7 +303,14 @@ namespace AthermalScan
             if (!standalone && !Opts.NoDialog && (Opts.NoArgs || Opts.ForceDialog))
             {
                 bool plugin = false;
-                try { plugin = app.Mode == ZOSAPI.ZOSAPI_Mode.Plugin; } catch { }
+                string modeName = "(unreadable)";
+                try { modeName = app.Mode.ToString(); plugin = app.Mode == ZOSAPI.ZOSAPI_Mode.Plugin; } catch { }
+                // A ribbon run loses its console instantly, so when the settings window
+                // does not appear there is nothing at all to look at. Record what the
+                // gate actually saw - this exists because "I ran it and saw no
+                // settings" was otherwise undiagnosable without another user attempt.
+                LaunchLog("mode=" + modeName + " plugin=" + plugin + " noArgs=" + Opts.NoArgs +
+                          " forceDialog=" + Opts.ForceDialog + " -> dialog=" + (plugin || Opts.ForceDialog));
                 if (plugin || Opts.ForceDialog)
                 {
                     var envNow = app.PrimarySystem.SystemData.Environment;
@@ -291,7 +324,7 @@ namespace AthermalScan
                 }
             }
 
-            try { Analyze(app); }
+            try { Analyze(app, app.PrimarySystem); }
             finally
             {
                 if (standalone) app.CloseApplication();
@@ -323,9 +356,10 @@ namespace AthermalScan
             int p1, int p2, double h1 = 0, double h2 = 0, double p3 = 0, double p4 = 0)
             => sys.MFE.GetOperandValue(t, p1, p2, h1, h2, p3, p4, 0, 0);
 
-        static void Analyze(ZOSAPI.IZOSAPI_Application app)
+        internal static void Analyze(ZOSAPI.IZOSAPI_Application app, ZOSAPI.IOpticalSystem sys)
         {
-            var sys = app.PrimarySystem;
+            // sys is passed in: the extension analyses the live system, the User Analysis
+            // a CopySystem() clone, so the open prescription is never touched.
             if (sys.Mode != ZOSAPI.SystemType.Sequential)
                 throw new Exception("this extension requires a sequential system");
 
@@ -840,6 +874,10 @@ namespace AthermalScan
             }
 
             // ---- outputs -----------------------------------------------------------
+            // The User Analysis renders into its own OpticStudio window and has no
+            // business scattering report files beside the lens, so it sets NoFiles.
+            if (Opts.NoFiles) return;
+
             string prefix = Opts.OutPrefix;
             if (string.IsNullOrEmpty(prefix))
             {
