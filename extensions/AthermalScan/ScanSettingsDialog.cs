@@ -51,55 +51,74 @@ namespace AthermalScan
             FormBorderStyle = FormBorderStyle.FixedDialog;
             StartPosition = FormStartPosition.CenterScreen;
             MaximizeBox = MinimizeBox = false;
-            ClientSize = new Size(430, 476);
             Font = new Font("Segoe UI", 9f);
 
             LoadLastRun(o); // last run's values, if any, override the built-in defaults
 
-            int y = 10;
-            AddGroup("Temperature sweep", ref y, 88);
-            _tmin = AddField("Start (C)", 30, y - 58, o.TMin.ToString(CultureInfo.InvariantCulture));
-            _tmax = AddField("End (C)", 30, y - 32, o.TMax.ToString(CultureInfo.InvariantCulture));
-            _steps = AddField("Steps", 250, y - 58, o.Steps.ToString(CultureInfo.InvariantCulture));
+            // Every control is a CHILD of its group box, positioned in the group's own
+            // coordinates. The first version made them siblings at absolute
+            // coordinates, which failed twice over: WinForms z-order puts index 0 in
+            // front and Controls.Add appends, so each group - added before the fields
+            // it encloses - painted straight over them and the dialog rendered as four
+            // empty boxes; and the hand-computed offsets put a 200px label on top of
+            // its own text box, pushed the Steps box past the client width, and
+            // truncated the warning mid-sentence. Parenting removes the whole class:
+            // a child cannot be hidden by its own frame, and local coordinates cannot
+            // drift out of the group.
+            //
+            // The four pressure radios all live in ONE group box, so they still form a
+            // single mutually exclusive set - WinForms groups radios by parent.
+            const int GW = 436, PAD = 12, LBL = 22;
+            int y = PAD;
 
-            AddGroup("Design environment - what the prescription was measured in", ref y, adjustOn ? 88 : 108);
-            _t0 = AddField("Temperature (C)", 30, y - (adjustOn ? 58 : 78),
+            var gSweep = AddGroup("Temperature sweep", ref y, GW, 84);
+            _tmin = AddField(gSweep, "Start (C)", 16, LBL, 100, o.TMin.ToString(CultureInfo.InvariantCulture));
+            _tmax = AddField(gSweep, "End (C)", 16, LBL + 28, 100, o.TMax.ToString(CultureInfo.InvariantCulture));
+            _steps = AddField(gSweep, "Steps", 240, LBL, 300, o.Steps.ToString(CultureInfo.InvariantCulture));
+
+            var gEnv = AddGroup("Design environment - what the prescription was measured in",
+                ref y, GW, adjustOn ? 60 : 122);
+            _t0 = AddField(gEnv, "Temperature (C)", 16, LBL, 130,
                 (o.Temp0 ?? sysTemp).ToString("0.###", CultureInfo.InvariantCulture));
-            _p0 = AddField("Pressure (atm)", 250, y - (adjustOn ? 58 : 78),
+            _p0 = AddField(gEnv, "Pressure (atm)", 240, LBL, 340,
                 (o.Press0 ?? (adjustOn ? sysPress : 1.0)).ToString("0.###", CultureInfo.InvariantCulture));
             if (!adjustOn)
-                Add(new Label
+                gEnv.Controls.Add(new Label
                 {
-                    Left = 30, Top = y - 46, Width = 370, Height = 32,
-                    ForeColor = Color.FromArgb(160, 60, 0),
-                    Text = "This file has Adjust Index Data To Environment OFF, so its stored " +
-                           "temperature and pressure do not define the design environment. Enter it here."
+                    Left = 16, Top = LBL + 30, Width = GW - 36, Height = 56,
+                    ForeColor = Color.FromArgb(150, 70, 0),
+                    Text = "This file has Adjust Index Data To Environment OFF. OpticStudio then pins " +
+                           "index data to 20 C / 1.0 atm, so the temperature and pressure stored in the " +
+                           "file do not define the design environment - enter it here."
                 });
 
-            AddGroup("Analyse at", ref y, 122);
-            int gy = y - 108;
-            _pSame = AddRadio("The design pressure", 30, gy);
-            _pVac = AddRadio("Vacuum (0 atm) - absolute indices", 30, gy + 24);
-            _pFixed = AddRadio("Fixed pressure (atm):", 30, gy + 48);
-            _pfixed = AddBox(230, gy + 46, 70, "0");
-            _pRamp = AddRadio("Ramp with temperature, ending at (atm):", 30, gy + 72);
-            _pramp = AddBox(300, gy + 70, 70, "0");
+            var gAt = AddGroup("Analyse at", ref y, GW, 118);
+            _pSame = AddRadio(gAt, "The design pressure", 16, LBL - 4);
+            _pVac = AddRadio(gAt, "Vacuum (0 atm) - absolute indices", 16, LBL + 20);
+            _pFixed = AddRadio(gAt, "Fixed pressure (atm):", 16, LBL + 44);
+            _pfixed = AddBox(gAt, 250, LBL + 44, 70, "0");
+            _pRamp = AddRadio(gAt, "Ramp with temperature, ending at (atm):", 16, LBL + 68);
+            _pramp = AddBox(gAt, 250, LBL + 68, 70, "0");
             SelectPressureMode(o);
 
-            AddGroup("Options", ref y, 84);
-            _track = AddField("Mount track L (blank = total track)", 30, y - 54,
+            var gOpt = AddGroup("Options", ref y, GW, 80);
+            _track = AddField(gOpt, "Mount track L (blank = total track)", 16, LBL, 220,
                 o.Track > 0 ? o.Track.ToString(CultureInfo.InvariantCulture) : "");
             _freeze = new CheckBox
             {
-                Left = 30, Top = y - 28, Width = 380, Checked = o.FreezeSolves,
+                Left = 16, Top = LBL + 30, Width = GW - 36, Checked = o.FreezeSolves,
                 Text = "Freeze value-computing solves (not undone afterwards)"
             };
-            Add(_freeze);
+            gOpt.Controls.Add(_freeze);
 
-            var ok = new Button { Text = "Run scan", Left = 230, Top = y + 8, Width = 90, DialogResult = DialogResult.OK };
-            var cancel = new Button { Text = "Cancel", Left = 328, Top = y + 8, Width = 82, DialogResult = DialogResult.Cancel };
+            var ok = new Button { Text = "Run scan", Left = PAD + GW - 188, Top = y, Width = 92, DialogResult = DialogResult.OK };
+            var cancel = new Button { Text = "Cancel", Left = PAD + GW - 90, Top = y, Width = 90, DialogResult = DialogResult.Cancel };
             Add(ok); Add(cancel);
             AcceptButton = ok; CancelButton = cancel;
+
+            // Size the form to the content instead of to a guessed constant, so the
+            // buttons cannot end up clipped by the bottom edge again.
+            ClientSize = new Size(PAD * 2 + GW, y + ok.Height + PAD);
         }
 
         void SelectPressureMode(Options o)
@@ -118,32 +137,37 @@ namespace AthermalScan
             else _pSame.Checked = true;
         }
 
-        // ---- tiny layout helpers -------------------------------------------------
+        // ---- layout helpers ------------------------------------------------------
+        // All coordinates inside a group are LOCAL to that group. Labels are AutoSize
+        // so a long caption cannot silently paint over the box beside it, and the box
+        // x is passed explicitly rather than guessed from the caption's length.
         void Add(Control c) => Controls.Add(c);
 
-        void AddGroup(string title, ref int y, int height)
+        GroupBox AddGroup(string title, ref int y, int width, int height)
         {
-            Add(new GroupBox { Left = 12, Top = y, Width = 406, Height = height, Text = title });
+            var g = new GroupBox { Left = 12, Top = y, Width = width, Height = height, Text = title };
+            Add(g);
             y += height + 10;
+            return g;
         }
 
-        TextBox AddField(string label, int x, int y, string value)
+        static TextBox AddField(GroupBox g, string label, int x, int y, int boxX, string value)
         {
-            Add(new Label { Left = x, Top = y + 3, Width = 200, Text = label });
-            return AddBox(x + (label.Length > 22 ? 240 : 130), y, 70, value);
+            g.Controls.Add(new Label { Left = x, Top = y + 4, AutoSize = true, Text = label });
+            return AddBox(g, boxX, y, 70, value);
         }
 
-        TextBox AddBox(int x, int y, int w, string value)
+        static TextBox AddBox(GroupBox g, int x, int y, int w, string value)
         {
             var t = new TextBox { Left = x, Top = y, Width = w, Text = value };
-            Add(t);
+            g.Controls.Add(t);
             return t;
         }
 
-        RadioButton AddRadio(string text, int x, int y)
+        static RadioButton AddRadio(GroupBox g, string text, int x, int y)
         {
-            var r = new RadioButton { Left = x, Top = y, Width = 300, Text = text };
-            Add(r);
+            var r = new RadioButton { Left = x, Top = y, AutoSize = true, Text = text };
+            g.Controls.Add(r);
             return r;
         }
 
