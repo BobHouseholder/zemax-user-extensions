@@ -187,30 +187,44 @@ namespace AthermalScan
                                   (r.Temps == null ? 0 : r.Temps.Length) + " points, " +
                                   Program.Report.Count + " report lines");
 
-                // The text carries the whole report - it is the part that must survive.
-                // The plots are attempted afterwards and guarded separately, because
-                // whether an analysis may hold text AND line plots at once is not
-                // documented either way, and a refusal must not cost the results.
+                // MEASURED, since the documentation says nothing either way: an
+                // analysis holds text plus exactly ONE plot. Calling Make2DLinePlot a
+                // second time throws nothing and reports nothing - the second plot
+                // simply replaces the first, so an earlier version that made a focus
+                // plot and then an RMS plot silently showed only the RMS one.
+                //
+                // So the single plot has to carry the conclusion. That is the focus
+                // shift, because every headline number here - dz/dT, the athermal
+                // range, the required housing CTE - is derived from it, while RMS is
+                // context and stays in the text. The depth-of-focus limits go on as
+                // two flat series: same units as the shift, so the temperature range
+                // over which the design stays in focus can be read straight off the
+                // crossing points instead of computed from the table.
                 if (r.Temps != null && r.Temps.Length > 0)
                 {
                     try
                     {
-                        var focus = data.Make2DLinePlotSafe("Focus shift vs temperature", r.Temps);
-                        focus.XLabel = "temperature (C)";
-                        focus.YLabel = "focus shift (lens units)";
-                        focus.AddSeriesSafe("focus shift", ZOSAPI.Common.ZemaxColor.Color1, r.FocusShift);
+                        var plot = data.Make2DLinePlotSafe("Focus shift vs temperature", r.Temps);
+                        plot.XLabel = "temperature (C)";
+                        plot.YLabel = "focus shift (lens units)";
+                        plot.AddSeriesSafe("focus shift", ZOSAPI.Common.ZemaxColor.Color1, r.FocusShift);
 
-                        var rms = data.Make2DLinePlotSafe("RMS spot vs temperature", r.Temps);
-                        rms.XLabel = "temperature (C)";
-                        rms.YLabel = "RMS spot (micron)";
-                        rms.AddSeriesSafe("RMS @ fixed plane", ZOSAPI.Common.ZemaxColor.Color2, r.RmsFixed);
-                        rms.AddSeriesSafe("RMS refocused", ZOSAPI.Common.ZemaxColor.Color3, r.RmsRefoc);
+                        if (r.DofMm > 0)
+                        {
+                            var plus = new double[r.Temps.Length];
+                            var minus = new double[r.Temps.Length];
+                            for (int i = 0; i < r.Temps.Length; i++) { plus[i] = r.DofMm; minus[i] = -r.DofMm; }
+                            plot.AddSeriesSafe("+ depth of focus", ZOSAPI.Common.ZemaxColor.Color2, plus);
+                            plot.AddSeriesSafe("- depth of focus", ZOSAPI.Common.ZemaxColor.Color3, minus);
+                        }
                         data.ShowLegend = true;
+                        Program.LaunchLog("  plot: focus shift + " +
+                                          (r.DofMm > 0 ? "2 depth-of-focus limits" : "no DOF band"));
                     }
                     catch (Exception ex)
                     {
-                        Program.LaunchLog("  plots NOT rendered: " + ex.Message);
-                        Console.WriteLine("plots not rendered: " + ex.Message);
+                        Program.LaunchLog("  plot NOT rendered: " + ex.Message);
+                        Console.WriteLine("plot not rendered: " + ex.Message);
                     }
                 }
             }
