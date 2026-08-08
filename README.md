@@ -262,3 +262,14 @@ dotnet build extensions\EquivalentGlassFinder\EquivalentGlassFinder.csproj --con
 ```
 
 Copy the built `.exe` files to `{Zemax Data}\ZOS-API\Extensions\`.
+
+## Licence
+
+MIT — see [LICENSE](LICENSE). Copyright (c) 2026 Bob Householder.
+
+That covers the source in this repository and nothing else. The extensions
+**link against Ansys ZOS-API assemblies**, which are part of an OpticStudio
+installation, are not included here, and are not covered by this licence. A
+build output therefore carries Ansys components alongside MIT-licensed code —
+so building and using the extensions is straightforward, but redistributing a
+compiled `.exe` is a question about Ansys's terms, not about this one.
