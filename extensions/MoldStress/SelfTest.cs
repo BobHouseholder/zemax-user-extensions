@@ -22,6 +22,8 @@ namespace MoldStress
             CatalogChecks();
             Console.WriteLine();
             GeometryChecks();
+            Console.WriteLine();
+            FillField.SelfCheck();
 
             Console.WriteLine();
             Console.WriteLine(string.Format("  {0} passed, {1} failed", _pass, _fail));
