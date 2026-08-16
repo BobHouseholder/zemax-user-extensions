@@ -28,6 +28,8 @@ namespace MoldStress
             FreezeHistory.SelfCheck();
             Console.WriteLine();
             Channels.SelfCheck();
+            Console.WriteLine();
+            StarFiles.SelfCheck();
 
             Console.WriteLine();
             Console.WriteLine(string.Format("  {0} passed, {1} failed", _pass, _fail));

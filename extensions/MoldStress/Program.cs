@@ -35,6 +35,7 @@ namespace MoldStress
                 if (Has(args, "-writecatalog")) return WriteCatalog(args);
                 if (Has(args, "-selftest")) return SelfTest.Run(args);
                 if (Has(args, "-gates")) return Gates(args);
+                if (Has(args, "-run")) return Runner.Run(args);
 
                 Usage();
                 return 0;
@@ -163,6 +164,14 @@ namespace MoldStress
             Console.WriteLine("        element: a single edge gate at +Y sized off the local wall,");
             Console.WriteLine("        a ring gate above 12 mm semi-diameter, and the parting plane");
             Console.WriteLine("        at the rim. Override any of it per element.");
+            Console.WriteLine();
+            Console.WriteLine("  -run [-file <lens.zmx>] [-gateconfig <f>] [-outdir <d>]");
+            Console.WriteLine("       [-filltime s] [-packpressure MPa] [-packtime s]");
+            Console.WriteLine("       [-melttemp C] [-moldtemp C]");
+            Console.WriteLine("        The whole chain: gate, fill field, freeze history, the three");
+            Console.WriteLine("        channels, STAR stress and index files, loaded and applied,");
+            Console.WriteLine("        with the performance change against a baseline measured");
+            Console.WriteLine("        before anything was imported.");
             Console.WriteLine();
             Console.WriteLine("  -selftest");
             Console.WriteLine("        Run every stage against its closed form. Exits non-zero on");
