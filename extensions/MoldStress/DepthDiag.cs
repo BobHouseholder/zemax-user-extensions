@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -49,7 +49,7 @@ namespace MoldStress
             };
 
             var fill = FillField.Build(plate, p, baseProc, 101);
-            var freeze = FreezeHistory.Build(plate.CentreThicknessMm, p, baseProc, 41);
+            var freeze = FreezeHistory.Build(plate.CentreThicknessMm, p, baseProc, 81);
             double lambda0 = fill.EtaPaS / p.MeltModulusPa;
             double half = 0.5 * plate.CentreThicknessMm;
 
@@ -121,6 +121,32 @@ namespace MoldStress
             say(monotoneDown
                 ? "  the ratio falls monotonically with lambda - PREDICTION 2 HOLDS"
                 : "  the ratio does NOT fall monotonically with lambda - PREDICTION 2 REFUTED");
+
+            // --- is the number even converged? ---------------------------------
+            // Asked before any new physics is proposed. The criterion samples at
+            // 2.5% of the half-wall from the surface, which is where the freeze
+            // profile is steepest and a grid resolves it worst.
+            say("");
+            say("  grid convergence of the depth ratio");
+            say("     nz    nFD    surface |dn|      deep |dn|     ratio");
+            double lastRatio = double.NaN;
+            foreach (var cfg in new[] {
+                new { nz = 41, nfd = 401 }, new { nz = 81, nfd = 801 },
+                new { nz = 161, nfd = 1601 }, new { nz = 321, nfd = 3201 } })
+            {
+                var fr = FreezeHistory.Build(plate.CentreThicknessMm, p, baseProc, cfg.nz, cfg.nfd);
+                var chC = Channels.Build(plate, p, baseProc, fill, fr);
+                double sS = Channels.DnAtDepthFraction(chC.DnFlow, fr.Z, 0, half, RefCase.SurfaceFraction);
+                double dD = Channels.DnAtDepthFraction(chC.DnFlow, fr.Z, 0, half, RefCase.DeepFraction);
+                double r = dD > 0 ? sS / dD : double.PositiveInfinity;
+                say(string.Format(ci, "  {0,5}  {1,5}  {2,13:E3}  {3,13:E3}  {4,8:F3}",
+                    cfg.nz, cfg.nfd, sS, dD, r));
+                lastRatio = r;
+            }
+            say("");
+            say("  a ratio that moves with resolution is a measurement result, not a");
+            say("  physics result. Compare the spread above with the 5.56 target and");
+            say("  the [2.78, 11.11] band before proposing any new mechanism.");
 
             string outPath = Program.Value(args, "-out")
                 ?? Path.Combine(Path.GetTempPath(), "moldstress_depthdiag.txt");

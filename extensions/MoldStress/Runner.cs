@@ -76,7 +76,7 @@ namespace MoldStress
                 {
                     var p = Polymers.ByName(e.Material);
                     var fill = FillField.Build(e, p, proc, 101);
-                    var freeze = FreezeHistory.Build(Math.Max(e.EdgeThicknessMm, 0.2), p, proc, 41);
+                    var freeze = FreezeHistory.Build(Math.Max(e.EdgeThicknessMm, 0.2), p, proc, 81);
                     var ch = Channels.Build(e, p, proc, fill, freeze);
                     var w = StarFiles.Write(e, p, ch, fill, freeze, outDir);
                     written.Add(w);

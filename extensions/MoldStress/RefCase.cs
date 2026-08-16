@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -90,7 +90,7 @@ namespace MoldStress
                 e.PartingLineZMm = Gating.DefaultPartingLineZ(e);
 
                 var fill = FillField.Build(e, p, proc, 101);
-                var freeze = FreezeHistory.Build(e.CentreThicknessMm, p, proc, 41);
+                var freeze = FreezeHistory.Build(e.CentreThicknessMm, p, proc, 81);
                 var ch = Channels.Build(e, p, proc, fill, freeze);
 
                 // Thickness average of |dn| at each station along the flow - what
@@ -137,7 +137,7 @@ namespace MoldStress
                     // reversing it returns the same array and the null agreed with
                     // itself at 33.41 vs 33.41. Inverting the ORDER - t -> tMax - t
                     // - genuinely swaps which depths freeze first.
-                    var reversed = FreezeHistory.Build(e.CentreThicknessMm, p, proc, 41);
+                    var reversed = FreezeHistory.Build(e.CentreThicknessMm, p, proc, 81);
                     double tMax = 0.0;
                     foreach (double t in reversed.FreezeTimeS) tMax = Math.Max(tMax, t);
                     for (int k = 0; k < reversed.FreezeTimeS.Length; k++)

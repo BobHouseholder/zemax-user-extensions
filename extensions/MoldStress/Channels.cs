@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace MoldStress
 {
@@ -544,7 +544,7 @@ namespace MoldStress
                 plateF.Gate = new GateSpec { Kind = GateKind.FilmEdge, AzimuthDeg = 0,
                                              WidthMm = 100, ThicknessMm = 0.9 };
                 var fillF = FillField.Build(plateF, pf, procOn, 51);
-                var frF = FreezeHistory.Build(plateF.CentreThicknessMm, pf, procOn, 41);
+                var frF = FreezeHistory.Build(plateF.CentreThicknessMm, pf, procOn, 81);
                 var cOn = Build(plateF, pf, procOn, fillF, frF);
                 var cOff = Build(plateF, pf, procOff, fillF, frF);
 
@@ -597,12 +597,12 @@ namespace MoldStress
             plate.EdgeThicknessMm = plate.ThicknessAt(plate.SemiDiameterMm);
             plate.Gate = Gating.DefaultGate(plate);
             var fill = FillField.Build(plate, p, proc, 101);
-            var freeze = FreezeHistory.Build(plate.CentreThicknessMm, p, proc, 41);
+            var freeze = FreezeHistory.Build(plate.CentreThicknessMm, p, proc, 81);
             var c = Build(plate, p, proc, fill, freeze);
 
             // Shear vanishes on the mid-plane, so the flow channel must too.
             SelfTest.Near("flow birefringence vanishes at the mid-plane",
-                c.DnFlow[0, 40 / 2], 0.0, 1e-12);
+                c.DnFlow[0, freeze.NodeCount / 2], 0.0, 1e-12);
 
             // ... and it must peak between the surface and the core, not at
             // either end. That is the signature the reference case reports.

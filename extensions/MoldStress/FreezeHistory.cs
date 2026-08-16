@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace MoldStress
 {
@@ -68,7 +68,8 @@ namespace MoldStress
         /// short-time control, rather than the other way round. It costs a
         /// fraction of a second.
         /// </summary>
-        public static FreezeHistory Build(double thicknessMm, Polymer p, Process proc, int nz = 41)
+        public static FreezeHistory Build(double thicknessMm, Polymer p, Process proc, int nz = 81,
+                                          int nFd = 801)
         {
             if (nz < 5 || nz % 2 == 0) throw new ArgumentException("nz must be odd and >= 5");
             double melt = double.IsNaN(proc.MeltTempC) ? p.MeltTempC : proc.MeltTempC;
@@ -86,7 +87,11 @@ namespace MoldStress
             };
             for (int i = 0; i < nz; i++) f.Z[i] = -half + thicknessMm * i / (nz - 1.0);
 
-            int n = 401;                                  // odd, so a node sits on the mid-plane
+            // Odd, so a node sits on the mid-plane. Exposed as a parameter
+            // because the depth criterion samples 2.5% from the wall, where a
+            // coarse grid resolves the steepest part of the freeze profile worst
+            // - and a number that moves with resolution is not a physics result.
+            int n = (nFd % 2 == 0) ? nFd + 1 : nFd;
             double dz = thicknessMm / (n - 1);
             double dt = 0.2 * dz * dz / alpha;
             var T = new double[n];
