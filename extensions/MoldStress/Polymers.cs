@@ -131,11 +131,23 @@ namespace MoldStress
             new Polymer {
                 Name = "MS_COC_TOPAS6017", Description = "Cyclic olefin copolymer, TOPAS 6017-class",
                 Nd = 1.5300, Vd = 56.0, WavelengthUm = 0.5876,
-                KGlassBrewster = 5.0, K11Brewster = -1.7,
-                KSource = "COC photoelastic coefficients reported 5-10x below polycarbonate; low end of that range taken",
-                Provisional = true,
-                CMeltBrewster = 600.0,
-                CMeltSource = "melt coefficient inferred from the COC/PC ratio, not measured; the weakest number in this table",
+                // MEASURED, 2026-08-15. Kim, Yoon & Kornfield, "Measurement of
+                // Stress-Optical Coefficients of COC's with Different
+                // Composition", Key Engineering Materials 326-328 (2006) 183:
+                // glassy -8 to -9 Br, melt +920 to +1160 Br, for COCs of 60-70
+                // mol% norbornene. Corroborated for TOPAS 5013 by Korea-Australia
+                // Rheology Journal (2012), which reports a melt extreme of
+                // +1.0e-9 /Pa = +1000 Br.
+                //
+                // This REPLACES a provisional +5.0 Br glassy value that was wrong
+                // in SIGN as well as magnitude. The measured difference K12 - K11
+                // is what is quoted; the split between K11 and K12 individually is
+                // not measured and is assumed in N-BK7's proportion.
+                KGlassBrewster = -8.5, K11Brewster = 2.43,
+                KSource = "MEASURED: Kim, Yoon & Kornfield, Key Eng. Mater. 326-328 (2006) 183 - glassy -8 to -9 Br; midpoint taken. K11/K12 split assumed",
+                Provisional = false,
+                CMeltBrewster = 1000.0,
+                CMeltSource = "MEASURED: same source, melt +920 to +1160 Br; corroborated at +1.0e-9 /Pa for TOPAS 5013, Korea-Australia Rheol. J. (2012)",
                 TgC = 178, MeltTempC = 290, MoldTempC = 120,
                 DiffusivityMm2PerS = 0.10, CtePerK = 60e-6, ModulusMPa = 3000, PoissonRatio = 0.36,
                 DensityGPerCm3 = 1.02,
@@ -175,8 +187,14 @@ namespace MoldStress
                     errs.Add(p.Name + ": K != K12 - K11");
                 if (Math.Abs(p.CMeltBrewster) <= Math.Abs(p.KGlassBrewster))
                     errs.Add(p.Name + ": |Cmelt| <= |Cglass| - the coefficients look swapped");
-                if (Math.Sign(p.CMeltBrewster) != Math.Sign(p.KGlassBrewster))
-                    errs.Add(p.Name + ": melt and glassy coefficients disagree in sign");
+                // A same-sign check used to live here, on the reasoning that a
+                // sign disagreement meant the two had been swapped. MEASUREMENT
+                // REFUTED IT: Kim, Yoon & Kornfield report COC at -8 to -9 Br
+                // glassy and +920 to +1160 Br in the melt - genuinely opposite,
+                // and polystyrene is documented to invert through Tg as well. The
+                // guard would have REFUSED the correct data, which is the worst
+                // thing a guard can do. Magnitude separation is the real check and
+                // it stays.
                 if (p.TgC >= p.MeltTempC) errs.Add(p.Name + ": Tg is not below the melt temperature");
                 if (p.MoldTempC >= p.TgC) errs.Add(p.Name + ": mould wall is not below Tg");
             }
