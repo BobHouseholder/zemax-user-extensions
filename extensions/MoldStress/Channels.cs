@@ -134,7 +134,7 @@ namespace MoldStress
                         for (int q = 0; q < hist.Length; q++) hist[q] = freeze.TempHistoryC[k, q];
                         memory = MemoryFactorWlf(tArrive, tFill, tFreezeAbs,
                                                  freeze.TimeGridS, hist, p, lambda, tPack,
-                                                 meltFracAtTime);
+                                                 meltFracAtTime, proc.ChannelNarrowing);
                     }
                     else
                     {
@@ -282,7 +282,8 @@ namespace MoldStress
         public static double MemoryFactorWlf(double tA, double tFill, double tF,
                                              double[] grid, double[] tempC,
                                              Polymer p, double lambdaMelt, double tPack,
-                                             double[] meltFrac = null)
+                                             double[] meltFrac = null,
+                                             bool narrowing = false)
         {
             if (tF <= tA || grid == null || grid.Length < 2) return 0.0;
             double tEndLocal = Math.Min(tF - tA, Math.Max(tFill - tA, 0.0));
@@ -352,7 +353,7 @@ namespace MoldStress
                 // the ratio diverge; applied here it is graded by the same memory
                 // kernel and damped by the packing decay above, which is the
                 // combination the diagnostics pointed at.
-                if (meltFrac != null && j < meltFrac.Length && meltFrac[j] > 1e-6)
+                if (narrowing && meltFrac != null && j < meltFrac.Length && meltFrac[j] > 1e-6)
                 {
                     double narrow = 1.0 / meltFrac[j];
                     weight *= narrow * narrow * narrow;
@@ -373,18 +374,19 @@ namespace MoldStress
                 integral += weight * kernel;
             }
             double v = integral / Math.Max(lambdaMelt, 1e-12);
-            // The clamp is BINDING, not decorative, and that is the finding.
-            // With WLF relaxation the integral already saturates, so the graded
-            // narrowing term added above is INERT: it pushes v further above 1 and
-            // the clamp returns 1 regardless. Measured by removing it - the depth
-            // ratio went 2.07 -> 0.22 and the in-plane peak 2.02x -> 44.63x, so
-            // the narrowing drives orientation into the CORE, the opposite of the
-            // skin-peaked profile the published case shows. The combination of
-            // partial cut-off and graded memory does not sharpen the skin; it
-            // produces a core-peaked profile that the clamp happens to hide.
-            // Restored, because a layer cannot freeze in more orientation than the
-            // steady state it is relaxing towards.
-            return v < 0 ? 0 : (v > 1 ? 1 : v);
+            // UPPER CLAMP REMOVED 2026-08-15 on Bob's instruction: orientation is
+            // allowed to exceed the steady state it is relaxing towards.
+            //
+            // That is defensible physics - transient stress overshoot in start-up
+            // flow is real, and a layer whose relaxation time is climbing through
+            // the WLF shift as it cools can retain more than the melt-temperature
+            // steady value it started from. The clamp was a bound I imposed, and
+            // measuring showed it was BINDING: it pinned the depth ratio at the
+            // purely geometric 0.975/0.47 and made every later mechanism inert.
+            //
+            // Only the lower bound stays. Negative retained orientation would mean
+            // the kernel had inverted, which is not physics, it is an error.
+            return v < 0 ? 0 : v;
         }
 
         public static double MemoryFactor(double tA, double tFill, double tF,

@@ -49,6 +49,15 @@ namespace MoldStress
         /// regardless of this default, so gating it off does not stop testing it.
         /// </summary>
         public double FountainStrain = 0.0;
+
+        /// <summary>
+        /// Grade the shear rate by the narrowing molten channel, |dp/ds| going as
+        /// 1/h_melt^3 as the skin closes the gap. OFF by default: it was inert
+        /// under the old memory clamp, and with the clamp gone it is not inert but
+        /// it drives orientation into the CORE - measured, depth ratio 2.07 -> 0.22
+        /// - which is the opposite of the published skin-peaked profile.
+        /// </summary>
+        public bool ChannelNarrowing = false;
     }
 
     /// <summary>
