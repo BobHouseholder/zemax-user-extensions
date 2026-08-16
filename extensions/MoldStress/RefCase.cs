@@ -38,6 +38,16 @@ namespace MoldStress
         public const double PublishedCoreDn = 1.8e-4;
         public const double FactorBar = 2.0;
 
+        // Depth criterion, registered 2026-08-15 before it was implemented.
+        // Surface is the outermost 5% of the half-wall; the deep point is 0.47 of
+        // it, which is the 0.4 mm depth in a 1.5 mm plate where the published
+        // prism-coupler value of 1.8e-4 was taken. Both sampling points are part
+        // of the criterion, not of the implementation.
+        public const double SurfaceFraction = 0.975;
+        public const double DeepFraction = 0.47;
+        public const double PublishedDepthRatio = PublishedSurfaceDn / PublishedCoreDn;
+        public const double PeakMustLieOutside = 0.75;   // outer 25% of the half-wall
+
         public static int Run(string[] args)
         {
             var log = new StringBuilder();
@@ -58,6 +68,8 @@ namespace MoldStress
             double[] gateProfile = null, farProfile = null;
             double gatePeak = 0, farPeak = 0;
             double surfaceDn = 0, coreDn = 0;
+            double bandSurfaceDn = 0, bandCoreDn = 0;
+            double peakDepthFraction = 0, reversedRatio = 0;
 
             foreach (double azimuth in new[] { 0.0, 180.0 })
             {
@@ -94,21 +106,44 @@ namespace MoldStress
                 {
                     gateProfile = avg;
                     gatePeak = avg[0];
-                    for (int k = 0; k < nz; k++)
-                    {
-                        double v = Math.Abs(ch.DnFlow[0, k]);
-                        if (Math.Abs(freeze.Z[k]) > 0.45 * e.CentreThicknessMm)
-                            surfaceDn = Math.Max(surfaceDn, v);
-                    }
-                    coreDn = Math.Abs(ch.DnFlow[0, nz / 2]);
-                    // the core is exactly on the mid-plane where shear vanishes,
-                    // so report the mid-third average instead - that is what a
-                    // prism coupler sampling the core sees.
+
+                    // Sampled at the depths the criterion names, not averaged over
+                    // a band. The band version is kept alongside because it is
+                    // what the earlier 108.9 was, and replacing a number silently
+                    // is worse than reporting both.
+                    double half = 0.5 * e.CentreThicknessMm;
+                    surfaceDn = Channels.DnAtDepthFraction(ch.DnFlow, freeze.Z, 0, half, SurfaceFraction);
+                    coreDn = Channels.DnAtDepthFraction(ch.DnFlow, freeze.Z, 0, half, DeepFraction);
+
                     double s2 = 0; int c2 = 0;
                     for (int k = 0; k < nz; k++)
                         if (Math.Abs(freeze.Z[k]) < 0.17 * e.CentreThicknessMm)
                         { s2 += Math.Abs(ch.DnFlow[0, k]); c2++; }
-                    coreDn = c2 > 0 ? s2 / c2 : coreDn;
+                    bandCoreDn = c2 > 0 ? s2 / c2 : 0.0;
+                    bandSurfaceDn = 0;
+                    for (int k = 0; k < nz; k++)
+                        if (Math.Abs(freeze.Z[k]) > 0.45 * e.CentreThicknessMm)
+                            bandSurfaceDn = Math.Max(bandSurfaceDn, Math.Abs(ch.DnFlow[0, k]));
+
+                    peakDepthFraction = ch.PeakDepthFraction;
+
+                    // NULL for the depth clause: make the CORE solidify first,
+                    // change nothing else, and require the ratio to move.
+                    //
+                    // Array.Reverse was the first attempt and it is a no-op here:
+                    // the freeze-time profile is symmetric about the mid-plane, so
+                    // reversing it returns the same array and the null agreed with
+                    // itself at 33.41 vs 33.41. Inverting the ORDER - t -> tMax - t
+                    // - genuinely swaps which depths freeze first.
+                    var reversed = FreezeHistory.Build(e.CentreThicknessMm, p, proc, 41);
+                    double tMax = 0.0;
+                    foreach (double t in reversed.FreezeTimeS) tMax = Math.Max(tMax, t);
+                    for (int k = 0; k < reversed.FreezeTimeS.Length; k++)
+                        reversed.FreezeTimeS[k] = tMax - reversed.FreezeTimeS[k];
+                    var chRev = Channels.Build(e, p, proc, fill, reversed);
+                    double sRev = Channels.DnAtDepthFraction(chRev.DnFlow, reversed.Z, 0, half, SurfaceFraction);
+                    double dRev = Channels.DnAtDepthFraction(chRev.DnFlow, reversed.Z, 0, half, DeepFraction);
+                    reversedRatio = dRev > 0 ? sRev / dRev : double.PositiveInfinity;
 
                     say("  distance from gate    thickness-averaged |dn|");
                     for (int i = 0; i < ns; i += ns / 10)
@@ -140,12 +175,33 @@ namespace MoldStress
                 "      maximum on the gate side, falling to {0:P1} of it at the far edge  =>  {1}",
                 decayRatio, decays ? "PASS" : "FAIL"));
 
-            // --- through-thickness shape --------------------------------------
-            double pubRatio = PublishedSurfaceDn / PublishedCoreDn;
+            // --- (a) depth profile, GATED since 2026-08-15 ---------------------
             double gotRatio = surfaceDn / Math.Max(coreDn, 1e-30);
+            double bandRatio = bandSurfaceDn / Math.Max(bandCoreDn, 1e-30);
+            double lo = PublishedDepthRatio / FactorBar, hi = PublishedDepthRatio * FactorBar;
+            bool depthInBand = gotRatio >= lo && gotRatio <= hi;
+            bool peakOutside = peakDepthFraction >= PeakMustLieOutside;
+
+            say("");
             say(string.Format(ci,
-                "      surface/core {0:F2} against published {1:F2} (diagnostic, not gated)",
-                gotRatio, pubRatio));
+                "  (a) depth: |dn| at {0:P0} of the half-wall / at {1:P0} = {2:F2}",
+                SurfaceFraction, DeepFraction, gotRatio));
+            say(string.Format(ci,
+                "      published {0:F2}, criterion [{1:F2}, {2:F2}]  =>  {3}",
+                PublishedDepthRatio, lo, hi, depthInBand ? "PASS" : "FAIL"));
+            say(string.Format(ci,
+                "      maximum at {0:P0} of the half-wall, must be beyond {1:P0}  =>  {2}",
+                peakDepthFraction, PeakMustLieOutside, peakOutside ? "PASS" : "FAIL"));
+            say(string.Format(ci,
+                "      for comparison, the mid-third band average this replaces: {0:F2}",
+                bandRatio));
+
+            // NULL for the depth clause.
+            bool depthNull = (gotRatio - 1.0) * (reversedRatio - 1.0) < 0
+                             || Math.Abs(reversedRatio - gotRatio) / Math.Max(gotRatio, 1e-30) > 0.5;
+            say(string.Format(ci,
+                "      null: freeze order reversed, ratio {0:F2} vs {1:F2}  =>  {2}",
+                reversedRatio, gotRatio, depthNull ? "PASS" : "FAIL"));
 
             // --- (b) the null --------------------------------------------------
             // Both runs are symmetric plates, so the profile against distance from
@@ -194,7 +250,8 @@ namespace MoldStress
             say("  result clears it. Recorded as a criterion that cannot fail rather than");
             say("  as one that passed.");
 
-            bool pass = withinFactor && decays && nullMoves;
+            bool pass = withinFactor && decays && nullMoves
+                        && depthInBand && peakOutside && depthNull;
             say("");
             say("  VERDICT: " + (pass ? "the registered criterion is MET"
                                       : "the registered criterion is NOT met"));

@@ -193,9 +193,72 @@ namespace MoldStress
             return sigma;
         }
 
+        /// <summary>
+        /// Birefringence at a stated fraction of the half-wall, interpolated.
+        ///
+        /// The depth criterion registered 2026-08-15 names its sampling points
+        /// rather than leaving them to the caller, because the number it gates is
+        /// meaningless without them: an average over the middle third includes the
+        /// mid-plane, where shear vanishes identically, so it reports a ratio that
+        /// is partly an artefact of the band.
+        /// </summary>
+        public static double DnAtDepthFraction(double[,] dn, double[] z, int station,
+                                               double halfWallMm, double fraction)
+        {
+            // INTERPOLATED, not snapped to the nearest node. Snapping was the
+            // first implementation and its own success-arm control caught it: on
+            // an analytic profile of known ratio 5.0 it read 5.444, an 8.9% error
+            // against a 1% bar, purely because no grid node sits exactly at 0.47
+            // of the half-wall. An instrument that cannot return a ratio it is
+            // given cannot be used to judge one it is not.
+            double target = fraction * halfWallMm;
+            int nz = z.Length;
+            double loD = double.MaxValue, hiD = double.MaxValue;
+            int loK = -1, hiK = -1;
+            for (int k = 0; k < nz; k++)
+            {
+                double a = Math.Abs(z[k]);
+                if (a <= target && target - a < loD) { loD = target - a; loK = k; }
+                if (a >= target && a - target < hiD) { hiD = a - target; hiK = k; }
+            }
+            if (loK < 0) return Math.Abs(dn[station, hiK]);
+            if (hiK < 0) return Math.Abs(dn[station, loK]);
+            double zLo = Math.Abs(z[loK]), zHi = Math.Abs(z[hiK]);
+            double vLo = Math.Abs(dn[station, loK]), vHi = Math.Abs(dn[station, hiK]);
+            if (Math.Abs(zHi - zLo) < 1e-12) return vLo;
+            double t = (target - zLo) / (zHi - zLo);
+            return vLo + t * (vHi - vLo);
+        }
+
         public static void SelfCheck()
         {
             Console.WriteLine("  A3 three channels");
+
+            // --- SUCCESS ARM for the depth criterion --------------------------
+            // Before any surface/core ratio can mean anything, the extraction has
+            // to be shown to return a ratio it is given. Analytic profile with a
+            // known ratio of exactly 5.0, through the same sampling code.
+            {
+                int nArm = 41;
+                var zz = new double[nArm];
+                var dd = new double[1, nArm];
+                double half = 0.75;                       // the registered plate
+                for (int k = 0; k < nArm; k++)
+                {
+                    zz[k] = -half + 2.0 * half * k / (nArm - 1.0);
+                    double f = Math.Abs(zz[k]) / half;
+                    // Constructed so the ratio between the two SAMPLING points is
+                    // exactly 5.0. The first version made it 5.0 at f = 1 while
+                    // sampling at f = 0.975, so it expected 5.0 and the correct
+                    // answer was 4.811 - the control was wrong, not the extraction,
+                    // and it took the disagreement to notice.
+                    dd[0, k] = 1.0 + 4.0 * (f - 0.47) / (0.975 - 0.47);
+                }
+                double surf = DnAtDepthFraction(dd, zz, 0, half, 0.975);
+                double deep = DnAtDepthFraction(dd, zz, 0, half, 0.47);
+                SelfTest.Near("depth extraction returns a known ratio of 5.0",
+                    surf / deep, 5.0, 0.01);
+            }
 
             var p = Polymers.ByName("MS_PMMA");
             var proc = new Process();
