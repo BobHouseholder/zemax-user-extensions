@@ -7,11 +7,28 @@
     here silently breaks every project on a machine with any other release
     installed - the reference fails to resolve and the build dies in CS0246.
   -->
+  <!--
+    Discovered by wildcard, not by an enumerated list. The list below was once the
+    whole mechanism and it failed exactly as the comment above warns: it named
+    2026 R1.01, 2026 R1.00 and 2025 R2.00, and a machine carrying 2026 R1.03
+    matched none of them. Any future release named "Ansys Zemax OpticStudio *"
+    now resolves with no edit to this file; the enumerated entries survive only as
+    a preference order where several installs coexist.
+  -->
+  <ItemGroup Condition="'$(ZEMAX_ROOT)' == ''">
+    <_ZosCandidate Include="C:\Program Files\Ansys Zemax OpticStudio*\ZOSAPI.dll" />
+    <_ZosCandidate Include="C:\Program Files\Zemax OpticStudio\ZOSAPI.dll" />
+  </ItemGroup>
+
   <PropertyGroup Condition="'$(ZEMAX_ROOT)' == ''">
-    <ZEMAX_ROOT Condition="Exists('C:\Program Files\Ansys Zemax OpticStudio 2026 R1.01\ZOSAPI.dll')">C:\Program Files\Ansys Zemax OpticStudio 2026 R1.01\</ZEMAX_ROOT>
+    <ZEMAX_ROOT Condition="Exists('C:\Program Files\Ansys Zemax OpticStudio 2026 R1.03\ZOSAPI.dll')">C:\Program Files\Ansys Zemax OpticStudio 2026 R1.03\</ZEMAX_ROOT>
+    <ZEMAX_ROOT Condition="'$(ZEMAX_ROOT)' == '' And Exists('C:\Program Files\Ansys Zemax OpticStudio 2026 R1.01\ZOSAPI.dll')">C:\Program Files\Ansys Zemax OpticStudio 2026 R1.01\</ZEMAX_ROOT>
     <ZEMAX_ROOT Condition="'$(ZEMAX_ROOT)' == '' And Exists('C:\Program Files\Ansys Zemax OpticStudio 2026 R1.00\ZOSAPI.dll')">C:\Program Files\Ansys Zemax OpticStudio 2026 R1.00\</ZEMAX_ROOT>
     <ZEMAX_ROOT Condition="'$(ZEMAX_ROOT)' == '' And Exists('C:\Program Files\Ansys Zemax OpticStudio 2025 R2.00\ZOSAPI.dll')">C:\Program Files\Ansys Zemax OpticStudio 2025 R2.00\</ZEMAX_ROOT>
     <ZEMAX_ROOT Condition="'$(ZEMAX_ROOT)' == '' And Exists('C:\Program Files\Zemax OpticStudio\ZOSAPI.dll')">C:\Program Files\Zemax OpticStudio\</ZEMAX_ROOT>
+    <!-- last resort: take whatever the wildcard found -->
+    <_ZosFound>@(_ZosCandidate->'%(RootDir)%(Directory)')</_ZosFound>
+    <ZEMAX_ROOT Condition="'$(ZEMAX_ROOT)' == '' And '$(_ZosFound)' != ''">$(_ZosFound.Split(';')[0])</ZEMAX_ROOT>
   </PropertyGroup>
 
   <Target Name="_CheckZemaxRoot" BeforeTargets="ResolveAssemblyReferences"
