@@ -77,24 +77,39 @@ namespace MoldStress
                     // where the shear stress would be highest. Without the ramp
                     // this model put the peak exactly at the surface - caught by
                     // this stage's own control.
-                    // ARRIVAL TIME. The freeze clock starts when the melt reaches
-                    // this station, not when the shot starts, so the absolute
-                    // instant a layer solidifies is arrival + its own freeze time.
+                    // VISCOELASTIC MEMORY.
                     //
-                    // This is the mechanism the registered reference case failed
-                    // without: material at the gate is still being sheared by the
-                    // flow filling everything downstream when its layers freeze,
-                    // while material at the far edge arrives as filling ends and
-                    // solidifies after the flow has stopped. Omitting it made the
-                    // predicted profile perfectly FLAT from gate to far edge,
-                    // against a published case that falls to zero - and made the
-                    // gate-rotation null unable to discriminate at all.
+                    // Frozen orientation is not the shear stress at the instant of
+                    // freezing - it is what the material still REMEMBERS of its
+                    // whole shear history at that instant. For a single Maxwell
+                    // mode with relaxation time lambda = eta/G:
+                    //
+                    //   sigma_e(t_f) = G * INT exp(-(t_f - t')/lambda) gamma_dot dt'
+                    //
+                    // which for a constant shear rate running from arrival t_a to
+                    // the end of flow t_end integrates in closed form to the
+                    // viscous stress times a memory factor:
+                    //
+                    //   sigma_e = tau_visc * [ exp(-(t_f - t_end)/lambda)
+                    //                        - exp(-(t_f - t_a  )/lambda) ]
+                    //
+                    // The two limits are the reason this replaces the ad-hoc ramp
+                    // it used to carry. Fast relaxation with a long shear window
+                    // returns tau_visc exactly - the instantaneous model is the
+                    // short-memory limit of this one, not a rival to it. And at
+                    // the far edge, where the melt arrives as filling ends, t_a
+                    // and t_end coincide and the bracket is identically ZERO: no
+                    // shear window, no orientation, whatever the local stress is.
+                    //
+                    // That is the gate-to-edge decay the registered reference case
+                    // requires and that an instantaneous rule cannot express.
                     double tArrive = tFill * fill.S[i] / Math.Max(fill.PathLengthMm, 1e-9);
-                    double tAbs = tArrive + freeze.FreezeTimeS[k];
-                    double history = tAbs <= tFill
-                        ? tAbs / tFill
-                        : Math.Exp(-(tAbs - tFill) / tPack);
-                    double tauMPa = fill.DpDs[i] * Math.Abs(freeze.Z[k]) * history;
+                    double tFreezeAbs = tArrive + freeze.FreezeTimeS[k];
+                    double tauViscMPa = fill.DpDs[i] * Math.Abs(freeze.Z[k]);
+                    double lambda = Math.Max(p.MeltModulusPa > 0
+                        ? fill.EtaPaS / p.MeltModulusPa : 1e-6, 1e-9);
+                    double memory = MemoryFactor(tArrive, tFill, tFreezeAbs, lambda, tPack);
+                    double tauMPa = tauViscMPa * memory;
 
                     // Stress-optical rule in simple shear: the principal stress
                     // difference is 2*tau.
@@ -117,6 +132,41 @@ namespace MoldStress
             c.PeakDnFlow = best;
             c.PeakDepthFraction = Math.Abs(freeze.Z[bestK]) / (0.5 * freeze.ThicknessMm);
             return c;
+        }
+
+        /// <summary>
+        /// The fraction of the steady viscous stress a layer still carries when
+        /// it freezes, from a single-mode Maxwell memory integral.
+        ///
+        ///   t_a     when the melt reached this station
+        ///   t_fill  when flow stops
+        ///   t_f     when this layer crossed Tg (absolute)
+        ///   lambda  relaxation time, eta/G
+        ///   t_pack  packing flow persists weakly after fill; modelled as a
+        ///           shear rate decaying with this time constant
+        ///
+        /// Bounded to [0, 1]: a layer cannot freeze in more orientation than the
+        /// steady state it is heading towards.
+        /// </summary>
+        public static double MemoryFactor(double tA, double tFill, double tF,
+                                          double lambda, double tPack)
+        {
+            if (tF <= tA) return 0.0;                       // frozen before it arrived
+            double tEnd = Math.Min(tF, tFill);
+            double main = tEnd > tA
+                ? Math.Exp(-(tF - tEnd) / lambda) - Math.Exp(-(tF - tA) / lambda)
+                : 0.0;
+
+            // Packing keeps a weak shear going after the cavity is full. Its
+            // contribution decays with tPack and can only add, never subtract.
+            double tail = 0.0;
+            if (tF > tFill && tFill > tA)
+            {
+                double w = Math.Exp(-(tF - tFill) / Math.Max(tPack, 1e-9));
+                tail = 0.1 * w * (1.0 - Math.Exp(-(tF - tFill) / lambda));
+            }
+            double v = main + tail;
+            return v < 0.0 ? 0.0 : (v > 1.0 ? 1.0 : v);
         }
 
         /// <summary>
@@ -184,6 +234,30 @@ namespace MoldStress
             SelfTest.Check("core ends in tension, skin in compression",
                 sPara[n / 2] > 0 && sPara[0] < 0,
                 string.Format("core {0:+0.0;-0.0}, skin {1:+0.0;-0.0}", sPara[n / 2], sPara[0]));
+
+            // --- the memory integral, against its own two limits -------------
+            // Short memory plus a long shear window must return the steady
+            // viscous stress exactly - the instantaneous model is this model's
+            // fast-relaxation limit, not a competitor to it.
+            SelfTest.Near("memory returns the steady state when lambda is short",
+                MemoryFactor(0.0, 10.0, 5.0, 1e-3, 3.0), 1.0, 1e-9);
+
+            // A layer that freezes as the melt arrives has no shear window at
+            // all, so it can carry nothing however large the local stress is.
+            // This is the term that produces the gate-to-edge decay.
+            SelfTest.Near("no shear window means no frozen orientation",
+                MemoryFactor(1.0, 1.0, 1.0000001, 0.5, 3.0), 0.0, 1e-6);
+
+            // And it must fall monotonically as the melt arrives later, which is
+            // the decay itself rather than a proxy for it.
+            double mEarly = MemoryFactor(0.0, 1.0, 1.2, 0.5, 3.0);
+            double mMid = MemoryFactor(0.5, 1.0, 1.7, 0.5, 3.0);
+            double mLate = MemoryFactor(0.95, 1.0, 2.15, 0.5, 3.0);
+            SelfTest.Check("memory falls as the melt arrives later",
+                mEarly > mMid && mMid > mLate,
+                string.Format("{0:F4} -> {1:F4} -> {2:F4}", mEarly, mMid, mLate));
+            SelfTest.Check("memory stays inside [0,1]",
+                mEarly <= 1.0 && mLate >= 0.0, "bounded");
 
             // --- Lorentz-Lorenz, against a numerical differentiation ---------
             // Checking the analytic factor against itself proves nothing, so

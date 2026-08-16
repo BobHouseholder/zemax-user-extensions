@@ -156,8 +156,24 @@ namespace MoldStress
             // compares two identical flat fields passes for the same reason a
             // broken instrument passes: there is nothing in the treatment for it
             // to detect. Reported as INCONCLUSIVE rather than as a pass.
-            bool nullTracks = Math.Abs(farPeak - gatePeak) / Math.Max(gatePeak, 1e-30) < 1e-9;
+            //
+            // Comparing PEAK MAGNITUDES is also too weak - by symmetry they are
+            // equal whether or not anything moved. The test that means something
+            // is in PART coordinates: where on the plate does the maximum sit?
             bool hasStructure = decayRatio < 0.99;
+            int nGrid = gateProfile.Length;
+            int argMaxGate0 = 0, argMaxGate180 = 0;
+            for (int i = 0; i < nGrid; i++)
+            {
+                if (gateProfile[i] > gateProfile[argMaxGate0]) argMaxGate0 = i;
+                if (farProfile[i] > farProfile[argMaxGate180]) argMaxGate180 = i;
+            }
+            // Gate at azimuth 0 enters at x = 0; gate at 180 enters at x = 100,
+            // so its distance-from-gate axis runs the other way across the part.
+            double xMax0 = 100.0 * argMaxGate0 / (nGrid - 1.0);
+            double xMax180 = 100.0 - 100.0 * argMaxGate180 / (nGrid - 1.0);
+            bool moved = Math.Abs(xMax180 - xMax0) > 50.0;
+
             say("");
             say(string.Format(ci,
                 "  (b) null: gate moved to the opposite edge, peak {0:E3} vs {1:E3}",
@@ -166,9 +182,10 @@ namespace MoldStress
                 say("      INCONCLUSIVE - the predicted field has no spatial structure, so " +
                     "moving the gate cannot move anything. This null cannot fail here.");
             else
-                say("      the maximum tracks the gate rather than the part  =>  " +
-                    (nullTracks ? "PASS" : "FAIL"));
-            bool nullMoves = hasStructure && nullTracks;
+                say(string.Format(ci,
+                    "      maximum sits at x = {0:F0} mm with the gate at 0 deg and x = {1:F0} mm " +
+                    "with it at 180 deg  =>  {2}", xMax0, xMax180, moved ? "PASS" : "FAIL"));
+            bool nullMoves = hasStructure && moved;
 
             // --- (a) non-triviality -------------------------------------------
             say("");

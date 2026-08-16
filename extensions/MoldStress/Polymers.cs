@@ -59,6 +59,14 @@ namespace MoldStress
         public double PoissonRatio;
         public double DensityGPerCm3;
 
+        /// <summary>
+        /// Plateau (rubbery) modulus of the melt, Pa. With the Maxwell relation
+        /// lambda = eta / G it sets the relaxation time, and therefore how much
+        /// of the shear history a layer still remembers when it freezes. Order
+        /// 1e5 Pa for a flexible-chain melt.
+        /// </summary>
+        public double MeltModulusPa = 2.0e5;
+
         // --- Cross-WLF (SI: Pa.s, Pa, K) ------------------------------------
         public double CrossN;               // power-law index
         public double CrossTauStarPa;       // tau*
