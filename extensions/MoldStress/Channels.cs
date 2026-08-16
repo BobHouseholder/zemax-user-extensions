@@ -77,10 +77,23 @@ namespace MoldStress
                     // where the shear stress would be highest. Without the ramp
                     // this model put the peak exactly at the surface - caught by
                     // this stage's own control.
-                    double tf = freeze.FreezeTimeS[k];
-                    double history = tf <= tFill
-                        ? tf / tFill
-                        : Math.Exp(-(tf - tFill) / tPack);
+                    // ARRIVAL TIME. The freeze clock starts when the melt reaches
+                    // this station, not when the shot starts, so the absolute
+                    // instant a layer solidifies is arrival + its own freeze time.
+                    //
+                    // This is the mechanism the registered reference case failed
+                    // without: material at the gate is still being sheared by the
+                    // flow filling everything downstream when its layers freeze,
+                    // while material at the far edge arrives as filling ends and
+                    // solidifies after the flow has stopped. Omitting it made the
+                    // predicted profile perfectly FLAT from gate to far edge,
+                    // against a published case that falls to zero - and made the
+                    // gate-rotation null unable to discriminate at all.
+                    double tArrive = tFill * fill.S[i] / Math.Max(fill.PathLengthMm, 1e-9);
+                    double tAbs = tArrive + freeze.FreezeTimeS[k];
+                    double history = tAbs <= tFill
+                        ? tAbs / tFill
+                        : Math.Exp(-(tAbs - tFill) / tPack);
                     double tauMPa = fill.DpDs[i] * Math.Abs(freeze.Z[k]) * history;
 
                     // Stress-optical rule in simple shear: the principal stress
