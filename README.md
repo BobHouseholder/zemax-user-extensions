@@ -270,28 +270,20 @@ index onto a stressed surface silently empties the retardance map), which is why
 the density term rides in the stress tensor as a hydrostatic component; and
 `GetRetardanceMap`'s first argument is a sampling selector, not a point count.
 
-**Fountain flow is implemented and gated OFF by default — a hold, not a fix.**
-Material reaching the cavity wall got there through the melt front, turning
-through roughly a right angle and stretching on the way; that strain is imposed
-once at deposition and then relaxes, so the skin keeps nearly all of it and the
-core loses nearly all of it. The term carries three passing controls, and its magnitude comes from the front
-kinematics rather than from a chosen strain: a Maxwell fluid extended at
-v_front/(h/2) for one gap-crossing time, so the Weissenberg number decides how
-much stress the material can actually build and nothing is left to pick.
+**Fountain flow is ON by default.** Material reaching the cavity wall got there
+through the melt front, turning through roughly a right angle and stretching on
+the way; that strain is imposed once at deposition and then relaxes, so the skin
+keeps nearly all of it and the core loses nearly all of it. Its magnitude comes
+from the front kinematics — a Maxwell fluid extended at v_front/(h/2) for one
+gap-crossing time — not from a chosen strain.
 
-It was originally gated pending a *measured* melt stress-optical coefficient for
-COC. **That condition has since been met — Kim, Yoon & Kornfield, Key Eng. Mater.
-326–328 (2006) 183 — and the gate stands for a better reason than it was set
-for.** With measured constants, the kinematic magnitude and the converged grid,
-enabling the term puts the in-plane peak at **2.65×** the published value against
-2.02× without it — further outside the factor of 2 — while moving the depth ratio
-from 2.07 to **1.88**, i.e. *away* from the published 5.56. It does improve the
-gate decay, from 0.0% to 23.9% at the far edge.
-
-So the skin deficit is not a fountain-magnitude problem: the physically correct
-fountain is *smaller* than the arbitrary one it replaced, and the depth profile
-needs more skin weighting, not less. Enable with `-fountain`; `-refcase` states
-which configuration produced any result it prints.
+It was gated off for part of its history, because enabling it then made both
+criteria worse. The viscosity-weighted shear rate inverted that: shear alone now
+correctly gives a fast-freezing skin almost no orientation, so **deposition at the
+front is the only thing left that can orient one**. With both channels the
+in-plane peak goes from 0.26× to 0.90× of the published value and the depth ratio
+from 0.02 to 0.76, on measured constants with no fitted parameter between them.
+Disable with `-fountain 0` to recover the shear-only model.
 
 ## Validation, and what currently fails
 
@@ -300,22 +292,24 @@ film gate on one edge, polarimetry at 594 nm), on material constants measured by
 Kim, Yoon & Kornfield, *Key Eng. Mater.* **326–328** (2006) 183. Run it with
 `-refcase`, which exits non-zero unless every clause holds.
 
-**Both registered accuracy criteria currently FAIL.**
+**The in-plane criterion passes; the depth criterion fails.**
 
 | Clause | Result | Bar |
 |---|---|---|
-| in-plane peak | **2.02×** the published 1.2 × 10⁻⁴ | within a factor of 2 — **fails, marginally** |
-| in-plane shape | maximum at the gate, falling to 0.0% at the far edge | must decay from the gate — **passes** |
+| in-plane peak | **0.90×** the published 1.2 × 10⁻⁴ | within a factor of 2 — **passes** |
+| in-plane shape | maximum at the gate, falling to 70.6% at the far edge | must decay from the gate — **passes** |
 | gate null | maximum moves from x = 0 to x = 100 mm when the gate moves | must track the gate — **passes** |
-| depth ratio | **2.07** surface/deep against a published 5.56 | [2.78, 11.11] — **fails** |
-| depth peak position | maximum at 98% of the half-wall | beyond 75% — **passes** |
+| depth ratio | **0.76** surface/deep against a published 5.56 | [2.78, 11.11] — **fails** |
+| depth peak position | maximum at 68% of the half-wall | beyond 75% — **fails** |
 | depth null | does not discriminate | — **fails** |
 
-**What the failures mean.** The converged depth ratio of 2.074 is *exactly*
-0.975/0.47, the pure τ ∝ |z| geometric ratio — so the predicted profile is the
-linear shear-stress shape and nothing more, while the real part is genuinely
-skin-peaked. The depth null stops discriminating for the same reason: reversing
-the freeze order cannot change a ratio that no longer depends on freeze time.
+**What the failure means.** The predicted profile is now core-weighted where the
+real part is skin-peaked. That is not a missing magnitude — it is the balance
+between the two channels through the thickness. Shear correctly gives a
+fast-freezing skin almost nothing, and fountain deposition supplies what the skin
+has, so the depth shape is set by how those two trade off, which is the open
+question. The in-plane peak, by contrast, is 0.90× of the published value on
+measured constants with **no fitted parameter between the two channels.**
 
 **Numbers here are converged, and were not always.** The depth ratio reads 1.01
 on a 41-node grid and 2.07 from 81 nodes upward; the criterion samples at 97.5%

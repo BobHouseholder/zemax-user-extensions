@@ -21,34 +21,27 @@ namespace MoldStress
 
         /// <summary>
         /// Strain imposed on material as it turns through the fountain at the
-        /// advancing melt front and is laid onto the cold wall. Order unity: the
-        /// material rotates through roughly a right angle on its way from the
-        /// centreline to the wall.
+        /// advancing melt front and is laid onto the cold wall. Its magnitude is
+        /// NOT this number alone: it is set by the front kinematics - a Maxwell
+        /// fluid extended at v_front/(h/2) for one gap-crossing time - and this
+        /// scales that. 1.0 means the physical model; 0 disables the term.
         ///
-        /// GATED OFF BY DEFAULT SINCE 2026-08-15, AND THIS IS A HOLD, NOT A FIX.
+        /// ON BY DEFAULT SINCE 2026-08-15. It was gated off between 08-15 and
+        /// 08-15 because enabling it made both registered criteria worse. The
+        /// viscosity-weighted shear rate inverted that: shear alone now correctly
+        /// gives a fast-freezing skin almost no orientation, so deposition at the
+        /// front is the only thing left that can orient one - and with both
+        /// channels the in-plane peak goes 0.26x -> 0.90x of the published value
+        /// and the depth ratio 0.02 -> 0.76, on measured constants with no fitted
+        /// parameter between the two channels.
         ///
-        /// The term is implemented, carries three passing controls, and is real
-        /// physics. It is off because its MAGNITUDE cannot currently be judged:
-        /// at strain 1.0 it contributes 2.4e-4 at the skin, twice the entire
-        /// published in-plane peak, and that figure is the product of a generic
-        /// plateau modulus and a melt stress-optical coefficient for COC that
-        /// Polymers.cs flags as the weakest number in its table - inferred from a
-        /// COC/PC ratio, never measured.
+        /// The gate's own recorded condition was a measured melt stress-optical
+        /// coefficient, which was met, and it then stood only on the evidence that
+        /// the term made things worse. That evidence no longer holds, so the gate
+        /// is lifted rather than quietly kept.
         ///
-        /// Turning it off recovers a criterion it was breaking, which is exactly
-        /// why the reason has to be written down rather than assumed: the term
-        /// was not shown to be wrong, only unjudgeable.
-        ///
-        /// REOPENS ON: a MEASURED melt stress-optical coefficient for the
-        /// polymer in use. With the scale settled, the fountain term can be
-        /// judged on its SHAPE alone - and note the depth ratio is invariant
-        /// under any scaling of C_melt, so that judgement is independent of the
-        /// calibration that gates it.
-        ///
-        /// Enable with -fountain [strain]. The self-test exercises it at 1.0
-        /// regardless of this default, so gating it off does not stop testing it.
-        /// </summary>
-        public double FountainStrain = 0.0;
+        /// Disable with -fountain 0 to recover the shear-only model.
+        public double FountainStrain = 1.0;
 
         /// <summary>
         /// Grade the shear rate by the narrowing molten channel, |dp/ds| going as

@@ -679,9 +679,16 @@ namespace MoldStress
             var freeze = FreezeHistory.Build(plate.CentreThicknessMm, p, proc, 81);
             var c = Build(plate, p, proc, fill, freeze);
 
-            // Shear vanishes on the mid-plane, so the flow channel must too.
-            SelfTest.Near("flow birefringence vanishes at the mid-plane",
-                c.DnFlow[0, freeze.NodeCount / 2], 0.0, 1e-12);
+            // Shear vanishes on the mid-plane, so the SHEAR channel must too -
+            // measured with the fountain off, because deposition does not vanish
+            // there and has no reason to. Running this on the total was fine only
+            // while the fountain was gated off by default.
+            var procNoF = new Process { FillTimeS = proc.FillTimeS, PackTimeS = proc.PackTimeS,
+                                        PackPressureMPa = proc.PackPressureMPa,
+                                        FountainStrain = 0.0 };
+            var cShear = Build(plate, p, procNoF, fill, freeze);
+            SelfTest.Near("shear birefringence vanishes at the mid-plane",
+                cShear.DnFlow[0, freeze.NodeCount / 2], 0.0, 1e-12);
 
             // ... and it must peak between the surface and the core, not at
             // either end. That is the signature the reference case reports.

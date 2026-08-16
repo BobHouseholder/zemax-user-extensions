@@ -260,18 +260,17 @@ namespace MoldStress
             say("");
             if (proc.FountainStrain <= 0)
             {
-                say("  FOUNTAIN FLOW IS GATED OFF for this run. It is implemented and");
-                say("  controlled, and it is held because its magnitude rests on an");
-                say("  UNMEASURED melt stress-optical coefficient for this polymer. With");
-                say("  it enabled the in-plane peak reads 2.45x instead of 1.17x.");
-                say("  Re-enable with -fountain; reopen the default on a measured C_melt.");
+                say("  FOUNTAIN FLOW IS DISABLED for this run - non-default. The shipped");
+                say("  configuration has it ON, because shear alone correctly gives a");
+                say("  fast-freezing skin almost no orientation, so deposition at the front");
+                say("  is the only thing left that can orient one.");
             }
             else
             {
                 say(string.Format(ci,
-                    "  fountain flow ENABLED at strain {0:F2} - non-default; the shipped",
+                    "  fountain flow enabled at strain {0:F2} (the shipped default). Disable",
                     proc.FountainStrain));
-                say("  configuration gates it off pending a measured C_melt.");
+                say("  with -fountain 0 to see the shear-only model.");
             }
 
             say("");
