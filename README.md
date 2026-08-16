@@ -282,29 +282,55 @@ much stress the material can actually build and nothing is left to pick.
 It was originally gated pending a *measured* melt stress-optical coefficient for
 COC. **That condition has since been met — Kim, Yoon & Kornfield, Key Eng. Mater.
 326–328 (2006) 183 — and the gate stands for a better reason than it was set
-for.** With measured constants and the kinematic magnitude, enabling the term
-still puts the in-plane peak at 2.43× the published value, outside the registered
-factor of 2, *and* moves the depth ratio further from the published shape (1.16
-against 1.01 without it, where the target is 5.56). So the skin deficit is not a
-fountain-magnitude problem: the physically correct fountain is *smaller* than the
-arbitrary one it replaced, and the depth profile needs more skin weighting, not
-less. Enable with `-fountain`; `-refcase` states which configuration produced any
-result it prints.
+for.** With measured constants, the kinematic magnitude and the converged grid,
+enabling the term puts the in-plane peak at **2.65×** the published value against
+2.02× without it — further outside the factor of 2 — while moving the depth ratio
+from 2.07 to **1.88**, i.e. *away* from the published 5.56. It does improve the
+gate decay, from 0.0% to 23.9% at the far edge.
 
-**Validation.** Against a published injection-moulded TOPAS 6017S-04 plate
-(100 × 100 × 1.5 mm, film gate on one edge, polarimetry at 594 nm), `-refcase`
-predicts a peak thickness-averaged birefringence of 1.4 × 10⁻⁴ against a
-published 1.2 × 10⁻⁴ — a ratio of 1.17, inside the factor of 2 fixed before the
-run — with the maximum at the gate falling to zero at the far edge, and the
-maximum moving from one edge of the plate to the other when the gate does.
+So the skin deficit is not a fountain-magnitude problem: the physically correct
+fountain is *smaller* than the arbitrary one it replaced, and the depth profile
+needs more skin weighting, not less. Enable with `-fountain`; `-refcase` states
+which configuration produced any result it prints.
 
-**The through-thickness profile is NOT right, and it is gated: surface/deep comes
-out at 1.01 against a published 5.56, outside the registered band of
-[2.78, 11.11].** `-refcase` exits non-zero on that. The in-plane magnitude and
-trend are validated; the depth profile is not. The model has now been wrong
-through-thickness in both directions — 15.62 with a fixed relaxation time, 1.01
-with the temperature-dependent one — so the published value lies between two
-treatments and neither brackets it.
+## Validation, and what currently fails
+
+Against a published injection-moulded TOPAS 6017S-04 plate (100 × 100 × 1.5 mm,
+film gate on one edge, polarimetry at 594 nm), on material constants measured by
+Kim, Yoon & Kornfield, *Key Eng. Mater.* **326–328** (2006) 183. Run it with
+`-refcase`, which exits non-zero unless every clause holds.
+
+**Both registered accuracy criteria currently FAIL.**
+
+| Clause | Result | Bar |
+|---|---|---|
+| in-plane peak | **2.02×** the published 1.2 × 10⁻⁴ | within a factor of 2 — **fails, marginally** |
+| in-plane shape | maximum at the gate, falling to 0.0% at the far edge | must decay from the gate — **passes** |
+| gate null | maximum moves from x = 0 to x = 100 mm when the gate moves | must track the gate — **passes** |
+| depth ratio | **2.07** surface/deep against a published 5.56 | [2.78, 11.11] — **fails** |
+| depth peak position | maximum at 98% of the half-wall | beyond 75% — **passes** |
+| depth null | does not discriminate | — **fails** |
+
+**What the failures mean.** The converged depth ratio of 2.074 is *exactly*
+0.975/0.47, the pure τ ∝ |z| geometric ratio — so the predicted profile is the
+linear shear-stress shape and nothing more, while the real part is genuinely
+skin-peaked. The depth null stops discriminating for the same reason: reversing
+the freeze order cannot change a ratio that no longer depends on freeze time.
+
+**Numbers here are converged, and were not always.** The depth ratio reads 1.01
+on a 41-node grid and 2.07 from 81 nodes upward; the criterion samples at 97.5%
+of the half-wall, where a coarse grid straddles a sharp feature and returns about
+half the peak. The in-plane figure moved with it — 1.94× under-resolved against
+2.02× converged, which is the difference between passing and failing. Grid
+defaults are now 81 through-thickness nodes and 801 in the freeze solve, and
+`-depthdiag` prints the convergence table.
+
+**Three candidate explanations for the depth deficit have been eliminated by
+measurement rather than argument:** the melt stress-optical coefficient (the
+depth ratio is invariant under any scaling of it), the fountain term's magnitude
+(the physically correct version is *smaller* than the arbitrary one it replaced,
+and the profile needs more skin weighting, not less), and grid resolution. What
+remains is the shear channel's behaviour in the skin.
 
 Options: `-writecatalog [-out <agf>]`, `-gates`, `-run`, `-refcase`, `-selftest`,
 plus `-file <zmx>` (headless batch mode), `-gateconfig <file>`, `-outdir <dir>`,
