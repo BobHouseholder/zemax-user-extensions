@@ -151,9 +151,37 @@ namespace MoldStress
                         for (int q = 0; q < histF.Length; q++) histF[q] = freeze.TempHistoryC[k, q];
                         double xiFreeze = ReducedTimeToFreeze(freeze.TimeGridS, histF, p,
                                                               freeze.FreezeTimeS[k]);
-                        double sigmaFrontPa = p.MeltModulusPa * proc.FountainStrain
+
+                        // MAGNITUDE FROM KINEMATICS, not from an assumed strain.
+                        //
+                        // The first version deposited G * 1.0, a unit strain I
+                        // chose. It is not a free parameter: material turning
+                        // through the front is extended at a rate set by the front
+                        // speed and the gap, and it is only in the front region
+                        // for about one gap-crossing time. For a Maxwell fluid
+                        // extended at rate edot for a time t_res:
+                        //
+                        //   sigma = G * lambda * edot * (1 - exp(-t_res/lambda))
+                        //
+                        // with edot = v_front/(h/2) and t_res = (h/2)/v_front, so
+                        // t_res = 1/edot and nothing is left to choose. The
+                        // Weissenberg number lambda*edot decides how much of the
+                        // available stress the material can actually build.
+                        double vFront = fill.PathLengthMm / Math.Max(tFill, 1e-9);
+                        double halfGap = Math.Max(0.5 * fill.H[i], 1e-6);
+                        double eDot = vFront / halfGap;
+                        double wi = lambda * eDot;
+                        double eEff = wi * (1.0 - Math.Exp(-1.0 / Math.Max(wi, 1e-12)));
+                        double sigmaFrontPa = p.MeltModulusPa * eEff * proc.FountainStrain
                                               * Math.Exp(-xiFreeze);
-                        dnFountain = 2.0 * p.CMeltBrewster * 1e-12 * sigmaFrontPa;
+
+                        // EXTENSION, so the principal stress difference IS sigma.
+                        // The factor of 2 that belongs to simple shear was applied
+                        // here as well and should never have been: in uniaxial
+                        // extension along the flow with the ray along z, the two
+                        // transverse principal stresses are zero and the
+                        // difference is sigma itself.
+                        dnFountain = p.CMeltBrewster * 1e-12 * sigmaFrontPa;
                     }
 
                     c.DnFlow[i, k] = dnShear + dnFountain;

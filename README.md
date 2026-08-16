@@ -274,16 +274,22 @@ the density term rides in the stress tensor as a hydrostatic component; and
 Material reaching the cavity wall got there through the melt front, turning
 through roughly a right angle and stretching on the way; that strain is imposed
 once at deposition and then relaxes, so the skin keeps nearly all of it and the
-core loses nearly all of it. The term carries three passing controls. It is off
-because its *magnitude* cannot presently be judged: at unit strain it contributes
-2.4 × 10⁻⁴ at the skin, twice the entire published in-plane peak, and that figure
-is the product of a generic plateau modulus and a melt stress-optical coefficient
-for COC that this repo flags as its weakest constant — inferred from a COC/PC
-ratio, never measured. **It was not shown to be wrong, only unjudgeable.** Enable
-it with `-fountain`; `-refcase` states which configuration produced any result it
-prints. The default reopens on a measured melt stress-optical coefficient, and
-note the depth ratio is invariant under any scaling of that constant, so the
-term's *shape* can be judged independently of the calibration that gates it.
+core loses nearly all of it. The term carries three passing controls, and its magnitude comes from the front
+kinematics rather than from a chosen strain: a Maxwell fluid extended at
+v_front/(h/2) for one gap-crossing time, so the Weissenberg number decides how
+much stress the material can actually build and nothing is left to pick.
+
+It was originally gated pending a *measured* melt stress-optical coefficient for
+COC. **That condition has since been met — Kim, Yoon & Kornfield, Key Eng. Mater.
+326–328 (2006) 183 — and the gate stands for a better reason than it was set
+for.** With measured constants and the kinematic magnitude, enabling the term
+still puts the in-plane peak at 2.43× the published value, outside the registered
+factor of 2, *and* moves the depth ratio further from the published shape (1.16
+against 1.01 without it, where the target is 5.56). So the skin deficit is not a
+fountain-magnitude problem: the physically correct fountain is *smaller* than the
+arbitrary one it replaced, and the depth profile needs more skin weighting, not
+less. Enable with `-fountain`; `-refcase` states which configuration produced any
+result it prints.
 
 **Validation.** Against a published injection-moulded TOPAS 6017S-04 plate
 (100 × 100 × 1.5 mm, film gate on one edge, polarimetry at 594 nm), `-refcase`
