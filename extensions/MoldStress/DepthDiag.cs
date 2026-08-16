@@ -148,6 +148,55 @@ namespace MoldStress
             say("  physics result. Compare the spread above with the 5.56 target and");
             say("  the [2.78, 11.11] band before proposing any new mechanism.");
 
+            // --- what stress does a layer actually lock in? ---------------------
+            //
+            // The shipped channel uses tau = |dp/ds| * |z|: the stress at that
+            // layer's position in a fully developed profile through the ORIGINAL
+            // gap. But by the time a layer at |z| freezes, the frozen skin has
+            // grown to exactly (half - |z|) from each wall, so the molten channel
+            // is 2|z| wide and that layer is sitting ON the melt/solid interface.
+            // The stress there is (h_melt/2)*|dp/ds|(h_melt), and at fixed flow
+            // rate |dp/ds| goes as 1/h_melt^3, so tau_interface ~ 1/|z|^2 - it
+            // RISES toward the mid-plane instead of falling, and is cut off when
+            // filling stops. Two qualitatively different profiles, and the
+            // shipped one is the only one that cannot be sharper than linear.
+            say("");
+            say("  what stress does a layer lock in?");
+            say("   depth   tau ~ |z| (shipped)   tau_interface ~ 1/|z|^2   flowing at freeze?");
+            var frD = FreezeHistory.Build(plate.CentreThicknessMm, p, baseProc, 81);
+            int nzD = frD.NodeCount;
+            double tauWall = fill.DpDs[0] * half;
+            double sIface = 0, dIface = 0;
+            for (int k = nzD - 1; k >= nzD / 2; k -= 4)
+            {
+                double f = Math.Abs(frD.Z[k]) / half;
+                if (f < 1e-6) continue;
+                double tauShipped = fill.DpDs[0] * Math.Abs(frD.Z[k]);
+                bool flowing = frD.FreezeTimeS[k] <= baseProc.FillTimeS;
+                double hMelt = 2.0 * Math.Abs(frD.Z[k]);
+                double gradNarrow = fill.DpDs[0] * Math.Pow(plate.CentreThicknessMm / hMelt, 3);
+                double tauIface = flowing ? 0.5 * hMelt * gradNarrow : 0.0;
+                say(string.Format(ci, "  {0,5:P0}   {1,18:E3}   {2,22:E3}   {3}",
+                    f, tauShipped / tauWall, tauIface / tauWall, flowing ? "yes" : "no"));
+                if (Math.Abs(f - RefCase.SurfaceFraction) < 0.03) sIface = tauIface;
+                if (Math.Abs(f - RefCase.DeepFraction) < 0.03) dIface = tauIface;
+            }
+            say("");
+            say(string.Format(ci,
+                "  shipped depth ratio {0:F3} = {1:F3}/{2:F3} - purely geometric",
+                RefCase.SurfaceFraction / RefCase.DeepFraction,
+                RefCase.SurfaceFraction, RefCase.DeepFraction));
+            if (dIface > 0)
+                say(string.Format(ci, "  interface model would give {0:F3}", sIface / dIface));
+            else
+            {
+                say("  interface model: the deep sampling point is NOT still flowing when it");
+                say("  freezes, so its locked-in shear is zero and the ratio DIVERGES - a");
+                say("  profile far SHARPER than the published 5.56, not flatter. That is an");
+                say("  overshoot of the same kind fixed lambda produced, so swapping to it");
+                say("  would trade one wrong shape for another rather than fix anything.");
+            }
+
             string outPath = Program.Value(args, "-out")
                 ?? Path.Combine(Path.GetTempPath(), "moldstress_depthdiag.txt");
             File.WriteAllText(outPath, log.ToString());
