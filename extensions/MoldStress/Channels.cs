@@ -374,19 +374,31 @@ namespace MoldStress
                 integral += weight * kernel;
             }
             double v = integral / Math.Max(lambdaMelt, 1e-12);
-            // UPPER CLAMP REMOVED 2026-08-15 on Bob's instruction: orientation is
-            // allowed to exceed the steady state it is relaxing towards.
+            // CLAMP RESTORED 2026-08-15, and it is a STAND-IN, not a physical
+            // bound. Read this before removing it again.
             //
-            // That is defensible physics - transient stress overshoot in start-up
-            // flow is real, and a layer whose relaxation time is climbing through
-            // the WLF shift as it cools can retain more than the melt-temperature
-            // steady value it started from. The clamp was a bound I imposed, and
-            // measuring showed it was BINDING: it pinned the depth ratio at the
-            // purely geometric 0.975/0.47 and made every later mechanism inert.
+            // It was removed once, deliberately, to see what it was holding back.
+            // With it gone the in-plane peak went 2.02x -> 36.68x and the depth
+            // ratio INVERTED, 2.07 -> 0.25, core-peaked where the published case
+            // is skin-peaked. The channel-narrowing term was off for that test, so
+            // the memory integral alone is responsible.
             //
-            // Only the lower bound stays. Negative retained orientation would mean
-            // the kernel had inverted, which is not physics, it is an error.
-            return v < 0 ? 0 : v;
+            // The mechanism is a real defect and it is NOT in this line. With
+            // lambda climbing as a layer cools, the Maxwell solution tends to
+            // sigma -> G*lambda(T)*gamma_dot = eta(T)*gamma_dot, and eta near Tg is
+            // three orders above its melt value. The integral is right; the INPUT
+            // is wrong. This model applies the full MELT shear rate to material
+            // that is nearly solid, right up to the freeze instant, when that
+            // material has in fact stopped deforming and the flow has redistributed
+            // into the hot core.
+            //
+            // So the clamp is standing in for a missing gamma_dot(z,t) weighted by
+            // the local viscosity. Until that exists, removing the clamp does not
+            // free the physics - it just lets a shear rate applied at the wrong
+            // temperature report about 250x the steady stress.
+            //
+            // Removing it is only progress WITH that weighting in place.
+            return v < 0 ? 0 : (v > 1 ? 1 : v);
         }
 
         public static double MemoryFactor(double tA, double tFill, double tF,
