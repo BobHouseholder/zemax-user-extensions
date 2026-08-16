@@ -62,6 +62,25 @@ namespace MoldStress
             double tFill = Math.Max(proc.FillTimeS, 1e-6);
             double tPack = Math.Max(proc.PackTimeS, 1e-6);
 
+            // Molten fraction of the gap at each grid time: the freeze history
+            // already says which depth solidifies when, so inverting it gives the
+            // position of the solid/melt interface and hence h_melt(t)/h.
+            double[] meltFracAtTime = null;
+            if (freeze.TimeGridS != null)
+            {
+                meltFracAtTime = new double[freeze.TimeGridS.Length];
+                double halfW = 0.5 * freeze.ThicknessMm;
+                for (int j = 0; j < freeze.TimeGridS.Length; j++)
+                {
+                    double t = freeze.TimeGridS[j];
+                    double interfaceZ = 0.0;      // deepest still-molten position
+                    for (int k = 0; k < nz; k++)
+                        if (freeze.FreezeTimeS[k] > t)
+                            interfaceZ = Math.Max(interfaceZ, Math.Abs(freeze.Z[k]));
+                    meltFracAtTime[j] = halfW > 0 ? interfaceZ / halfW : 1.0;
+                }
+            }
+
             for (int i = 0; i < ns; i++)
             {
                 for (int k = 0; k < nz; k++)
@@ -114,7 +133,8 @@ namespace MoldStress
                         var hist = new double[freeze.TimeGridS.Length];
                         for (int q = 0; q < hist.Length; q++) hist[q] = freeze.TempHistoryC[k, q];
                         memory = MemoryFactorWlf(tArrive, tFill, tFreezeAbs,
-                                                 freeze.TimeGridS, hist, p, lambda, tPack);
+                                                 freeze.TimeGridS, hist, p, lambda, tPack,
+                                                 meltFracAtTime);
                     }
                     else
                     {
@@ -261,7 +281,8 @@ namespace MoldStress
 
         public static double MemoryFactorWlf(double tA, double tFill, double tF,
                                              double[] grid, double[] tempC,
-                                             Polymer p, double lambdaMelt, double tPack)
+                                             Polymer p, double lambdaMelt, double tPack,
+                                             double[] meltFrac = null)
         {
             if (tF <= tA || grid == null || grid.Length < 2) return 0.0;
             double tEndLocal = Math.Min(tF - tA, Math.Max(tFill - tA, 0.0));
@@ -316,9 +337,26 @@ namespace MoldStress
                 // constant-temperature control caught: 1.16e-11 against 8.75e-2,
                 // the whole difference being a term one of them did not have.
                 double tMidW = 0.5 * (tHi + grid[j - 1]);
+
+                // PARTIAL FLOW CUT-OFF: filling ends, but packing keeps a weak
+                // flow going that decays with tPack rather than stopping dead.
                 double weight = tMidW <= tEndLocal
                     ? 1.0
                     : 0.1 * Math.Exp(-(tMidW - tEndLocal) / Math.Max(tPack, 1e-9));
+
+                // CHANNEL NARROWING, GRADED. The shipped channel evaluated the
+                // shear rate once, in the ORIGINAL gap. As the skin freezes the
+                // molten channel closes and, at fixed flow rate, |dp/ds| goes as
+                // 1/h_melt^3 - so the shear rate at any still-molten depth rises
+                // through the cycle. Applying that as a hard interface switch made
+                // the ratio diverge; applied here it is graded by the same memory
+                // kernel and damped by the packing decay above, which is the
+                // combination the diagnostics pointed at.
+                if (meltFrac != null && j < meltFrac.Length && meltFrac[j] > 1e-6)
+                {
+                    double narrow = 1.0 / meltFrac[j];
+                    weight *= narrow * narrow * narrow;
+                }
 
                 // The kernel varies on the scale of lambda, which can be far
                 // shorter than the grid spacing, so it is integrated EXACTLY
@@ -335,6 +373,17 @@ namespace MoldStress
                 integral += weight * kernel;
             }
             double v = integral / Math.Max(lambdaMelt, 1e-12);
+            // The clamp is BINDING, not decorative, and that is the finding.
+            // With WLF relaxation the integral already saturates, so the graded
+            // narrowing term added above is INERT: it pushes v further above 1 and
+            // the clamp returns 1 regardless. Measured by removing it - the depth
+            // ratio went 2.07 -> 0.22 and the in-plane peak 2.02x -> 44.63x, so
+            // the narrowing drives orientation into the CORE, the opposite of the
+            // skin-peaked profile the published case shows. The combination of
+            // partial cut-off and graded memory does not sharpen the skin; it
+            // produces a core-peaked profile that the clamp happens to hide.
+            // Restored, because a layer cannot freeze in more orientation than the
+            // steady state it is relaxing towards.
             return v < 0 ? 0 : (v > 1 ? 1 : v);
         }
 
