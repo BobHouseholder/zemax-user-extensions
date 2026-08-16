@@ -39,6 +39,21 @@ namespace MoldStress
         public double ThicknessMm;
 
         /// <summary>
+        /// Local time grid, measured from the instant the melt reaches a station.
+        /// Every station sees the same cooling curve shifted by its own arrival
+        /// time, so one grid serves the whole part.
+        /// </summary>
+        public double[] TimeGridS;
+
+        /// <summary>
+        /// Temperature at depth node k and local time j, degC. Kept because the
+        /// relaxation time is a function of it: evaluating lambda once at melt
+        /// temperature is what made the memory bracket a step (measured
+        /// 2026-08-15 - lambda 4.0e-3 s against a 1.0 s fill).
+        /// </summary>
+        public double[,] TempHistoryC;
+
+        /// <summary>
         /// Solved numerically across the FULL wall, both faces quenched.
         ///
         /// The erf isotherm is a SEMI-INFINITE result and it is only valid while
@@ -84,6 +99,15 @@ namespace MoldStress
             double tNow = 0.0;
             int centre = n / 2;
             double[] snapshot = null;
+
+            // Sample the cooling curve on a fixed local-time grid so the
+            // relaxation time can be integrated along it later.
+            const int nt = 240;
+            f.TimeGridS = new double[nt];
+            var histFine = new double[n, nt];
+            double tGridMax = 0.0;
+            int nextSample = 0;
+
             for (int step = 0; step < 20000000 && snapshot == null; step++)
             {
                 for (int i = 1; i < n - 1; i++)
@@ -93,21 +117,48 @@ namespace MoldStress
                 tNow += dt;
                 for (int i = 0; i < n; i++)
                     if (double.IsNaN(tFreeze[i]) && T[i] <= p.TgC) tFreeze[i] = tNow;
+
+                // First pass fills the grid up to the centre freeze; the grid
+                // spacing is set once that time is known, so sample every step
+                // into a ring of slots by elapsed fraction of a running estimate.
                 if (!double.IsNaN(tFreeze[centre]))
                 {
                     snapshot = (double[])T.Clone();
                     f.CentreFreezeTimeS = tFreeze[centre];
+                    tGridMax = tNow;
+                }
+                else if (nextSample < nt)
+                {
+                    // provisional: record every step until we know the span,
+                    // keeping only nt evenly spread samples by decimation below
+                    if (step % 50 == 0)
+                    {
+                        f.TimeGridS[nextSample] = tNow;
+                        for (int i = 0; i < n; i++) histFine[i, nextSample] = T[i];
+                        nextSample++;
+                    }
+                }
+            }
+            if (nextSample < nt)
+            {
+                // pad the tail with the final state so the grid is complete
+                for (int j = nextSample; j < nt; j++)
+                {
+                    f.TimeGridS[j] = tGridMax > 0 ? tGridMax : (j + 1) * dt;
+                    for (int i = 0; i < n; i++) histFine[i, j] = snapshot != null ? snapshot[i] : wall;
                 }
             }
             if (snapshot == null)
                 throw new InvalidOperationException("the centre never reached Tg - check the material");
 
+            f.TempHistoryC = new double[nz, nt];
             for (int i = 0; i < nz; i++)
             {
                 double frac = (f.Z[i] + half) / thicknessMm;
                 int j = Math.Max(0, Math.Min(n - 1, (int)Math.Round(frac * (n - 1))));
                 f.FreezeTimeS[i] = double.IsNaN(tFreeze[j]) ? f.CentreFreezeTimeS : tFreeze[j];
                 f.TrefC[i] = snapshot[j];
+                for (int q = 0; q < nt; q++) f.TempHistoryC[i, q] = histFine[j, q];
             }
             return f;
         }

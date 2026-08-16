@@ -108,7 +108,18 @@ namespace MoldStress
                     double tauViscMPa = fill.DpDs[i] * Math.Abs(freeze.Z[k]);
                     double lambda = Math.Max(proc.LambdaScale * (p.MeltModulusPa > 0
                         ? fill.EtaPaS / p.MeltModulusPa : 1e-6), 1e-9);
-                    double memory = MemoryFactor(tArrive, tFill, tFreezeAbs, lambda, tPack);
+                    double memory;
+                    if (freeze.TimeGridS != null && freeze.TempHistoryC != null)
+                    {
+                        var hist = new double[freeze.TimeGridS.Length];
+                        for (int q = 0; q < hist.Length; q++) hist[q] = freeze.TempHistoryC[k, q];
+                        memory = MemoryFactorWlf(tArrive, tFill, tFreezeAbs,
+                                                 freeze.TimeGridS, hist, p, lambda, tPack);
+                    }
+                    else
+                    {
+                        memory = MemoryFactor(tArrive, tFill, tFreezeAbs, lambda, tPack);
+                    }
                     double tauMPa = tauViscMPa * memory;
 
                     // Stress-optical rule in simple shear: the principal stress
@@ -148,6 +159,101 @@ namespace MoldStress
         /// Bounded to [0, 1]: a layer cannot freeze in more orientation than the
         /// steady state it is heading towards.
         /// </summary>
+        /// <summary>
+        /// The same memory integral, but with a relaxation time that follows the
+        /// layer's own temperature rather than being fixed at melt temperature.
+        ///
+        /// lambda(T) = eta0(T) / G, with eta0 from the Cross-WLF zero-shear term
+        /// already in the material data. As a layer cools toward Tg the WLF shift
+        /// raises lambda by orders of magnitude, so what it retains is decided by
+        /// how much it relaxed while it was still HOT - not by a single constant
+        /// evaluated where it never spends its last second.
+        ///
+        /// With a time-varying lambda the kernel is exp(-(xi(t_f) - xi(t'))) where
+        /// xi is reduced time, INT dt/lambda(T(t)). Integrated numerically along
+        /// the stored cooling curve and normalised by the melt-temperature lambda,
+        /// so a constant temperature reproduces the closed-form bracket exactly -
+        /// which is the control.
+        /// </summary>
+        public static double MemoryFactorWlf(double tA, double tFill, double tF,
+                                             double[] grid, double[] tempC,
+                                             Polymer p, double lambdaMelt, double tPack)
+        {
+            if (tF <= tA || grid == null || grid.Length < 2) return 0.0;
+            double tEndLocal = Math.Min(tF - tA, Math.Max(tFill - tA, 0.0));
+            if (tEndLocal <= 0) return 0.0;
+            double tFLocal = tF - tA;
+
+            // Reduced time along the curve, and the shear-weighted integral.
+            // Reduced time on the grid, plus its INTERPOLATED value at the freeze
+            // instant. Taking xiF from the first grid point at or beyond the
+            // freeze time puts the kernel's reference a whole step late, and the
+            // kernel decays on the scale of lambda - which can be far shorter
+            // than a step. That cost 40% against the closed form and read as a
+            // quadrature problem when it was an indexing one.
+            double xi = 0.0, integral = 0.0;
+            var xiAt = new double[grid.Length];
+            var lamAt = new double[grid.Length];
+            for (int j = 1; j < grid.Length; j++)
+            {
+                double dtj = grid[j] - grid[j - 1];
+                double tMid = 0.5 * (tempC[j] + tempC[j - 1]);
+                lamAt[j] = Math.Max(FillField.CrossWlf(p, 0.0, tMid, 0.0) / p.MeltModulusPa, 1e-12);
+                if (dtj > 0) xi += dtj / lamAt[j];
+                xiAt[j] = xi;
+            }
+            double xiF = xi;
+            for (int j = 1; j < grid.Length; j++)
+            {
+                if (grid[j] >= tFLocal)
+                {
+                    double span = grid[j] - grid[j - 1];
+                    double frac = span > 0 ? (tFLocal - grid[j - 1]) / span : 0.0;
+                    xiF = xiAt[j - 1] + frac * (xiAt[j] - xiAt[j - 1]);
+                    break;
+                }
+            }
+
+            for (int j = 1; j < grid.Length; j++)
+            {
+                if (grid[j - 1] >= tFLocal) break;
+                double tHi = Math.Min(grid[j], tFLocal);
+                double dt = tHi - grid[j - 1];
+                if (dt <= 0) continue;
+                double spanJ = grid[j] - grid[j - 1];
+                double xiHi = spanJ > 0
+                    ? xiAt[j - 1] + (dt / spanJ) * (xiAt[j] - xiAt[j - 1])
+                    : xiAt[j];
+
+                // Shear weight: full while the cavity is filling, then the weak
+                // packing flow decaying with tPack. The closed-form version
+                // carries the same 0.1 packing term, and it has to be here too or
+                // the two are not comparable - which is exactly what the
+                // constant-temperature control caught: 1.16e-11 against 8.75e-2,
+                // the whole difference being a term one of them did not have.
+                double tMidW = 0.5 * (tHi + grid[j - 1]);
+                double weight = tMidW <= tEndLocal
+                    ? 1.0
+                    : 0.1 * Math.Exp(-(tMidW - tEndLocal) / Math.Max(tPack, 1e-9));
+
+                // The kernel varies on the scale of lambda, which can be far
+                // shorter than the grid spacing, so it is integrated EXACTLY
+                // across each interval on the assumption that reduced time runs
+                // linearly within it. A rectangle rule here read 23% low against
+                // the closed form purely on quadrature.
+                double dXi = xiHi - xiAt[j - 1];
+                double kernel;
+                if (dXi > 1e-12)
+                    kernel = (dt / dXi) * Math.Exp(-(xiF - xiHi)) * (1.0 - Math.Exp(-dXi));
+                else
+                    kernel = Math.Exp(-(xiF - xiHi)) * dt;
+
+                integral += weight * kernel;
+            }
+            double v = integral / Math.Max(lambdaMelt, 1e-12);
+            return v < 0 ? 0 : (v > 1 ? 1 : v);
+        }
+
         public static double MemoryFactor(double tA, double tFill, double tF,
                                           double lambda, double tPack)
         {
@@ -321,6 +427,24 @@ namespace MoldStress
                 string.Format("{0:F4} -> {1:F4} -> {2:F4}", mEarly, mMid, mLate));
             SelfTest.Check("memory stays inside [0,1]",
                 mEarly <= 1.0 && mLate >= 0.0, "bounded");
+
+            // CONTROL for the WLF version: hold the temperature CONSTANT at melt
+            // and the numerical reduced-time integral must reproduce the
+            // closed-form constant-lambda bracket. If it does not, the new
+            // machinery is not a generalisation of the old one, it is a
+            // different model wearing its name.
+            {
+                var pw = Polymers.ByName("MS_PMMA");
+                int ng = 240;
+                var grid = new double[ng];
+                var flatT = new double[ng];
+                for (int j = 0; j < ng; j++) { grid[j] = 2.0 * j / (ng - 1.0); flatT[j] = pw.MeltTempC; }
+                double lamMelt = FillField.CrossWlf(pw, 0.0, pw.MeltTempC, 0.0) / pw.MeltModulusPa;
+                double wlf = MemoryFactorWlf(0.0, 1.0, 1.4, grid, flatT, pw, lamMelt, 3.0);
+                double closed = MemoryFactor(0.0, 1.0, 1.4, lamMelt, 3.0);
+                SelfTest.Near("WLF memory reduces to the closed form at constant T",
+                    wlf, closed, 0.02);
+            }
 
             // --- Lorentz-Lorenz, against a numerical differentiation ---------
             // Checking the analytic factor against itself proves nothing, so
