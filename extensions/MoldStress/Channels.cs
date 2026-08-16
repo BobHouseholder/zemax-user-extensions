@@ -62,6 +62,25 @@ namespace MoldStress
             double tFill = Math.Max(proc.FillTimeS, 1e-6);
             double tPack = Math.Max(proc.PackTimeS, 1e-6);
 
+            // GATE SEAL. Shear does not decay away for ever after filling - it
+            // STOPS, when the gate freezes. The gate land is thinner than the
+            // wall by design, so it seals first, and after that no melt enters and
+            // nothing in the cavity is being sheared however hot the core still is.
+            //
+            // Solved with the same freeze model applied to the gate's own
+            // thickness, so it is geometry the design already carries rather than
+            // a fitted time.
+            double tGateSeal = double.PositiveInfinity;
+            if (e.Gate != null && e.Gate.ThicknessMm > 1e-4)
+            {
+                try
+                {
+                    var gateFreeze = FreezeHistory.Build(e.Gate.ThicknessMm, p, proc, 21, 201);
+                    tGateSeal = gateFreeze.CentreFreezeTimeS;
+                }
+                catch { }
+            }
+
             // Molten fraction of the gap at each grid time: the freeze history
             // already says which depth solidifies when, so inverting it gives the
             // position of the solid/melt interface and hence h_melt(t)/h.
@@ -134,7 +153,8 @@ namespace MoldStress
                         for (int q = 0; q < hist.Length; q++) hist[q] = freeze.TempHistoryC[k, q];
                         memory = MemoryFactorWlf(tArrive, tFill, tFreezeAbs,
                                                  freeze.TimeGridS, hist, p, lambda, tPack,
-                                                 meltFracAtTime, proc.ChannelNarrowing);
+                                                 meltFracAtTime, proc.ChannelNarrowing,
+                                                 tGateSeal);
                     }
                     else
                     {
@@ -283,7 +303,8 @@ namespace MoldStress
                                              double[] grid, double[] tempC,
                                              Polymer p, double lambdaMelt, double tPack,
                                              double[] meltFrac = null,
-                                             bool narrowing = false)
+                                             bool narrowing = false,
+                                             double tGateSeal = double.PositiveInfinity)
         {
             if (tF <= tA || grid == null || grid.Length < 2) return 0.0;
             double tEndLocal = Math.Min(tF - tA, Math.Max(tFill - tA, 0.0));
@@ -344,6 +365,12 @@ namespace MoldStress
                 double weight = tMidW <= tEndLocal
                     ? 1.0
                     : 0.1 * Math.Exp(-(tMidW - tEndLocal) / Math.Max(tPack, 1e-9));
+
+                // and nothing at all once the gate has frozen: the packing term
+                // used to decay towards zero without ever reaching it, which left
+                // the still-molten core accumulating orientation for seconds after
+                // the last melt could possibly have entered.
+                if (tA + tMidW >= tGateSeal) weight = 0.0;
 
                 // CHANNEL NARROWING, GRADED. The shipped channel evaluated the
                 // shear rate once, in the ORIGINAL gap. As the skin freezes the
