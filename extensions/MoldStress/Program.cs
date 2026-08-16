@@ -32,6 +32,15 @@ namespace MoldStress
                     return 0;
                 }
 
+                // A RIBBON LAUNCH ARRIVES WITH NO COMMAND LINE AT ALL.
+                // OpticStudio offers no way to supply one, so an extension whose
+                // no-argument path prints usage does nothing when its button is
+                // pressed - which is what this one did, while the README
+                // advertised ribbon operation. With no arguments and no mode,
+                // attach to the open system and run the whole chain on it.
+                if (args.Length == 0)
+                    return Runner.Run(new[] { "-ribbon" });
+
                 if (Has(args, "-writecatalog")) return WriteCatalog(args);
                 if (Has(args, "-selftest")) return SelfTest.Run(args);
                 if (Has(args, "-gates")) return Gates(args);
@@ -39,8 +48,16 @@ namespace MoldStress
                 if (Has(args, "-refcase")) return RefCase.Run(args);
                 if (Has(args, "-depthdiag")) return DepthDiag.Run(args);
 
+                // An UNRECOGNISED argument used to print usage and exit 0 - the
+                // does-nothing-reports-success pattern this project keeps meeting.
+                // It cost a ribbon test in this very session: `-quiet` alone made
+                // args non-empty, missed every mode, printed help and returned 0
+                // as though it had worked.
+                Console.Error.WriteLine("MoldStress: no mode recognised in: " +
+                                        string.Join(" ", args));
+                Console.Error.WriteLine();
                 Usage();
-                return 0;
+                return 2;
             }
             catch (Exception ex)
             {

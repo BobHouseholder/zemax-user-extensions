@@ -176,6 +176,15 @@ namespace MoldStress
                 Directory.CreateDirectory(outDir);
                 File.WriteAllText(report, log.ToString());
                 Console.WriteLine("  report: " + report);
+
+                // The console window closes with the process on a ribbon run, so
+                // the report is opened for the user - the convention every other
+                // extension in this repo follows. -quiet suppresses it.
+                if (Program.Has(args, "-ribbon") && !Program.Has(args, "-quiet"))
+                {
+                    try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(report) { UseShellExecute = true }); }
+                    catch { }
+                }
                 return 0;
             }
             finally
