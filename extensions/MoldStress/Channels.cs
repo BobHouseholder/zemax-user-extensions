@@ -106,8 +106,8 @@ namespace MoldStress
                     double tArrive = tFill * fill.S[i] / Math.Max(fill.PathLengthMm, 1e-9);
                     double tFreezeAbs = tArrive + freeze.FreezeTimeS[k];
                     double tauViscMPa = fill.DpDs[i] * Math.Abs(freeze.Z[k]);
-                    double lambda = Math.Max(p.MeltModulusPa > 0
-                        ? fill.EtaPaS / p.MeltModulusPa : 1e-6, 1e-9);
+                    double lambda = Math.Max(proc.LambdaScale * (p.MeltModulusPa > 0
+                        ? fill.EtaPaS / p.MeltModulusPa : 1e-6), 1e-9);
                     double memory = MemoryFactor(tArrive, tFill, tFreezeAbs, lambda, tPack);
                     double tauMPa = tauViscMPa * memory;
 

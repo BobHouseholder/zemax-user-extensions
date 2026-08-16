@@ -10,6 +10,14 @@ namespace MoldStress
         public double PackTimeS = 3.0;
         public double MeltTempC = double.NaN;   // NaN => the polymer's own default
         public double MoldTempC = double.NaN;
+
+        /// <summary>
+        /// Multiplier on the relaxation time lambda = eta/G. Exists so the
+        /// depth-profile hypothesis can be TESTED as a lever rather than argued:
+        /// if the surface-peaking is caused by lambda being far shorter than the
+        /// fill time, raising this must move the surface/deep ratio.
+        /// </summary>
+        public double LambdaScale = 1.0;
     }
 
     /// <summary>

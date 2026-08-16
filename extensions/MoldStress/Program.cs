@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 
@@ -37,6 +37,7 @@ namespace MoldStress
                 if (Has(args, "-gates")) return Gates(args);
                 if (Has(args, "-run")) return Runner.Run(args);
                 if (Has(args, "-refcase")) return RefCase.Run(args);
+                if (Has(args, "-depthdiag")) return DepthDiag.Run(args);
 
                 Usage();
                 return 0;
