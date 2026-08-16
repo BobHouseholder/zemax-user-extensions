@@ -98,9 +98,11 @@ namespace MoldStress
 
             // Flow path: from the gate at the rim, across the part, to the far rim.
             // Ring gates converge on the centre, so their path is one radius.
-            double pathLen = e.Gate.Kind == GateKind.RingAllRound
-                ? Math.Max(e.SemiDiameterMm - radiusFloor, 1e-3)
-                : 2.0 * e.SemiDiameterMm;
+            double pathLen;
+            if (e.Gate.Kind == GateKind.RingAllRound)
+                pathLen = Math.Max(e.SemiDiameterMm - radiusFloor, 1e-3);
+            else
+                pathLen = 2.0 * e.SemiDiameterMm;   // rim to rim, film or point
 
             // Cavity volume, by revolving the gap profile.
             double vol = 0.0;
@@ -122,7 +124,15 @@ namespace MoldStress
 
                 // Radius reached, and the width of the advancing front there.
                 double r, w;
-                if (e.Gate.Kind == GateKind.RingAllRound)
+                if (e.Gate.Kind == GateKind.FilmEdge)
+                {
+                    // A film gate spans one whole edge, so the front is a
+                    // straight line of constant width travelling across the part.
+                    // No convergence, no fan: the width is the gate's own.
+                    r = Math.Abs(e.SemiDiameterMm - s);
+                    w = e.Gate.WidthMm;
+                }
+                else if (e.Gate.Kind == GateKind.RingAllRound)
                 {
                     r = Math.Max(e.SemiDiameterMm - s, f.RadiusFloorMm);
                     w = 2.0 * Math.PI * r;                     // converging annulus

@@ -36,6 +36,7 @@ namespace MoldStress
                 if (Has(args, "-selftest")) return SelfTest.Run(args);
                 if (Has(args, "-gates")) return Gates(args);
                 if (Has(args, "-run")) return Runner.Run(args);
+                if (Has(args, "-refcase")) return RefCase.Run(args);
 
                 Usage();
                 return 0;
