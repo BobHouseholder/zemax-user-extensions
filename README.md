@@ -270,15 +270,35 @@ index onto a stressed surface silently empties the retardance map), which is why
 the density term rides in the stress tensor as a hydrostatic component; and
 `GetRetardanceMap`'s first argument is a sampling selector, not a point count.
 
+**Fountain flow is implemented and gated OFF by default — a hold, not a fix.**
+Material reaching the cavity wall got there through the melt front, turning
+through roughly a right angle and stretching on the way; that strain is imposed
+once at deposition and then relaxes, so the skin keeps nearly all of it and the
+core loses nearly all of it. The term carries three passing controls. It is off
+because its *magnitude* cannot presently be judged: at unit strain it contributes
+2.4 × 10⁻⁴ at the skin, twice the entire published in-plane peak, and that figure
+is the product of a generic plateau modulus and a melt stress-optical coefficient
+for COC that this repo flags as its weakest constant — inferred from a COC/PC
+ratio, never measured. **It was not shown to be wrong, only unjudgeable.** Enable
+it with `-fountain`; `-refcase` states which configuration produced any result it
+prints. The default reopens on a measured melt stress-optical coefficient, and
+note the depth ratio is invariant under any scaling of that constant, so the
+term's *shape* can be judged independently of the calibration that gates it.
+
 **Validation.** Against a published injection-moulded TOPAS 6017S-04 plate
 (100 × 100 × 1.5 mm, film gate on one edge, polarimetry at 594 nm), `-refcase`
-predicts a peak thickness-averaged birefringence of 6.8 × 10⁻⁵ against a
-published 1.2 × 10⁻⁴ — inside the factor of 2 fixed before the run — with the
-maximum at the gate falling to zero at the far edge, and the maximum moving from
-one edge of the plate to the other when the gate does. **The through-thickness
-profile is NOT right: surface/core comes out at 108.9 against a published 5.56.**
-The in-plane trend and magnitude are validated; the depth profile is not, and no
-criterion currently gates it.
+predicts a peak thickness-averaged birefringence of 1.4 × 10⁻⁴ against a
+published 1.2 × 10⁻⁴ — a ratio of 1.17, inside the factor of 2 fixed before the
+run — with the maximum at the gate falling to zero at the far edge, and the
+maximum moving from one edge of the plate to the other when the gate does.
+
+**The through-thickness profile is NOT right, and it is gated: surface/deep comes
+out at 1.01 against a published 5.56, outside the registered band of
+[2.78, 11.11].** `-refcase` exits non-zero on that. The in-plane magnitude and
+trend are validated; the depth profile is not. The model has now been wrong
+through-thickness in both directions — 15.62 with a fixed relaxation time, 1.01
+with the temperature-dependent one — so the published value lies between two
+treatments and neither brackets it.
 
 Options: `-writecatalog [-out <agf>]`, `-gates`, `-run`, `-refcase`, `-selftest`,
 plus `-file <zmx>` (headless batch mode), `-gateconfig <file>`, `-outdir <dir>`,

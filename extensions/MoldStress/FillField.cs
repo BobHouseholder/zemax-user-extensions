@@ -23,10 +23,32 @@ namespace MoldStress
         /// Strain imposed on material as it turns through the fountain at the
         /// advancing melt front and is laid onto the cold wall. Order unity: the
         /// material rotates through roughly a right angle on its way from the
-        /// centreline to the wall. Set to 0 to disable the fountain entirely,
-        /// which is how the term's own regression control is run.
+        /// centreline to the wall.
+        ///
+        /// GATED OFF BY DEFAULT SINCE 2026-08-15, AND THIS IS A HOLD, NOT A FIX.
+        ///
+        /// The term is implemented, carries three passing controls, and is real
+        /// physics. It is off because its MAGNITUDE cannot currently be judged:
+        /// at strain 1.0 it contributes 2.4e-4 at the skin, twice the entire
+        /// published in-plane peak, and that figure is the product of a generic
+        /// plateau modulus and a melt stress-optical coefficient for COC that
+        /// Polymers.cs flags as the weakest number in its table - inferred from a
+        /// COC/PC ratio, never measured.
+        ///
+        /// Turning it off recovers a criterion it was breaking, which is exactly
+        /// why the reason has to be written down rather than assumed: the term
+        /// was not shown to be wrong, only unjudgeable.
+        ///
+        /// REOPENS ON: a MEASURED melt stress-optical coefficient for the
+        /// polymer in use. With the scale settled, the fountain term can be
+        /// judged on its SHAPE alone - and note the depth ratio is invariant
+        /// under any scaling of C_melt, so that judgement is independent of the
+        /// calibration that gates it.
+        ///
+        /// Enable with -fountain [strain]. The self-test exercises it at 1.0
+        /// regardless of this default, so gating it off does not stop testing it.
         /// </summary>
-        public double FountainStrain = 1.0;
+        public double FountainStrain = 0.0;
     }
 
     /// <summary>

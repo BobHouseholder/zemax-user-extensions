@@ -56,6 +56,8 @@ namespace MoldStress
 
             var p = Polymers.ByName("MS_COC_TOPAS6017");
             var proc = new Process { FillTimeS = 1.0, PackPressureMPa = 60.0, PackTimeS = 3.0 };
+            if (Program.Has(args, "-fountain"))
+                proc.FountainStrain = Program.Value(args, "-fountain", 1.0);
 
             say("MoldStress - registered reference case");
             say("  " + Program.ScopeLabel);
@@ -252,6 +254,26 @@ namespace MoldStress
 
             bool pass = withinFactor && decays && nullMoves
                         && depthInBand && peakOutside && depthNull;
+            // A criterion result read without knowing a physical term is disabled
+            // is worse than no result, so it is printed beside the verdict rather
+            // than in a footnote.
+            say("");
+            if (proc.FountainStrain <= 0)
+            {
+                say("  FOUNTAIN FLOW IS GATED OFF for this run. It is implemented and");
+                say("  controlled, and it is held because its magnitude rests on an");
+                say("  UNMEASURED melt stress-optical coefficient for this polymer. With");
+                say("  it enabled the in-plane peak reads 2.45x instead of 1.17x.");
+                say("  Re-enable with -fountain; reopen the default on a measured C_melt.");
+            }
+            else
+            {
+                say(string.Format(ci,
+                    "  fountain flow ENABLED at strain {0:F2} - non-default; the shipped",
+                    proc.FountainStrain));
+                say("  configuration gates it off pending a measured C_melt.");
+            }
+
             say("");
             say("  VERDICT: " + (pass ? "the registered criterion is MET"
                                       : "the registered criterion is NOT met"));
