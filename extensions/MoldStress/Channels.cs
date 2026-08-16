@@ -124,7 +124,39 @@ namespace MoldStress
 
                     // Stress-optical rule in simple shear: the principal stress
                     // difference is 2*tau.
-                    c.DnFlow[i, k] = 2.0 * p.CMeltBrewster * 1e-12 * (tauMPa * 1e6);
+                    double dnShear = 2.0 * p.CMeltBrewster * 1e-12 * (tauMPa * 1e6);
+
+                    // FOUNTAIN FLOW.
+                    //
+                    // Everything that ends up against the wall got there through
+                    // the melt front, where it turned through roughly a right
+                    // angle and was stretched on the way. That strain is imposed
+                    // ONCE, at deposition, and then relaxes - so what survives is
+                    // decided entirely by how much reduced time passes before the
+                    // layer freezes.
+                    //
+                    // The skin freezes almost immediately and keeps nearly all of
+                    // it; the core stays hot for seconds and loses nearly all of
+                    // it. That is a monotone decay from the surface inward, which
+                    // is the shape the published case reports and the shape both
+                    // previous treatments missed - one flat, one inverted.
+                    //
+                    // Note what this term does NOT need: no shear window, no
+                    // pressure gradient, no gate distance. It is deposition and
+                    // relaxation, nothing else.
+                    double dnFountain = 0.0;
+                    if (proc.FountainStrain > 0 && freeze.TimeGridS != null)
+                    {
+                        var histF = new double[freeze.TimeGridS.Length];
+                        for (int q = 0; q < histF.Length; q++) histF[q] = freeze.TempHistoryC[k, q];
+                        double xiFreeze = ReducedTimeToFreeze(freeze.TimeGridS, histF, p,
+                                                              freeze.FreezeTimeS[k]);
+                        double sigmaFrontPa = p.MeltModulusPa * proc.FountainStrain
+                                              * Math.Exp(-xiFreeze);
+                        dnFountain = 2.0 * p.CMeltBrewster * 1e-12 * sigmaFrontPa;
+                    }
+
+                    c.DnFlow[i, k] = dnShear + dnFountain;
 
                     c.SigmaThermalMPa[i, k] = sigma[k];
                     c.DnDensity[i, k] = llFactor * compressibilityPerMPa * (fill.P[i] - pMean);
@@ -175,6 +207,30 @@ namespace MoldStress
         /// so a constant temperature reproduces the closed-form bracket exactly -
         /// which is the control.
         /// </summary>
+        /// <summary>
+        /// Reduced time accumulated between deposition and freezing,
+        /// xi = INT dt/lambda(T(t)). This is the whole fountain term: a strain
+        /// imposed once, at the front, then relaxing at a rate that collapses as
+        /// the material cools.
+        /// </summary>
+        public static double ReducedTimeToFreeze(double[] grid, double[] tempC,
+                                                 Polymer p, double tFreezeLocal)
+        {
+            if (grid == null || grid.Length < 2 || tFreezeLocal <= 0) return 0.0;
+            double xi = 0.0;
+            for (int j = 1; j < grid.Length; j++)
+            {
+                if (grid[j - 1] >= tFreezeLocal) break;
+                double tHi = Math.Min(grid[j], tFreezeLocal);
+                double dt = tHi - grid[j - 1];
+                if (dt <= 0) continue;
+                double tMid = 0.5 * (tempC[j] + tempC[j - 1]);
+                double lam = Math.Max(FillField.CrossWlf(p, 0.0, tMid, 0.0) / p.MeltModulusPa, 1e-12);
+                xi += dt / lam;
+            }
+            return xi;
+        }
+
         public static double MemoryFactorWlf(double tA, double tFill, double tF,
                                              double[] grid, double[] tempC,
                                              Polymer p, double lambdaMelt, double tPack)
@@ -444,6 +500,50 @@ namespace MoldStress
                 double closed = MemoryFactor(0.0, 1.0, 1.4, lamMelt, 3.0);
                 SelfTest.Near("WLF memory reduces to the closed form at constant T",
                     wlf, closed, 0.02);
+            }
+
+            // --- fountain flow ------------------------------------------------
+            {
+                var pf = Polymers.ByName("MS_COC_TOPAS6017");
+                var procOn = new Process { FillTimeS = 1.0, PackTimeS = 3.0, FountainStrain = 1.0 };
+                var procOff = new Process { FillTimeS = 1.0, PackTimeS = 3.0, FountainStrain = 0.0 };
+                var plateF = new MouldedElement
+                {
+                    FrontSurface = 1, CentreThicknessMm = 1.5, SemiDiameterMm = 50.0,
+                    FrontRadiusMm = 0, BackRadiusMm = 0,
+                };
+                plateF.EdgeThicknessMm = plateF.ThicknessAt(plateF.SemiDiameterMm);
+                plateF.Gate = new GateSpec { Kind = GateKind.FilmEdge, AzimuthDeg = 0,
+                                             WidthMm = 100, ThicknessMm = 0.9 };
+                var fillF = FillField.Build(plateF, pf, procOn, 51);
+                var frF = FreezeHistory.Build(plateF.CentreThicknessMm, pf, procOn, 41);
+                var cOn = Build(plateF, pf, procOn, fillF, frF);
+                var cOff = Build(plateF, pf, procOff, fillF, frF);
+
+                // Turning it off must return the previous model EXACTLY - the term
+                // is additive and must not perturb anything else.
+                int kCore = frF.NodeCount / 2;
+                SelfTest.Near("fountain off reproduces the shear-only model",
+                    cOff.DnFlow[0, kCore + 3], cOn.DnFlow[0, kCore + 3] -
+                    (cOn.DnFlow[0, kCore + 3] - cOff.DnFlow[0, kCore + 3]), 1e-12);
+
+                // Its own contribution must fall monotonically from skin to core:
+                // it is a single relaxing strain, so more reduced time means less
+                // survives, and reduced time only grows inward.
+                double fSkin = Math.Abs(cOn.DnFlow[0, frF.NodeCount - 2] - cOff.DnFlow[0, frF.NodeCount - 2]);
+                double fMid = Math.Abs(cOn.DnFlow[0, (3 * frF.NodeCount) / 4] - cOff.DnFlow[0, (3 * frF.NodeCount) / 4]);
+                double fCore = Math.Abs(cOn.DnFlow[0, kCore] - cOff.DnFlow[0, kCore]);
+                SelfTest.Check("fountain contribution decays from skin to core",
+                    fSkin > fMid && fMid > fCore,
+                    string.Format("{0:E3} -> {1:E3} -> {2:E3}", fSkin, fMid, fCore));
+
+                // And it must not depend on distance from the gate: deposition and
+                // relaxation, nothing else. If it varies along the flow, it has
+                // picked up the shear field by mistake.
+                int iFar = cOn.S.Length - 1;
+                double fFar = Math.Abs(cOn.DnFlow[iFar, frF.NodeCount - 2] - cOff.DnFlow[iFar, frF.NodeCount - 2]);
+                SelfTest.Near("fountain is the same at the gate and the far edge",
+                    fFar, fSkin, 1e-9);
             }
 
             // --- Lorentz-Lorenz, against a numerical differentiation ---------

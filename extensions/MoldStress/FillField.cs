@@ -18,6 +18,15 @@ namespace MoldStress
         /// fill time, raising this must move the surface/deep ratio.
         /// </summary>
         public double LambdaScale = 1.0;
+
+        /// <summary>
+        /// Strain imposed on material as it turns through the fountain at the
+        /// advancing melt front and is laid onto the cold wall. Order unity: the
+        /// material rotates through roughly a right angle on its way from the
+        /// centreline to the wall. Set to 0 to disable the fountain entirely,
+        /// which is how the term's own regression control is run.
+        /// </summary>
+        public double FountainStrain = 1.0;
     }
 
     /// <summary>
