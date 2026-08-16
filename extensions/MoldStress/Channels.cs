@@ -364,16 +364,32 @@ namespace MoldStress
                 // across each interval on the assumption that reduced time runs
                 // linearly within it. A rectangle rule here read 23% low against
                 // the closed form purely on quadrature.
+                // VISCOSITY-WEIGHTED SHEAR RATE.
+                //
+                // The shear STRESS is continuous across the gap; the shear RATE is
+                // not. A layer takes up strain at gamma_dot = tau/eta(T), so as it
+                // stiffens it stops deforming - which is the physics the model was
+                // missing and the clamp was standing in for.
+                //
+                // Substituting gamma_dot = tau/eta into the Maxwell equation gives
+                //
+                //     dsigma/dt = (tau - sigma) / lambda(t)
+                //
+                // so sigma relaxes TOWARD the local shear stress and can never pass
+                // it. The bound is a consequence of the physics rather than a cap
+                // imposed on top of it, and in the integral it appears simply as
+                // the disappearance of the dt/dxi Jacobian: the kernel is now
+                // integrated in REDUCED time, not in real time.
                 double dXi = xiHi - xiAt[j - 1];
-                double kernel;
-                if (dXi > 1e-12)
-                    kernel = (dt / dXi) * Math.Exp(-(xiF - xiHi)) * (1.0 - Math.Exp(-dXi));
-                else
-                    kernel = Math.Exp(-(xiF - xiHi)) * dt;
+                double kernel = dXi > 1e-12
+                    ? Math.Exp(-(xiF - xiHi)) * (1.0 - Math.Exp(-dXi))
+                    : Math.Exp(-(xiF - xiHi)) * dXi;
 
                 integral += weight * kernel;
             }
-            double v = integral / Math.Max(lambdaMelt, 1e-12);
+            // Already a fraction of the local shear stress: dividing by the
+            // melt-temperature lambda was what made the old form unbounded.
+            double v = integral;
             // CLAMP RESTORED 2026-08-15, and it is a STAND-IN, not a physical
             // bound. Read this before removing it again.
             //
