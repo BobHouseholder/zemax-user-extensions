@@ -61,9 +61,19 @@ namespace MoldStress
 
         /// <summary>
         /// Plateau (rubbery) modulus of the melt, Pa. With the Maxwell relation
-        /// lambda = eta / G it sets the relaxation time, and therefore how much
-        /// of the shear history a layer still remembers when it freezes. Order
-        /// 1e5 Pa for a flexible-chain melt.
+        /// lambda = eta / G it sets the relaxation time, and therefore how much of
+        /// the shear history a layer still remembers when it freezes.
+        ///
+        /// Derived rather than assumed, from a MEASURED entanglement molecular
+        /// weight: G_N0 = rho*R*T/Me. For TOPAS COC, Me = 16-18 kDa (time-
+        /// temperature superposition plus TMA on Topas 5013 and 5014CL, Chinese
+        /// Journal of Polymer Bulletin 2024, doi 10.14028/j.cnki.1003-3726.2024.24.255),
+        /// giving 2.8e5 Pa at 290 C - against the generic 2.0e5 Pa this used to
+        /// carry, i.e. 1.4x, not the factor of ~7 the depth deficit would need.
+        ///
+        /// So the last unmeasured constant in the chain is now measured, and it
+        /// does NOT explain the depth profile. Per-polymer values below are set
+        /// where Me is known and left at the generic figure where it is not.
         /// </summary>
         public double MeltModulusPa = 2.0e5;
 
@@ -148,6 +158,7 @@ namespace MoldStress
                 Provisional = false,
                 CMeltBrewster = 1000.0,
                 CMeltSource = "MEASURED: same source, melt +920 to +1160 Br; corroborated at +1.0e-9 /Pa for TOPAS 5013, Korea-Australia Rheol. J. (2012)",
+                MeltModulusPa = 2.8e5,
                 TgC = 178, MeltTempC = 290, MoldTempC = 120,
                 DiffusivityMm2PerS = 0.10, CtePerK = 60e-6, ModulusMPa = 3000, PoissonRatio = 0.36,
                 DensityGPerCm3 = 1.02,
