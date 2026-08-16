@@ -34,6 +34,7 @@ namespace MoldStress
 
                 if (Has(args, "-writecatalog")) return WriteCatalog(args);
                 if (Has(args, "-selftest")) return SelfTest.Run(args);
+                if (Has(args, "-gates")) return Gates(args);
 
                 Usage();
                 return 0;
@@ -79,6 +80,52 @@ namespace MoldStress
             return 0;
         }
 
+        [System.Runtime.CompilerServices.MethodImpl(
+            System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static int Gates(string[] args)
+        {
+            Session.Locate();
+            return GatesConnected(args);
+        }
+
+        [System.Runtime.CompilerServices.MethodImpl(
+            System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static int GatesConnected(string[] args)
+        {
+            string file = Value(args, "-file");
+            var app = Session.Connect(file);
+            try
+            {
+                var sys = app.PrimarySystem;
+                var extra = (Value(args, "-materials") ?? "")
+                    .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+                var els = Session.FindElements(sys, extra);
+                Gating.ApplyOverrides(els, Value(args, "-gateconfig"));
+
+                Console.WriteLine("MoldStress gate and parting-line defaults");
+                Console.WriteLine("  " + ScopeLabel);
+                Console.WriteLine("  system: " + (string.IsNullOrEmpty(sys.SystemFile)
+                                                  ? "(unsaved)" : sys.SystemFile));
+                Console.WriteLine();
+                if (els.Count == 0)
+                {
+                    Console.WriteLine("  no mouldable element found. MoldStress only treats materials");
+                    Console.WriteLine("  it has stress-optic data for; name others with -materials.");
+                    Console.WriteLine("  known: " + string.Join(", ",
+                        Polymers.All.Select(p => p.Name)));
+                    return 0;
+                }
+                foreach (var e in els) { Session.Describe(e); Console.WriteLine(); }
+                Console.WriteLine("  Override any of it per element with -gateconfig <file>, one line each:");
+                Console.WriteLine("      surface=3 azimuth=180 kind=ring width=1.2 thickness=0.5");
+                return 0;
+            }
+            finally
+            {
+                if (!string.IsNullOrEmpty(file)) { try { app.CloseApplication(); } catch { } }
+            }
+        }
+
         internal static bool Has(string[] a, string flag)
         {
             return a.Any(x => string.Equals(x, flag, StringComparison.OrdinalIgnoreCase));
@@ -110,6 +157,12 @@ namespace MoldStress
             Console.WriteLine("        Write the polymer stress-optic catalog. No shipped polymer");
             Console.WriteLine("        carries a BD record, and without one STAR silently returns");
             Console.WriteLine("        zero retardance, so this is a prerequisite, not an extra.");
+            Console.WriteLine();
+            Console.WriteLine("  -gates [-file <lens.zmx>] [-gateconfig <file>] [-materials A,B]");
+            Console.WriteLine("        Report the gate and parting line chosen for every mouldable");
+            Console.WriteLine("        element: a single edge gate at +Y sized off the local wall,");
+            Console.WriteLine("        a ring gate above 12 mm semi-diameter, and the parting plane");
+            Console.WriteLine("        at the rim. Override any of it per element.");
             Console.WriteLine();
             Console.WriteLine("  -selftest");
             Console.WriteLine("        Run every stage against its closed form. Exits non-zero on");
