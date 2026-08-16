@@ -215,6 +215,76 @@ Options: `-tmin/-tmax/-steps`, `-track L` (mount length), `-pressure P`,
 `-freezesolves`, `-out <prefix>`, `-outdir <dir>`, `-file <path>` (headless batch mode),
 `-quiet`.
 
+### MoldStress
+
+Estimates the refractive-index change and stress birefringence that injection
+moulding leaves in the plastic elements of a sequential system, and applies both
+through OpticStudio's STAR module so the change in optical performance can be
+read directly.
+
+**ESTIMATE — not a mould-flow simulation, and not validated against a moulded
+part.** That label is on every artifact the tool writes. Moldex3D's Optics
+add-on and Autodesk Moldflow Insight solve this properly and export into optical
+design software; MoldStress exists for the designer who has OpticStudio and STAR
+and no mould-flow seat.
+
+Nothing is asked of the user that the design already contains. The cavity
+profile `h(r)` comes from the surface sag equations, so the filling solve needs
+no mesh: for a rotationally symmetric element it is a one-dimensional radial
+integral. A single edge gate at +Y sized off the local wall (a ring gate above
+12 mm semi-diameter) and a parting plane at the rim are chosen by default, and
+any of it is overridable per element.
+
+The chain is four stages, each held against a closed form by `-selftest` before
+the next is allowed to depend on it:
+
+- **A1** Hele–Shaw pressure and shear field, Cross-WLF viscosity, Tait equation
+  of state — checked against Poiseuille flow and the analytic log law for
+  converging radial flow;
+- **A2** freeze history, solved numerically across the full wall — checked
+  against the erf isotherm near the wall, *where that closed form is valid*. It
+  is a semi-infinite result and overstates the core freeze time by 10.8× on a
+  2 mm wall, which is why the numerics are the model and the closed form is the
+  control;
+- **A3** three channels, kept apart because they are physically apart: flow
+  orientation through a **viscoelastic memory integral** (single Maxwell mode,
+  λ = η/G, from melt arrival to end of flow), thermal residual stress with force
+  and moment balance imposed, and density through Lorentz–Lorenz;
+- **A4** assembly. STAR accepts a *stress tensor*, not birefringence, and applies
+  the catalog's K11 and K12 itself — so frozen orientation, which is not a stress
+  in the finished part, is converted to the equivalent stress
+  `σ = Δn / (K11 − K12)` with its principal axis along the local flow.
+
+**A polymer catalog is a prerequisite, not an extra.** No polymer OpticStudio
+ships carries a `BD` record: across all 51 installed catalogs there are 578 of
+them and every one is on a glass. Without it STAR does not refuse the stress data
+through the ZOS-API — it accepts zero points, returns success, and reports
+retardance exactly zero, which is indistinguishable from a well-moulded part.
+`-writecatalog` writes the missing constants; they are marked PROVISIONAL
+everywhere because they are representative of the polymer family rather than
+measured for a grade.
+
+Two behaviours worth knowing, both measured rather than documented anywhere:
+`DirectIndex` and `Stress` are **mutually exclusive per surface** (loading the
+index onto a stressed surface silently empties the retardance map), which is why
+the density term rides in the stress tensor as a hydrostatic component; and
+`GetRetardanceMap`'s first argument is a sampling selector, not a point count.
+
+**Validation.** Against a published injection-moulded TOPAS 6017S-04 plate
+(100 × 100 × 1.5 mm, film gate on one edge, polarimetry at 594 nm), `-refcase`
+predicts a peak thickness-averaged birefringence of 6.8 × 10⁻⁵ against a
+published 1.2 × 10⁻⁴ — inside the factor of 2 fixed before the run — with the
+maximum at the gate falling to zero at the far edge, and the maximum moving from
+one edge of the plate to the other when the gate does. **The through-thickness
+profile is NOT right: surface/core comes out at 108.9 against a published 5.56.**
+The in-plane trend and magnitude are validated; the depth profile is not, and no
+criterion currently gates it.
+
+Options: `-writecatalog [-out <agf>]`, `-gates`, `-run`, `-refcase`, `-selftest`,
+plus `-file <zmx>` (headless batch mode), `-gateconfig <file>`, `-outdir <dir>`,
+`-filltime`, `-packpressure`, `-packtime`, `-melttemp`, `-moldtemp`,
+`-materials A,B`, `-directindex`.
+
 ### CryoGlass
 
 Generates OpticStudio glass catalogs from the NASA GSFC **CHARMS** cryogenic
