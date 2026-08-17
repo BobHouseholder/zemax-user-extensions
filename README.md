@@ -427,6 +427,43 @@ Two things break, and both are diagnostic rather than incidental:
    instead. This is the fifth time a number on this model has turned on a
    sampling definition before it turned on physics.
 
+### The in-plane peak is now the maximum of the profile
+
+Corrected 2026-08-17. The clause reads *"predicted peak within a factor of 2 of
+1.2 × 10⁻⁴"*, and the code took `avg[0]` — the same thing only if the maximum
+sits at the gate. That held for every model this case had run until Blake's
+envelope arrived, and `z*(0) = 1` admits no deposited material at the gate edge
+exactly, so `avg[0]` collapsed to the shear-only value and the clause fell
+1.07× → 0.28×. **That was the criterion reading the one station where the
+kinematics is singular, not the model losing its peak.**
+
+Taking the actual maximum is the literal reading and does not weaken anything:
+clause (b) still separately requires that maximum to lie on the gate side and to
+decay toward the far edge. The gate-edge value is printed beside it. The change
+is **inert in the default configuration** — the maximum is at s = 0 there, so
+1.07× is unchanged.
+
+Under the envelope the peak recovers to **0.59×, inside the factor of 2**. But it
+now fails a different clause, and this one is physical rather than a sampling
+artefact:
+
+| envelope | in-plane peak | peak location | far-edge value |
+|---|---|---|---|
+| off | 1.07× passes | s = 0 mm | 76.1% — decays, **passes** |
+| on | 0.59× passes | **s = 92 mm** | **129.3% — rises, FAILS** |
+
+**Blake's envelope makes the fountain-deposited layer thicken along the flow, so
+predicted birefringence RISES with distance from the gate. The reference says it
+falls roughly linearly to zero.** This is exactly the gate-versus-far-field
+tension flagged before the envelope was implemented, when it looked like it might
+be confined to the first 7% of flow length. It is not: it inverts the whole
+along-flow profile.
+
+So the envelope trades a depth-shape success for an along-flow-shape failure, and
+it stays opt-in. What it has genuinely established is that the depth ratio and
+the along-flow decay are coupled through one term, and no single scaling of that
+term satisfies both.
+
 ### The depth criterion now uses both channels
 
 Corrected 2026-08-17. The depth clause compared `DnFlow` alone against a profile

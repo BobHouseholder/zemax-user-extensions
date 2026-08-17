@@ -203,7 +203,35 @@ namespace MoldStress
                 if (azimuth == 0.0)
                 {
                     gateProfile = avg;
-                    gatePeak = avg[0];
+                    // THE PEAK IS THE MAXIMUM OF THE PROFILE, not the value at
+                    // station 0. Corrected 2026-08-17.
+                    //
+                    // The clause reads "predicted peak within a factor of 2 of
+                    // 1.2e-4". This line took avg[0], which is the same thing ONLY
+                    // if the maximum sits at the gate. That held for every model
+                    // this case has run until Blake's deposition envelope arrived,
+                    // and z*(0) = 1 makes the envelope admit no deposited material
+                    // at the gate edge exactly - so avg[0] collapsed to the
+                    // shear-only value and the in-plane clause fell 1.07x -> 0.28x.
+                    // That was the criterion reading the one station where the
+                    // kinematics is singular, not the model losing the peak.
+                    //
+                    // Taking the actual maximum is the literal reading of "peak"
+                    // and it does NOT weaken the criterion: clause (b) separately
+                    // requires that maximum to lie on the gate side and to decay
+                    // toward the far edge, and it is unchanged. The gate-edge value
+                    // is still printed beside it so nothing is hidden by the
+                    // switch.
+                    int argMax = 0;
+                    for (int i2 = 1; i2 < avg.Length; i2++)
+                        if (avg[i2] > avg[argMax]) argMax = i2;
+                    gatePeak = avg[argMax];
+                    say(string.Format(ci,
+                        "  in-plane peak {0:E3} at s = {1:F1} mm (s/L {2:F2}); " +
+                        "value at the gate edge itself {3:E3}",
+                        gatePeak, ch.S[argMax],
+                        ch.S[ch.S.Length - 1] > 0 ? ch.S[argMax] / ch.S[ch.S.Length - 1] : 0.0,
+                        avg[0]));
 
                     // Sampled at the depths the criterion names, not averaged over
                     // a band. The band version is kept alongside because it is
@@ -458,7 +486,12 @@ namespace MoldStress
                 else
                 {
                     farProfile = avg;
-                    farPeak = avg[0];
+                    // Same rule for the mirrored arm, or the gate null compares
+                    // a maximum against a station value and is not a null at all.
+                    int argMaxFar = 0;
+                    for (int i2 = 1; i2 < avg.Length; i2++)
+                        if (avg[i2] > avg[argMaxFar]) argMaxFar = i2;
+                    farPeak = avg[argMaxFar];
                 }
             }
 
