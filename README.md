@@ -427,6 +427,41 @@ Two things break, and both are diagnostic rather than incidental:
    instead. This is the fifth time a number on this model has turned on a
    sampling definition before it turned on physics.
 
+### The depth criterion now uses both channels
+
+Corrected 2026-08-17. The depth clause compared `DnFlow` alone against a profile
+the source measured in the **xz and yz planes** — out of plane, on slabs cut from
+the plate and viewed edge-on — where the thermal residual stress contributes in
+full. Isayev (*J. Polym. Sci. B*, 2006) has the thermal part dominating the core
+outright. Comparing one channel against a two-channel measurement is a
+measurement-definition error of the same class as the withdrawn 5.56.
+
+**The in-plane clause is deliberately unchanged.** Thermal stress is equibiaxial
+in plane (σxx = σyy, σzz = 0), so it contributes exactly **zero** to the in-plane
+difference that clause measures. Adding it there would be adding a term that
+vanishes in the geometry it is measured in. In-plane stays 1.07×.
+
+| | depth @ gate | depth @ s/L 0.1–0.5 | published |
+|---|---|---|---|
+| flow only, no envelope | 0.81 | 0.81 | 2.78 (yz) / 4.67 (xz) |
+| **flow+thermal**, no envelope | **1.16** | 1.16 | |
+| flow only + envelope | 0.02 | 2.52 | |
+| **flow+thermal + envelope** | 1.08 | **4.08** | |
+
+With both corrections applied, the interior-station ratio is **4.08 — between the
+two planes the source actually measured** (2.78 yz, 4.67 xz), and 13% below the
+cross-plane value. That is the closest this model has come, on a corrected
+reference and a literature deposition weight, with no fitted parameter.
+
+**And it costs the null, for the fourth time on this clause.** The freeze-order
+null now reads 1.19 vs 1.16 without the envelope and 1.62 vs 1.08 with it —
+exactly 50% and so just under the bar. The mechanism is plain: the thermal
+channel is nearly flat through the thickness, so adding it to numerator and
+denominator alike pushes the ratio toward 1 and compresses whatever the null was
+discriminating. A correct measurement definition made the control weaker. Both
+facts are true at once, and the null needs rebuilding again before the 4.08 is
+worth anything.
+
 The `s/L = 1.0` column reads infinity: at the far edge the deep sample sits
 inside `z*` and the shear channel is identically zero there, so the denominator
 is exactly 0. Reported rather than suppressed — it is a real degeneracy of

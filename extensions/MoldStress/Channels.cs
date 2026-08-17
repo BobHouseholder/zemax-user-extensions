@@ -26,6 +26,32 @@ namespace MoldStress
         public double[] S;                 // path coordinate from the gate, mm
         public double[] Z;                 // height above the mid-plane, mm
         public double[,] DnFlow;           // n_parallel - n_perpendicular, flow frame
+
+        /// <summary>
+        /// Flow PLUS thermal, signed, for the OUT-OF-PLANE component (n_x - n_z).
+        /// Added 2026-08-17.
+        ///
+        /// Why this is a separate array rather than a correction to DnFlow: the
+        /// two channels do not appear in the same measurement. The thermal
+        /// residual stress is EQUIBIAXIAL IN PLANE - sigma_xx = sigma_yy,
+        /// sigma_zz = 0 - so for light down z the in-plane difference
+        /// (sigma_xx - sigma_yy) is identically ZERO and thermal contributes
+        /// NOTHING to in-plane birefringence. For a ray in the plane of the plate
+        /// the difference is (sigma_xx - sigma_zz) = sigma_xx and thermal
+        /// contributes in full.
+        ///
+        /// That is not a detail, it decides which criterion may use it. The
+        /// registered in-plane clause compares against a thickness-averaged
+        /// in-plane peak and must stay on DnFlow. The depth clause compares
+        /// against a profile the source measured in the xz and yz planes, on
+        /// slabs cut from the plate and viewed edge-on - out-of-plane, so it must
+        /// use this. Adding thermal to the in-plane number would be adding a term
+        /// that is zero in the geometry it is measured in.
+        ///
+        /// Converted with the GLASSY coefficient: thermal stress is locked into
+        /// solid material below Tg, so C_melt does not apply to it.
+        /// </summary>
+        public double[,] DnTotalOutOfPlane;
         public double[,] SigmaThermalMPa;  // in-plane equibiaxial residual stress
         public double[,] DnDensity;        // isotropic index change
         public Polymer Material;
@@ -53,6 +79,7 @@ namespace MoldStress
             {
                 S = fill.S, Z = freeze.Z, Material = p,
                 DnFlow = new double[ns, nz],
+                DnTotalOutOfPlane = new double[ns, nz],
                 SigmaThermalMPa = new double[ns, nz],
                 DnDensity = new double[ns, nz],
             };
@@ -307,6 +334,17 @@ namespace MoldStress
                     c.DnFlow[i, k] = dnShear + dnFountain;
 
                     c.SigmaThermalMPa[i, k] = sigma[k];
+
+                    // Signed sum, not a sum of magnitudes: the two channels can
+                    // oppose. C_melt is +1000 Br for this grade and K_glass is
+                    // -8.5 Br, and the thermal stress itself changes sign through
+                    // the wall (compression at the surface, tension in the core).
+                    // Summing |.| would manufacture agreement wherever they
+                    // cancel, which is exactly where the profile is most
+                    // informative. The sampler takes the magnitude afterwards,
+                    // which is what a polarimeter reads.
+                    c.DnTotalOutOfPlane[i, k] =
+                        c.DnFlow[i, k] + p.KGlassBrewster * 1e-6 * sigma[k];
                     c.DnDensity[i, k] = llFactor * compressibilityPerMPa * (fill.P[i] - pMean);
                 }
             }

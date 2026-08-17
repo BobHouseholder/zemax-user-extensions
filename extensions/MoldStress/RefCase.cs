@@ -210,8 +210,28 @@ namespace MoldStress
                     // what the earlier 108.9 was, and replacing a number silently
                     // is worse than reporting both.
                     double half = 0.5 * e.CentreThicknessMm;
-                    surfaceDn = Channels.DnAtDepthFraction(ch.DnFlow, freeze.Z, 0, half, SurfaceFraction);
-                    coreDn = Channels.DnAtDepthFraction(ch.DnFlow, freeze.Z, 0, half, DeepFraction);
+                    // BOTH CHANNELS, from 2026-08-17. The depth clause compared
+                    // DnFlow alone against a profile the source measured in the
+                    // xz and yz planes, i.e. OUT OF PLANE, where the thermal
+                    // residual stress contributes in full. Isayev (J. Polym. Sci.
+                    // B, 2006) has the thermal part dominating the core outright.
+                    // Comparing one channel against a two-channel measurement is
+                    // a measurement-definition error of the same class as the
+                    // withdrawn 5.56, not a change of goalposts - and like that
+                    // one it is recorded with the direction it moved the bar.
+                    //
+                    // The in-plane clause is deliberately NOT changed: thermal
+                    // stress is equibiaxial in plane, so it contributes exactly
+                    // zero to the in-plane difference that clause measures.
+                    surfaceDn = Channels.DnAtDepthFraction(ch.DnTotalOutOfPlane, freeze.Z, 0, half, SurfaceFraction);
+                    coreDn = Channels.DnAtDepthFraction(ch.DnTotalOutOfPlane, freeze.Z, 0, half, DeepFraction);
+                    double flowOnlySurface = Channels.DnAtDepthFraction(ch.DnFlow, freeze.Z, 0, half, SurfaceFraction);
+                    double flowOnlyDeep = Channels.DnAtDepthFraction(ch.DnFlow, freeze.Z, 0, half, DeepFraction);
+                    say(string.Format(ci,
+                        "      channels: flow-only ratio {0:F2} (what this clause used to report), " +
+                        "flow+thermal {1:F2}",
+                        flowOnlyDeep > 0 ? flowOnlySurface / flowOnlyDeep : double.PositiveInfinity,
+                        coreDn > 0 ? surfaceDn / coreDn : double.PositiveInfinity));
 
                     double s2 = 0; int c2 = 0;
                     for (int k = 0; k < nz; k++)
@@ -289,8 +309,8 @@ namespace MoldStress
                         }
                     }
                     var chRev = Channels.Build(e, p, proc, fill, reversed);
-                    double sRev = Channels.DnAtDepthFraction(chRev.DnFlow, reversed.Z, 0, half, SurfaceFraction);
-                    double dRev = Channels.DnAtDepthFraction(chRev.DnFlow, reversed.Z, 0, half, DeepFraction);
+                    double sRev = Channels.DnAtDepthFraction(chRev.DnTotalOutOfPlane, reversed.Z, 0, half, SurfaceFraction);
+                    double dRev = Channels.DnAtDepthFraction(chRev.DnTotalOutOfPlane, reversed.Z, 0, half, DeepFraction);
                     reversedRatio = dRev > 0 ? sRev / dRev : double.PositiveInfinity;
 
                     // POSITIVE CONTROL ON THE NULL ITSELF, added 2026-08-17.
@@ -315,8 +335,8 @@ namespace MoldStress
                         for (int k = 0; k < sc.FreezeTimeS.Length; k++)
                             sc.FreezeTimeS[k] *= scale;
                         var chSc = Channels.Build(e, p, proc, fill, sc);
-                        double sS = Channels.DnAtDepthFraction(chSc.DnFlow, sc.Z, 0, half, SurfaceFraction);
-                        double dS = Channels.DnAtDepthFraction(chSc.DnFlow, sc.Z, 0, half, DeepFraction);
+                        double sS = Channels.DnAtDepthFraction(chSc.DnTotalOutOfPlane, sc.Z, 0, half, SurfaceFraction);
+                        double dS = Channels.DnAtDepthFraction(chSc.DnTotalOutOfPlane, sc.Z, 0, half, DeepFraction);
                         say(string.Format(ci,
                             "      probe: freeze times x{0,-6:G} -> surface {1:E3}, deep {2:E3}, ratio {3:F3}",
                             scale, sS, dS, dS > 0 ? sS / dS : double.PositiveInfinity));
@@ -336,8 +356,8 @@ namespace MoldStress
                         int idx = (int)Math.Round(sf * (ns - 1));
                         if (idx < 0) idx = 0;
                         if (idx > ns - 1) idx = ns - 1;
-                        double sSt = Channels.DnAtDepthFraction(ch.DnFlow, freeze.Z, idx, half, SurfaceFraction);
-                        double dSt = Channels.DnAtDepthFraction(ch.DnFlow, freeze.Z, idx, half, DeepFraction);
+                        double sSt = Channels.DnAtDepthFraction(ch.DnTotalOutOfPlane, freeze.Z, idx, half, SurfaceFraction);
+                        double dSt = Channels.DnAtDepthFraction(ch.DnTotalOutOfPlane, freeze.Z, idx, half, DeepFraction);
                         say(string.Format(ci,
                             "        s/L {0:F2} ({1,5:F1} mm)  surface {2:E3}  deep {3:E3}  ratio {4:F2}",
                             sf, ch.S[idx], sSt, dSt, dSt > 0 ? sSt / dSt : double.PositiveInfinity));
