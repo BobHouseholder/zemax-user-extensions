@@ -62,7 +62,20 @@ namespace MoldStress
             say("");
 
             // --- prediction 1: is the bracket a step? --------------------------
-            say("  depth   t_freeze     memory     tau_visc      |dn|");
+            // BOTH memory columns, 2026-08-17. This table printed ONE column
+            // labelled "memory" and it was Channels.MemoryFactor - the isothermal
+            // CLOSED FORM - while Channels.Build has used MemoryFactorWlf since
+            // the WLF work landed. The diagnostic was reporting a different
+            // function from the one that produces the answer, and the two do not
+            // agree: the closed form reads 1.00000 across the outer half-wall
+            // where the model's actual value is ~0.2. That made the skin look
+            // like it retained the full steady shear stress when it retains a
+            // fifth of it, and it is why the magnitude deficit was hard to see.
+            //
+            // A diagnostic that names a quantity must evaluate the quantity the
+            // model uses. Both are printed now, so a future divergence shows up
+            // as a disagreement rather than as a plausible single number.
+            say("  depth   t_freeze    mem_wlf   mem_closed     tau_visc      dn_flow    dn_therm      total");
             var ch0 = Channels.Build(plate, p, baseProc, fill, freeze);
             int nz = freeze.NodeCount;
             for (int k = nz - 1; k >= nz / 2; k -= 2)
@@ -70,11 +83,35 @@ namespace MoldStress
                 double f = Math.Abs(freeze.Z[k]) / half;
                 double tArrive = 0.0;                     // gate station
                 double tAbs = tArrive + freeze.FreezeTimeS[k];
-                double mem = Channels.MemoryFactor(tArrive, baseProc.FillTimeS, tAbs,
-                                                   lambda0, baseProc.PackTimeS);
+                double memClosed = Channels.MemoryFactor(tArrive, baseProc.FillTimeS, tAbs,
+                                                         lambda0, baseProc.PackTimeS);
+                double memWlf = memClosed;
+                if (freeze.TimeGridS != null && freeze.TempHistoryC != null)
+                {
+                    var hist = new double[freeze.TimeGridS.Length];
+                    for (int q = 0; q < hist.Length; q++) hist[q] = freeze.TempHistoryC[k, q];
+                    memWlf = Channels.MemoryFactorWlf(tArrive, baseProc.FillTimeS, tAbs,
+                                                      freeze.TimeGridS, hist, p, lambda0,
+                                                      baseProc.PackTimeS);
+                }
                 double tau = fill.DpDs[0] * Math.Abs(freeze.Z[k]);
-                say(string.Format(ci, "  {0,5:P0}  {1,9:F4}  {2,9:F5}  {3,10:E3}  {4,9:E3}",
-                    f, freeze.FreezeTimeS[k], mem, tau, Math.Abs(ch0.DnFlow[0, k])));
+                // THE THERMAL CHANNEL, printed 2026-08-17 because the depth
+                // criterion does not look at it. Isayev (J. Polym. Sci. B, 2006)
+                // decomposes residual birefringence into a flow part, peaking near
+                // the surface, and a THERMAL part that is flat across the
+                // thickness and DOMINATES THE CORE. The criterion compares
+                // DnFlow alone against a published profile whose core plateau
+                // includes both, so a core deficit in DnFlow may be a missing
+                // channel rather than a weak one. Converted with the GLASSY
+                // coefficient - the thermal stress is locked into solid material,
+                // so C_melt does not apply to it.
+                double dnTherm = Math.Abs(p.KGlassBrewster) * 1e-6
+                                 * Math.Abs(ch0.SigmaThermalMPa[0, k]);
+                say(string.Format(ci,
+                    "  {0,5:P0}  {1,9:F4}  {2,9:F5}  {3,10:F5}  {4,11:E3}  {5,9:E3}  {6,9:E3}  {7,9:E3}",
+                    f, freeze.FreezeTimeS[k], memWlf, memClosed, tau,
+                    Math.Abs(ch0.DnFlow[0, k]), dnTherm,
+                    Math.Abs(ch0.DnFlow[0, k]) + dnTherm));
             }
             // Where does the freeze time cross the fill time? That is the depth
             // the hypothesis says the cliff must sit at.
