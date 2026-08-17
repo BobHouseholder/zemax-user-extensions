@@ -70,19 +70,7 @@ namespace MoldStress
 
                     // Path coordinate from the gate, and the local flow direction.
                     double s, fx, fy;
-                    if (e.Gate.Kind == GateKind.RingAllRound)
-                    {
-                        s = e.SemiDiameterMm - r;
-                        double rr = Math.Max(r, 1e-9);
-                        fx = -x / rr; fy = -y / rr;             // inward
-                    }
-                    else
-                    {
-                        double dx = x - gx, dy = y - gy;
-                        s = Math.Sqrt(dx * dx + dy * dy);
-                        double dd = Math.Max(s, 1e-9);
-                        fx = dx / dd; fy = dy / dd;             // away from the gate
-                    }
+                    FlowDirection(e, x, y, out fx, out fy, out s);
                     int iS = NearestNode(fill.S, s);
 
                     double h = e.ThicknessAt(r);
@@ -145,6 +133,34 @@ namespace MoldStress
             File.WriteAllText(w.StressPath, stress.ToString());
             File.WriteAllText(w.IndexPath, index.ToString());
             return w;
+        }
+
+
+        /// <summary>
+        /// Where the melt is going at (x,y), and how far it has come from the
+        /// gate. Extracted so the angular test exercises the SAME rule the files
+        /// are written from - a test against a re-typed copy of a rule proves
+        /// only that two copies agree.
+        /// </summary>
+        public static void FlowDirection(MouldedElement e, double x, double y,
+                                         out double fx, out double fy, out double s)
+        {
+            double phi = e.Gate.AzimuthDeg * Math.PI / 180.0;
+            double gx = e.SemiDiameterMm * Math.Sin(phi), gy = e.SemiDiameterMm * Math.Cos(phi);
+            if (e.Gate.Kind == GateKind.RingAllRound)
+            {
+                double r = Math.Sqrt(x * x + y * y);
+                s = e.SemiDiameterMm - r;
+                double rr = Math.Max(r, 1e-9);
+                fx = -x / rr; fy = -y / rr;                 // inward
+            }
+            else
+            {
+                double dx = x - gx, dy = y - gy;
+                s = Math.Sqrt(dx * dx + dy * dy);
+                double dd = Math.Max(s, 1e-9);
+                fx = dx / dd; fy = dy / dd;                 // away from the gate
+            }
         }
 
         private static int NearestNode(double[] arr, double v)
