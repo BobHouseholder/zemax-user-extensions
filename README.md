@@ -292,7 +292,45 @@ film gate on one edge, polarimetry at 594 nm), on material constants measured by
 Kim, Yoon & Kornfield, *Key Eng. Mater.* **326–328** (2006) 183. Run it with
 `-refcase`, which exits non-zero unless every clause holds.
 
-**The in-plane criterion passes; the depth criterion fails.**
+> **THE REGISTERED CRITERION IS NOW MET AT THE CONVERGED GRID — AND SHOULD NOT
+> YET BE READ AS SUCCESS.** Re-taking the convergence sweep on 2026-08-17
+> (`-nz 321`, corrected conditions) gives in-plane **0.95x** and depth **1.43**
+> against the band floor of 1.39, so `-refcase` exits 0 and prints
+> `the registered criterion is MET`. Three facts from the same sweep say the
+> model that meets it is not the model this README describes:
+>
+> 1. **The flow null FAILS at nz >= 161** and passes only below it. The number
+>    passes at exactly the resolutions where its control does not work.
+> 2. **With the fountain off, the in-plane peak does not converge — it diverges
+>    to zero:** 0.52x, 0.26x, 0.09x, 0.02x at nz 41/81/161/321, each refinement
+>    dividing by 2.0, then 3.0, then 3.5. **The shear channel's contribution
+>    vanishes under grid refinement.** At nz=321 the model's numbers come almost
+>    entirely from front deposition, and the freeze-history null fails because
+>    the channel it was built to test has disappeared.
+> 3. **Margin and headroom are both absent.** Depth clears the floor by 3%, is
+>    still climbing (1.16 -> 1.36 -> 1.43), and **nz=481 cannot arbitrate** — the
+>    freeze solver fails there outright (`the centre never reached Tg`), so 321
+>    is the ceiling and both trends are still moving at it.
+>
+> A criterion met by a model whose second channel has vanished, with a failing
+> control and 3% of margin, is a result to investigate rather than to report.
+> The shear channel's divergence is now the top open problem.
+
+**Convergence sweeps, re-taken 2026-08-17 on the corrected conditions.** The
+earlier sweep behind the shipped `-nz 321` default was run with the fountain ON
+*and* at the superseded process conditions, so it covered neither configuration
+as it now stands.
+
+| nz | default: peak / depth | flow null | fountain off: peak |
+|---|---|---|---|
+| 41 | 1.17x / 0.89 | PASS | 0.52x |
+| 81 | 1.07x / 1.16 | PASS | 0.26x |
+| 161 | 0.99x / 1.36 | **FAIL** | 0.09x |
+| 321 | **0.95x / 1.43** | **FAIL** | **0.02x** |
+| 481 | freeze solver fails | — | freeze solver fails |
+
+**The in-plane criterion passes; the depth criterion now passes at nz=321 but
+its control does not.**
 
 | Clause | Result | Bar |
 |---|---|---|

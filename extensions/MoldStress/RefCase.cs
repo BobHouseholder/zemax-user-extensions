@@ -148,8 +148,9 @@ namespace MoldStress
             say(string.Format(ci, "  grid: nz {0}, nFD {1}", nzGrid, nFdGrid));
             if (nzGrid < 321)
                 say("  WARNING: below nz=321 neither registered number is converged. " +
-                    "Sweep measured 2026-08-15: peak 1.01x / depth 0.74 at nz=81, " +
-                    "0.90x / 0.91 at 161, 0.85x / 0.98 at 321. Quote -nz 321.");
+                    "Sweep RE-TAKEN 2026-08-17 on the corrected conditions: peak " +
+                    "1.17x / depth 0.89 at nz=41, 1.07x / 1.16 at 81, 0.99x / 1.36 " +
+                    "at 161, 0.95x / 1.43 at 321. Quote -nz 321.");
             // Those figures were taken at 290 C / 120 C / 60 MPa. The 2026-08-17
             // correction to the paper's own conditions changes the model's inputs,
             // and convergence EXPIRES when the model changes - the sweep above is
@@ -157,8 +158,25 @@ namespace MoldStress
             // of boundary condition, even though the grid at which it converged
             // plausibly does. Re-taken below on every run, so the printed numbers
             // are always current; the sweep is quoted only to justify nz=321.
-            say("  NOTE: the 0.85x / 0.98 pair above predates the 2026-08-17 " +
-                "process-condition correction. Trust THIS run's numbers, not those.");
+            // TWO THINGS THE 2026-08-17 SWEEP FOUND, and a criterion reading
+            // MET at nz=321 must be read against both.
+            //
+            // (1) The FLOW NULL FAILS at nz>=161 and passes below it. It is not
+            //     the null that changed - the channel it tests has vanished.
+            // (2) With -fountain 0 the in-plane peak DOES NOT CONVERGE: 0.52x at
+            //     nz=41, 0.26x at 81, 0.09x at 161, 0.02x at 321, each refinement
+            //     dividing by 2.0, 3.0 then 3.5. The shear channel's contribution
+            //     goes to ZERO under refinement, so at the converged grid the
+            //     model's numbers come almost entirely from front deposition and
+            //     the freeze-history control has nothing left to detect.
+            //
+            // nz=481 cannot arbitrate: the freeze solver fails there outright
+            // ("the centre never reached Tg"), so 321 is the ceiling and both
+            // trends are still moving at it.
+            say("  CONVERGENCE CAVEAT: the flow null FAILS at nz>=161, and with " +
+                "-fountain 0 the in-plane peak diverges to zero (0.52x/0.26x/" +
+                "0.09x/0.02x at nz 41/81/161/321). The shear channel vanishes " +
+                "under refinement; these numbers are the deposition term alone.");
             say(string.Format(ci, "  process: fill {0:F1} s, pack {1:F0} MPa for {2:F0} s, " +
                 "melt {3:F0} C, mould {4:F0} C",
                 proc.FillTimeS, proc.PackPressureMPa, proc.PackTimeS, p.MeltTempC, p.MoldTempC));
