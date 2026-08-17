@@ -94,6 +94,19 @@ namespace MoldStress
             return q;
         }
 
+        /// <summary>
+        /// Shallow copy with the thermal expansion zeroed, which switches the
+        /// THERMAL birefringence channel off and leaves the flow channel alone.
+        /// Used as a positive control on the two-channel depth comparison: with
+        /// CTE = 0 the total must collapse EXACTLY onto the flow-only numbers.
+        /// </summary>
+        public Polymer WithZeroCte()
+        {
+            var q = (Polymer)MemberwiseClone();
+            q.CtePerK = 0.0;
+            return q;
+        }
+
         // --- Cross-WLF (SI: Pa.s, Pa, K) ------------------------------------
         public double CrossN;               // power-law index
         public double CrossTauStarPa;       // tau*

@@ -313,6 +313,90 @@ namespace MoldStress
                     double dRev = Channels.DnAtDepthFraction(chRev.DnTotalOutOfPlane, reversed.Z, 0, half, DeepFraction);
                     reversedRatio = dRev > 0 ? sRev / dRev : double.PositiveInfinity;
 
+                    // NULL REBUILT 2026-08-17, FOURTH VERSION, and this time the
+                    // problem was the RESPONSE VARIABLE rather than the
+                    // perturbation.
+                    //
+                    // Version 3 mirrored the temperature history and worked - it
+                    // moved the flow-only ratio 0.81 -> 1.35. Then the depth clause
+                    // was corrected to compare flow+thermal, because that is what
+                    // the source measured, and the same null fell to 1.19 vs 1.16.
+                    // Nothing about the perturbation got worse. The thermal channel
+                    // is nearly FLAT through the thickness, so adding it to
+                    // numerator and denominator alike drags any ratio toward 1 and
+                    // compresses whatever the null was resolving. A correct
+                    // measurement definition made the control weaker.
+                    //
+                    // A single null on a SUMMED quantity is always diluted by
+                    // whichever channel is flatter, and no amount of extra
+                    // perturbation fixes that. So the control is decomposed the
+                    // same way the measurement is - one per channel, each tested
+                    // where it is not diluted:
+                    //
+                    //   (i)  FLOW null: mirror the temperature history, and require
+                    //        the FLOW-ONLY ratio to move. This is version 3,
+                    //        unchanged, now reported against the channel it
+                    //        actually governs instead of against the sum.
+                    //   (ii) THERMAL null: set CTE = 0 and require the total to
+                    //        collapse EXACTLY onto the flow-only numbers. This is
+                    //        an identity, so it fails if the thermal term is not
+                    //        being added, is added twice, is added with the wrong
+                    //        sign, or is silently inert.
+                    //
+                    // Clause (ii) is the one that could not have existed before:
+                    // a summed field needs a decomposition test, not a bigger kick.
+                    double sRevFlow = Channels.DnAtDepthFraction(chRev.DnFlow, reversed.Z, 0, half, SurfaceFraction);
+                    double dRevFlow = Channels.DnAtDepthFraction(chRev.DnFlow, reversed.Z, 0, half, DeepFraction);
+                    double revFlowRatio = dRevFlow > 0 ? sRevFlow / dRevFlow : double.PositiveInfinity;
+                    double baseFlowRatio = flowOnlyDeep > 0 ? flowOnlySurface / flowOnlyDeep : double.PositiveInfinity;
+                    bool flowNull = double.IsInfinity(revFlowRatio) != double.IsInfinity(baseFlowRatio)
+                        || Math.Abs(revFlowRatio - baseFlowRatio) / Math.Max(baseFlowRatio, 1e-30) > 0.5;
+                    say(string.Format(ci,
+                        "      null (i) flow, freeze order mirrored: flow ratio {0:F3} vs {1:F3}  =>  {2}",
+                        revFlowRatio, baseFlowRatio, flowNull ? "PASS" : "FAIL"));
+
+                    var pNoCte = p.WithZeroCte();
+                    var chNoCte = Channels.Build(e, pNoCte, proc, fill, freeze);
+                    double sNo = Channels.DnAtDepthFraction(chNoCte.DnTotalOutOfPlane, freeze.Z, 0, half, SurfaceFraction);
+                    double dNo = Channels.DnAtDepthFraction(chNoCte.DnTotalOutOfPlane, freeze.Z, 0, half, DeepFraction);
+                    double relS = Math.Abs(sNo - flowOnlySurface) / Math.Max(Math.Abs(flowOnlySurface), 1e-30);
+                    double relD = Math.Abs(dNo - flowOnlyDeep) / Math.Max(Math.Abs(flowOnlyDeep), 1e-30);
+                    // THE IDENTITY IS NOT ENOUGH ON ITS OWN, and saying so is the
+                    // point. If DnTotalOutOfPlane were simply DnFlow - the thermal
+                    // term never added at all - then zeroing the CTE would change
+                    // nothing and this identity would hold TRIVIALLY. A check that
+                    // passes when the feature is absent guards nothing. So the
+                    // clause has two halves that fail in opposite directions:
+                    // the total must collapse onto flow-only when the channel is
+                    // off, AND must differ from it materially when the channel is
+                    // on.
+                    double noCteRatio = dNo > 0 ? sNo / dNo : double.PositiveInfinity;
+                    double totalRatio = coreDn > 0 ? surfaceDn / coreDn : double.PositiveInfinity;
+                    double contribution = Math.Abs(totalRatio - noCteRatio)
+                                          / Math.Max(Math.Abs(noCteRatio), 1e-30);
+                    bool collapses = relS < 1e-9 && relD < 1e-9;
+                    bool material = contribution > 0.10;
+                    bool thermalNull = collapses && material;
+                    say(string.Format(ci,
+                        "      null (ii) thermal: CTE=0 collapses to flow-only " +
+                        "(surface {0:E1}, deep {1:E1}) AND channel is material " +
+                        "({2:F3} with vs {3:F3} without, {4:P0})  =>  {5}",
+                        relS, relD, totalRatio, noCteRatio, contribution,
+                        thermalNull ? "PASS" : "FAIL"));
+
+                    // POSITIVE CONTROL ON THE IDENTITY CHECK ITSELF. Feed the same
+                    // comparison a pair it must reject - the thermal-ON total
+                    // against flow-only - and require it to report a difference.
+                    // If this reads zero the tolerance is swallowing everything and
+                    // the PASS above is meaningless.
+                    double relControl = Math.Abs(surfaceDn - flowOnlySurface)
+                                        / Math.Max(Math.Abs(flowOnlySurface), 1e-30);
+                    say(string.Format(ci,
+                        "      control on (ii): same check on a known-different pair " +
+                        "reads {0:E1}  =>  {1}",
+                        relControl, relControl > 1e-9 ? "OK, check discriminates"
+                                                      : "BROKEN, check cannot fail"));
+
                     // POSITIVE CONTROL ON THE NULL ITSELF, added 2026-08-17.
                     //
                     // The freeze-order null reports FAIL, and a null that cannot

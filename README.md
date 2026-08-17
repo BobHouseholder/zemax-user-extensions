@@ -453,14 +453,29 @@ two planes the source actually measured** (2.78 yz, 4.67 xz), and 13% below the
 cross-plane value. That is the closest this model has come, on a corrected
 reference and a literature deposition weight, with no fitted parameter.
 
-**And it costs the null, for the fourth time on this clause.** The freeze-order
-null now reads 1.19 vs 1.16 without the envelope and 1.62 vs 1.08 with it —
-exactly 50% and so just under the bar. The mechanism is plain: the thermal
-channel is nearly flat through the thickness, so adding it to numerator and
-denominator alike pushes the ratio toward 1 and compresses whatever the null was
-discriminating. A correct measurement definition made the control weaker. Both
-facts are true at once, and the null needs rebuilding again before the 4.08 is
-worth anything.
+**It cost the null, and the null has been rebuilt — fourth version.** Correcting
+the clause dropped the freeze-order null to 1.19 vs 1.16, just under the bar.
+Nothing about the perturbation got worse: the thermal channel is nearly flat
+through the thickness, so adding it to numerator and denominator alike drags any
+ratio toward 1 and compresses whatever the null was resolving. **A single null on
+a summed quantity is always diluted by whichever channel is flatter, and a bigger
+kick does not fix that.** So the control is decomposed the same way the
+measurement is:
+
+| control | what it perturbs | requirement | result |
+|---|---|---|---|
+| **(i) flow** | mirror the temperature history | flow-only ratio must move >50% | 1.349 vs 0.812 — **passes** (2.090 vs 0.018 with envelope) |
+| **(ii) thermal** | CTE = 0 | total must collapse **exactly** onto flow-only, **and** differ materially when on | rel err 0.0, contribution 43% — **passes** |
+
+Clause (ii) has two halves that fail in opposite directions, deliberately. The
+collapse identity alone would hold **trivially if the thermal term were never
+added at all**, so a check built only on it would pass when the feature is
+absent. The second half requires the channel to move the reported ratio.
+
+And the identity check carries its own positive control: the same comparison is
+fed a pair it must reject (thermal-ON total against flow-only) and required to
+report a difference. It reads 3.5 × 10⁻¹, so the tolerance is not swallowing
+everything.
 
 The `s/L = 1.0` column reads infinity: at the far edge the deep sample sits
 inside `z*` and the shear channel is identically zero there, so the denominator
