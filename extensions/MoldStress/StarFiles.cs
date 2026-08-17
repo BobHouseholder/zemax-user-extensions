@@ -40,7 +40,8 @@ namespace MoldStress
 
         public static Written Write(MouldedElement e, Polymer p, Channels c,
                                     FillField fill, FreezeHistory freeze,
-                                    string directory, int nRadial = 17, int nAzimuth = 24)
+                                    string directory, int nRadial = 17, int nAzimuth = 24,
+                                    int nzExport = 0)
         {
             var ci = CultureInfo.InvariantCulture;
             var stress = new StringBuilder();
@@ -58,7 +59,39 @@ namespace MoldStress
             double phi = e.Gate.AzimuthDeg * Math.PI / 180.0;
             double gx = e.SemiDiameterMm * Math.Sin(phi), gy = e.SemiDiameterMm * Math.Cos(phi);
 
-            int nz = freeze.NodeCount;
+            // EXPORTED DEPTH GRID, separate from the physics grid.
+            //
+            // The physics wants a fine wall (nz=321 to converge); the file wants
+            // few points, because it carries nz per (x,y) station and STAR has to
+            // fit all of them. Uniform decimation would be wrong: the field's
+            // whole structure is in the outermost few percent, which uniform
+            // sampling throws away first. So the exported depths are placed
+            // QUADRATICALLY in distance from the wall - dense at the skin, sparse
+            // in the core - and taken as actual physics nodes, so no interpolation
+            // is involved.
+            int nzFull = freeze.NodeCount;
+            int[] zIdx;
+            if (nzExport <= 0 || nzExport >= nzFull)
+            {
+                zIdx = new int[nzFull];
+                for (int i = 0; i < nzFull; i++) zIdx[i] = i;
+            }
+            else
+            {
+                var picked = new System.Collections.Generic.SortedSet<int>();
+                int half = nzExport / 2;
+                for (int i = 0; i <= half; i++)
+                {
+                    double u = (double)i / half;            // 0 at wall, 1 at centre
+                    double depthFrac = u * u;               // quadratic: dense at the wall
+                    int idxLow = (int)Math.Round(depthFrac * (nzFull - 1) / 2.0);
+                    picked.Add(Math.Max(0, Math.Min(nzFull - 1, idxLow)));
+                    picked.Add(Math.Max(0, Math.Min(nzFull - 1, nzFull - 1 - idxLow)));
+                }
+                zIdx = new int[picked.Count];
+                picked.CopyTo(zIdx);
+            }
+            int nz = zIdx.Length;
             for (int ir = 0; ir < nRadial; ir++)
             {
                 double r = e.SemiDiameterMm * ir / (nRadial - 1.0);
@@ -76,8 +109,9 @@ namespace MoldStress
                     double h = e.ThicknessAt(r);
                     double zFront = MouldedElement.Sag(e.FrontRadiusMm, r);
 
-                    for (int k = 0; k < nz; k++)
+                    for (int kk = 0; kk < nz; kk++)
                     {
+                        int k = zIdx[kk];
                         double zMid = freeze.Z[k] * (h / freeze.ThicknessMm);   // scale to local wall
                         double zLocal = zFront + 0.5 * h + zMid;
 
