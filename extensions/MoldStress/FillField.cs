@@ -122,6 +122,28 @@ namespace MoldStress
         public bool FountainDepositionSupport = false;
 
         /// <summary>
+        /// Scale the front deposition by the shear window available to the melt
+        /// FEEDING the front at that station, so the deposited magnitude decays
+        /// along the flow the way the shear channel already does.
+        ///
+        /// Without it the fountain term has no along-flow dependence at all. With
+        /// Blake's envelope on - which makes the deposited layer THICKEN with
+        /// distance from the gate - the predicted profile rises to 129.3% of the
+        /// gate value at the far edge, against a reference that falls roughly
+        /// linearly to zero. The support was right and the magnitude was missing
+        /// its along-flow term.
+        ///
+        /// The factor is the memory bracket evaluated at the MID-PLANE, the core
+        /// stream the front draws from. It is the same expression, and the same
+        /// argument, that already gives the shear channel its gate-to-edge decay:
+        /// at the far edge the melt arrives as filling ends, so the window is
+        /// identically zero and there is no orientation to deposit. An extension
+        /// of an argument already in the model, not a new constant.
+        /// </summary>
+        public bool FountainDecaysAlongFlow = false;
+
+
+        /// <summary>
         /// Grade the shear rate by the narrowing molten channel, |dp/ds| going as
         /// 1/h_melt^3 as the skin closes the gap. OFF by default: it was inert
         /// under the old memory clamp, and with the clamp gone it is not inert but

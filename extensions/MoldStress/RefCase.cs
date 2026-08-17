@@ -131,6 +131,8 @@ namespace MoldStress
                     proc.FrontCarriesMeltOrientation = true;
             if (Program.Has(args, "-deposition-support"))
                 proc.FountainDepositionSupport = true;
+            if (Program.Has(args, "-deposition-decay"))
+                proc.FountainDecaysAlongFlow = true;
 
             // Grid, exposed so both registered numbers can be re-taken at
             // convergence. The convergence established earlier was measured on

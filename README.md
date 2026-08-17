@@ -464,6 +464,40 @@ it stays opt-in. What it has genuinely established is that the depth ratio and
 the along-flow decay are coupled through one term, and no single scaling of that
 term satisfies both.
 
+### An along-flow decay for the deposition — implemented, measured, not adopted
+
+`-deposition-decay` scales the front deposition by the shear window available to
+the melt **feeding** the front at that station (the memory bracket at the
+mid-plane, the core stream the front draws from). The argument is not a new one:
+it is the same expression that already gives the shear channel its gate-to-edge
+decay — at the far edge the melt arrives as filling ends, the window is
+identically zero, and there is no orientation to deposit.
+
+It does produce decay, and it is still wrong. Measured at nz=81 with the
+envelope on:
+
+| | in-plane peak | peak location | far edge | depth @ s/L 0.1–0.5 |
+|---|---|---|---|---|
+| envelope only | 0.59× | s = 92 mm | 129% — rises | **4.08** |
+| envelope + decay | **0.31×** | s = 87 mm | 0% — falls | 1.56 |
+
+The far-edge rise is fixed, but the profile is now a **hump**: it climbs from the
+gate to a maximum at 87% of the flow length and then collapses to zero. The
+reference falls roughly linearly *from the gate*. And both magnitudes get worse —
+in-plane 0.59× → 0.31×, depth 4.08 → 1.56.
+
+The mechanism is visible in the two terms. Blake's support **grows** with
+distance (z* falls from 1 to 0.577) while this window factor **falls** slowly and
+then crashes at the very end. Their product peaks near s/L = 0.87. No scaling of
+either fixes that — a monotone decay from the gate needs the magnitude to fall
+faster than the support grows, everywhere, and this factor does not.
+
+**It also exposed a weak clause.** *"Maximum on the gate side"* is implemented as
+an endpoint comparison, `profile[0] > profile[last]`, so a profile peaking at 87%
+of the length **passes** it. It passed here while the shape was plainly wrong.
+The peak location is now printed beside the verdict so the gap is visible; the
+registered clause itself is left alone rather than quietly tightened.
+
 ### The depth criterion now uses both channels
 
 Corrected 2026-08-17. The depth clause compared `DnFlow` alone against a profile

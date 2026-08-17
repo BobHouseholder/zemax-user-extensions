@@ -143,6 +143,53 @@ namespace MoldStress
 
             for (int i = 0; i < ns; i++)
             {
+                // SOURCE-WINDOW FACTOR for the front deposition, added 2026-08-17.
+                //
+                // The front can only deposit orientation that the melt feeding it
+                // actually carries, and the melt feeding the front at station i is
+                // the CORE STREAM. This model already makes exactly that argument
+                // for the shear channel, and it is what produces the gate-to-edge
+                // decay the reference case requires: "at the far edge, where the
+                // melt arrives as filling ends, t_a and t_end coincide and the
+                // bracket is identically ZERO: no shear window, no orientation."
+                //
+                // The fountain term ignored it and so did not decay along the
+                // flow at all. With Blake's envelope on - which makes the
+                // deposited LAYER thicken with distance - the result was a
+                // predicted profile that RISES toward the far edge, 129.3% of the
+                // gate value, against a reference that falls roughly linearly to
+                // zero. The support was right and the magnitude was missing its
+                // along-flow dependence.
+                //
+                // So the deposition is scaled by the memory factor evaluated at
+                // the MID-PLANE - the source the front draws from - at this
+                // station. Dimensionless, in [0,1], identically zero at the far
+                // edge for the same reason and by the same expression as the
+                // shear channel. This is an extension of an argument already in
+                // the model rather than a new constant.
+                double mSource = 1.0;
+                if (proc.FountainDecaysAlongFlow)
+                {
+                    int kMid = nz / 2;
+                    double tArriveS = tFill * fill.S[i] / Math.Max(fill.PathLengthMm, 1e-9);
+                    double tFreezeSrc = tArriveS + freeze.FreezeTimeS[kMid];
+                    double lamS = Math.Max(proc.LambdaScale * (p.MeltModulusPa > 0
+                        ? fill.EtaPaS / p.MeltModulusPa : 1e-6), 1e-9);
+                    if (freeze.TimeGridS != null && freeze.TempHistoryC != null)
+                    {
+                        var hS = new double[freeze.TimeGridS.Length];
+                        for (int q = 0; q < hS.Length; q++) hS[q] = freeze.TempHistoryC[kMid, q];
+                        mSource = MemoryFactorWlf(tArriveS, tFill, tFreezeSrc,
+                                                  freeze.TimeGridS, hS, p, lamS, tPack,
+                                                  meltFracAtTime, proc.ChannelNarrowing,
+                                                  tGateSeal);
+                    }
+                    else
+                    {
+                        mSource = MemoryFactor(tArriveS, tFill, tFreezeSrc, lamS, tPack);
+                    }
+                }
+
                 for (int k = 0; k < nz; k++)
                 {
                     // Shear the layer locked in: the gradient present when it
@@ -311,7 +358,7 @@ namespace MoldStress
                                            * Math.Exp(-xiFreeze);
                         }
 
-                        dnFountain = p.CMeltBrewster * 1e-12 * sigmaFrontPa;
+                        dnFountain = p.CMeltBrewster * 1e-12 * sigmaFrontPa * mSource;
 
                         // BLAKE'S MAXIMUM-RESIDENCE ENVELOPE. Material inside
                         // z*(s) is core stream - it never reached the front, so it
