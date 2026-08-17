@@ -197,6 +197,30 @@ namespace MoldStress
                 say("  would trade one wrong shape for another rather than fix anything.");
             }
 
+            // WHERE does the surface value get sampled?
+            //
+            // The published 10e-4 is a PRISM COUPLER reading - an evanescent
+            // probe of order a micron. The registered criterion samples at 97.5%
+            // of the half-wall, which on a 1.5 mm plate is 19 um in. If the
+            // model's skin term is concentrated in the outermost microns, those
+            // are not the same measurement, and the gap would be a DOMAIN
+            // mismatch rather than a physics one - the same class as the two
+            // corrections that already moved this number by 2x and 5x.
+            say("");
+            say("  surface sampling depth vs the ratio it produces");
+            say("   fraction   depth from wall     surface |dn|      ratio to 47%");
+            var frS = FreezeHistory.Build(plate.CentreThicknessMm, p, baseProc, 401, 1601);
+            var chS = Channels.Build(plate, p, baseProc, fill, frS);
+            double deepS = Channels.DnAtDepthFraction(chS.DnFlow, frS.Z, 0, half, RefCase.DeepFraction);
+            foreach (double f in new[] { 0.975, 0.99, 0.995, 0.999, 0.9999 })
+            {
+                double sv = Channels.DnAtDepthFraction(chS.DnFlow, frS.Z, 0, half, f);
+                say(string.Format(ci, "   {0,8:F4}   {1,10:F4} mm   {2,14:E3}   {3,13:F3}",
+                    f, (1.0 - f) * half, sv, sv / Math.Max(deepS, 1e-30)));
+            }
+            say("");
+            say("  published surface 10e-4 at ~1 um, core 1.8e-4 at 0.4 mm, ratio 5.56");
+
             string outPath = Program.Value(args, "-out")
                 ?? Path.Combine(Path.GetTempPath(), "moldstress_depthdiag.txt");
             File.WriteAllText(outPath, log.ToString());
