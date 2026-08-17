@@ -63,7 +63,7 @@ namespace MoldStress
             // convergence. The convergence established earlier was measured on
             // the model as it stood before the fountain default, the viscosity
             // weighting and the measured constants, and does not carry over.
-            int nzGrid = (int)Program.Value(args, "-nz", 81.0);
+            int nzGrid = (int)Program.Value(args, "-nz", 321.0);   // converged; see -nz sweep
             if (nzGrid % 2 == 0) nzGrid++;
             int nFdGrid = 10 * nzGrid;
 

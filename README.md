@@ -311,13 +311,13 @@ has, so the depth shape is set by how those two trade off, which is the open
 question. The in-plane peak, by contrast, is 0.90× of the published value on
 measured constants with **no fitted parameter between the two channels.**
 
-**Numbers here are taken at `-nz 321`, and they are still drifting.** Neither
+**Numbers here are the default: `-refcase` now runs at nz=321.**  They are still drifting. Neither
 registered number is converged at the shipped default of 81: peak 1.01× / depth
 0.74 at nz=81, 0.90× / 0.91 at 161, 0.85× / 0.98 at 321. The trend is monotone
 and decelerating, and extrapolates to roughly 0.83× and 1.0. **nz=641 does not
 complete** — the freeze solver is explicit, so cost grows as the cube of the node
 count and the step cap is reached before the core freezes. So convergence here is
-demonstrated by trend, not by brute force, and `-refcase` warns below nz=321.
+demonstrated by trend, not by brute force, and `-refcase` warns if you drop below it. `-run` deliberately stays at nz=81 — the STAR file carries nz points per station, so 321 would be a quarter-million points and tens of MB per element — and it prints that its delta is therefore not a converged number.
 
 **The deficit is located and it is not a shape problem.** At the surface the
 model gives ~1.0 × 10⁻⁴ against a published 10 × 10⁻⁴ — a factor of ten low —

@@ -67,6 +67,9 @@ namespace MoldStress
 
                 // --- baseline, measured before anything is loaded --------------
                 double baseWfe = Metric(sys);
+                say("  NOTE: this path runs at nz=81 to keep the STAR files a sensible size.");
+                say("  That is BELOW the converged grid - quote -refcase -nz 321 for the");
+                say("  registered numbers, not the delta below.");
                 say(string.Format(CultureInfo.InvariantCulture,
                     "  baseline RMS wavefront error: {0:F6} waves", baseWfe));
                 say("");
@@ -76,6 +79,11 @@ namespace MoldStress
                 {
                     var p = Polymers.ByName(e.Material);
                     var fill = FillField.Build(e, p, proc, 101);
+                    // Deliberately coarser than -refcase's converged 321. The
+                    // written STAR file carries nz points per (x,y) station, so
+                    // 321 would be a quarter-million points and tens of MB per
+                    // element. The performance delta below is therefore NOT a
+                    // converged number and says so.
                     var freeze = FreezeHistory.Build(Math.Max(e.EdgeThicknessMm, 0.2), p, proc, 81);
                     var ch = Channels.Build(e, p, proc, fill, freeze);
                     var w = StarFiles.Write(e, p, ch, fill, freeze, outDir);
