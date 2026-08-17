@@ -77,6 +77,23 @@ namespace MoldStress
         /// </summary>
         public double MeltModulusPa = 2.0e5;
 
+        /// <summary>
+        /// Shallow copy with the processing temperatures overridden.
+        ///
+        /// MeltTempC and MoldTempC on the table entries are TYPICAL processing
+        /// conditions for the grade, which is what a user moulding their own part
+        /// wants as a default. A reference case reproducing a published
+        /// experiment needs THAT experiment's conditions, and must not get them
+        /// by editing the shared default every other caller reads.
+        /// </summary>
+        public Polymer WithProcessTemps(double meltTempC, double moldTempC)
+        {
+            var q = (Polymer)MemberwiseClone();
+            q.MeltTempC = meltTempC;
+            q.MoldTempC = moldTempC;
+            return q;
+        }
+
         // --- Cross-WLF (SI: Pa.s, Pa, K) ------------------------------------
         public double CrossN;               // power-law index
         public double CrossTauStarPa;       // tau*

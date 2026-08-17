@@ -296,22 +296,57 @@ Kim, Yoon & Kornfield, *Key Eng. Mater.* **326–328** (2006) 183. Run it with
 
 | Clause | Result | Bar |
 |---|---|---|
-| in-plane peak | **0.85×** the published 1.2 × 10⁻⁴ | within a factor of 2 — **passes** |
-| in-plane shape | maximum at the gate, falling to 70.6% at the far edge | must decay from the gate — **passes** |
+Measured 2026-08-17 at `-nz 321`, on the paper's own process conditions
+(280 °C melt, 150 °C mould, 71.3 MPa) — see the correction note below.
+
+| Clause | Result | Bar |
+|---|---|---|
+| in-plane peak | **0.95×** the published 1.2 × 10⁻⁴ | within a factor of 2 — **passes** |
+| in-plane shape | maximum at the gate, falling only to **97.4%** at the far edge | must decay from the gate — **passes, but see below** |
 | gate null | maximum moves from x = 0 to x = 100 mm when the gate moves | must track the gate — **passes** |
-| depth ratio | **0.98** surface/deep against a published 5.56 | [2.78, 11.11] — **fails** |
-| depth peak position | maximum at 68% of the half-wall | beyond 75% — **fails** |
-| depth null | does not discriminate | — **fails** |
+| depth ratio | **0.99** surface/deep against a published **2.78** | [1.39, 5.56] — **fails** |
+| depth peak position | maximum at **89%** of the half-wall | beyond 75% — **passes** |
+| depth null | does not discriminate (0.99 vs 0.99) | — **fails** |
+
+**Two rows moved on 2026-08-17, in opposite directions, and neither move was
+the point of the change.** Depth peak position went 68% → 89% and now passes.
+In-plane shape went 70.6% → 97.4% at the far edge, i.e. the predicted field is
+now nearly FLAT across the plate where the reference falls roughly linearly to
+zero. It still passes, and that is a criticism of the clause rather than a
+defence of the model: "maximum on the gate side" is satisfied by a 2.6% tilt.
+A shape clause that a nearly-flat field passes is not measuring shape.
+
+**The depth channel has no working control.** The null reverses the freeze-time
+ordering and the ratio must invert; it returns the same number to two decimals
+(0.99 vs 0.99 at nz=321, 0.81 vs 0.81 at nz=81, so not a grid artefact). The
+tool reports this as a FAIL rather than passing it silently, which is the
+intended behaviour, but it means the depth number currently rests on nothing.
+
+**A second, independent sign of the same thing:** correcting the mould from
+120 °C to 150 °C — a 30 °C change in the single boundary condition that governs
+how fast the skin freezes — moved the depth ratio by **1%** (0.98 → 0.99). A
+depth profile that barely responds to mould temperature, and a freeze-order null
+that cannot move it, together point at the depth channel not being driven by the
+freeze history at all. That is a sharper lead than the magnitude deficit, and it
+supersedes "the skin is 10× low" as the thing to investigate next.
 
 **What the failure means.** The predicted profile is now core-weighted where the
 real part is skin-peaked. That is not a missing magnitude — it is the balance
 between the two channels through the thickness. Shear correctly gives a
 fast-freezing skin almost nothing, and fountain deposition supplies what the skin
 has, so the depth shape is set by how those two trade off, which is the open
-question. The in-plane peak, by contrast, is 0.90× of the published value on
+question. The in-plane peak, by contrast, is 0.95× of the published value on
 measured constants with **no fitted parameter between the two channels.**
 
-**Numbers here are the default: `-refcase` now runs at nz=321.**  They are still drifting. Neither
+**Numbers here are the default: `-refcase` now runs at nz=321.**  They are still drifting.
+
+> **The sweep below was taken at the OLD process conditions (290 °C / 120 °C /
+> 60 MPa) and its VALUES are superseded** by the 2026-08-17 correction — at
+> 150 °C the pair is 0.95× / 0.99 at nz=321 and 0.81 depth at nz=81. Convergence
+> expires when the model changes. The GRID at which it converged plausibly
+> carries over, and that is all the sweep is still quoted for.
+
+Neither
 registered number is converged at the shipped default of 81: peak 1.01× / depth
 0.74 at nz=81, 0.90× / 0.91 at 161, 0.85× / 0.98 at 321. The trend is monotone
 and decelerating, and extrapolates to roughly 0.83× and 1.0. **nz=641 does not
