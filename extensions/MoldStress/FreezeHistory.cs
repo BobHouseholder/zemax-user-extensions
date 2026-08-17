@@ -112,6 +112,7 @@ namespace MoldStress
             var histFine = new double[n, nt];
             double tGridMax = 0.0;
             int nextSample = 0;
+            int sampleEvery = 1;
 
             for (int step = 0; step < 20000000 && snapshot == null; step++)
             {
@@ -132,16 +133,42 @@ namespace MoldStress
                     f.CentreFreezeTimeS = tFreeze[centre];
                     tGridMax = tNow;
                 }
-                else if (nextSample < nt)
+                else if (step % sampleEvery == 0)
                 {
-                    // provisional: record every step until we know the span,
-                    // keeping only nt evenly spread samples by decimation below
-                    if (step % 50 == 0)
+                    // DYNAMIC DECIMATION, 2026-08-17. This was `step % 50`, which
+                    // records a window of 240*50*dt - and dt = 0.2*dz^2/alpha with
+                    // dz proportional to 1/n, so THE RECORDED WINDOW SHRANK AS
+                    // 1/n^2: about 0.08 s at nz=81 and 0.005 s at nz=321, against
+                    // a centre that does not freeze until ~3 s. The memory
+                    // integral integrates along this grid, so at fine grids it saw
+                    // a vanishing fraction of the cooling curve and collapsed.
+                    // That is the whole of the shear channel's divergence to zero
+                    // (in-plane peak 0.52x -> 0.26x -> 0.09x -> 0.02x across
+                    // nz 41/81/161/321) and it is why the freeze-history null
+                    // stopped discriminating above nz=161.
+                    //
+                    // The comment this replaces described an adaptive grid whose
+                    // "spacing is set once that time is known". The code did no
+                    // such thing. Keeping the interval fixed while dt shrinks is
+                    // what made a time grid resolution-dependent.
+                    //
+                    // Now: sample every `sampleEvery` steps, and when the buffer
+                    // fills, keep every second sample and double the interval. The
+                    // grid always spans [0, tNow] with between nt/2 and nt points,
+                    // whatever dt is, in one pass and without extra storage.
+                    if (nextSample == nt)
                     {
-                        f.TimeGridS[nextSample] = tNow;
-                        for (int i = 0; i < n; i++) histFine[i, nextSample] = T[i];
-                        nextSample++;
+                        for (int j = 0; j < nt / 2; j++)
+                        {
+                            f.TimeGridS[j] = f.TimeGridS[2 * j];
+                            for (int i = 0; i < n; i++) histFine[i, j] = histFine[i, 2 * j];
+                        }
+                        nextSample = nt / 2;
+                        sampleEvery *= 2;
                     }
+                    f.TimeGridS[nextSample] = tNow;
+                    for (int i = 0; i < n; i++) histFine[i, nextSample] = T[i];
+                    nextSample++;
                 }
             }
             if (nextSample < nt)
