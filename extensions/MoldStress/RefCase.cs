@@ -59,9 +59,22 @@ namespace MoldStress
             if (Program.Has(args, "-fountain"))
                 proc.FountainStrain = Program.Value(args, "-fountain", 1.0);
 
+            // Grid, exposed so both registered numbers can be re-taken at
+            // convergence. The convergence established earlier was measured on
+            // the model as it stood before the fountain default, the viscosity
+            // weighting and the measured constants, and does not carry over.
+            int nzGrid = (int)Program.Value(args, "-nz", 81.0);
+            if (nzGrid % 2 == 0) nzGrid++;
+            int nFdGrid = 10 * nzGrid;
+
             say("MoldStress - registered reference case");
             say("  " + Program.ScopeLabel);
             say("  TOPAS 6017S-04, 100 x 100 x 1.5 mm plate, film gate on one edge");
+            say(string.Format(ci, "  grid: nz {0}, nFD {1}", nzGrid, nFdGrid));
+            if (nzGrid < 321)
+                say("  WARNING: below nz=321 neither registered number is converged. " +
+                    "Measured 2026-08-15: peak 1.01x / depth 0.74 at nz=81, 0.90x / 0.91 at 161, " +
+                    "0.85x / 0.98 at 321. Quote -nz 321.");
             say(string.Format(ci, "  process: fill {0:F1} s, pack {1:F0} MPa for {2:F0} s, " +
                 "melt {3:F0} C, mould {4:F0} C",
                 proc.FillTimeS, proc.PackPressureMPa, proc.PackTimeS, p.MeltTempC, p.MoldTempC));
@@ -90,7 +103,7 @@ namespace MoldStress
                 e.PartingLineZMm = Gating.DefaultPartingLineZ(e);
 
                 var fill = FillField.Build(e, p, proc, 101);
-                var freeze = FreezeHistory.Build(e.CentreThicknessMm, p, proc, 81);
+                var freeze = FreezeHistory.Build(e.CentreThicknessMm, p, proc, nzGrid, nFdGrid);
                 var ch = Channels.Build(e, p, proc, fill, freeze);
 
                 // Thickness average of |dn| at each station along the flow - what
@@ -137,7 +150,7 @@ namespace MoldStress
                     // reversing it returns the same array and the null agreed with
                     // itself at 33.41 vs 33.41. Inverting the ORDER - t -> tMax - t
                     // - genuinely swaps which depths freeze first.
-                    var reversed = FreezeHistory.Build(e.CentreThicknessMm, p, proc, 81);
+                    var reversed = FreezeHistory.Build(e.CentreThicknessMm, p, proc, nzGrid, nFdGrid);
                     double tMax = 0.0;
                     foreach (double t in reversed.FreezeTimeS) tMax = Math.Max(tMax, t);
                     for (int k = 0; k < reversed.FreezeTimeS.Length; k++)

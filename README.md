@@ -296,10 +296,10 @@ Kim, Yoon & Kornfield, *Key Eng. Mater.* **326–328** (2006) 183. Run it with
 
 | Clause | Result | Bar |
 |---|---|---|
-| in-plane peak | **0.90×** the published 1.2 × 10⁻⁴ | within a factor of 2 — **passes** |
+| in-plane peak | **0.85×** the published 1.2 × 10⁻⁴ | within a factor of 2 — **passes** |
 | in-plane shape | maximum at the gate, falling to 70.6% at the far edge | must decay from the gate — **passes** |
 | gate null | maximum moves from x = 0 to x = 100 mm when the gate moves | must track the gate — **passes** |
-| depth ratio | **0.76** surface/deep against a published 5.56 | [2.78, 11.11] — **fails** |
+| depth ratio | **0.98** surface/deep against a published 5.56 | [2.78, 11.11] — **fails** |
 | depth peak position | maximum at 68% of the half-wall | beyond 75% — **fails** |
 | depth null | does not discriminate | — **fails** |
 
@@ -311,13 +311,20 @@ has, so the depth shape is set by how those two trade off, which is the open
 question. The in-plane peak, by contrast, is 0.90× of the published value on
 measured constants with **no fitted parameter between the two channels.**
 
-**Numbers here are converged, and were not always.** The depth ratio reads 1.01
-on a 41-node grid and 2.07 from 81 nodes upward; the criterion samples at 97.5%
-of the half-wall, where a coarse grid straddles a sharp feature and returns about
-half the peak. The in-plane figure moved with it — 1.94× under-resolved against
-2.02× converged, which is the difference between passing and failing. Grid
-defaults are now 81 through-thickness nodes and 801 in the freeze solve, and
-`-depthdiag` prints the convergence table.
+**Numbers here are taken at `-nz 321`, and they are still drifting.** Neither
+registered number is converged at the shipped default of 81: peak 1.01× / depth
+0.74 at nz=81, 0.90× / 0.91 at 161, 0.85× / 0.98 at 321. The trend is monotone
+and decelerating, and extrapolates to roughly 0.83× and 1.0. **nz=641 does not
+complete** — the freeze solver is explicit, so cost grows as the cube of the node
+count and the step cap is reached before the core freezes. So convergence here is
+demonstrated by trend, not by brute force, and `-refcase` warns below nz=321.
+
+**The deficit is located and it is not a shape problem.** At the surface the
+model gives ~1.0 × 10⁻⁴ against a published 10 × 10⁻⁴ — a factor of ten low —
+while at the published 0.4 mm depth it gives ~1.1 × 10⁻⁴ against 1.8 × 10⁻⁴,
+which is within a factor of two. The core is roughly right and the skin is short
+by an order of magnitude. Sampling depth is not the explanation: sweeping the
+surface sampling point from 19 µm to 0.1 µm moves the value by under 1%.
 
 **Three candidate explanations for the depth deficit have been eliminated by
 measurement rather than argument:** the melt stress-optical coefficient (the
