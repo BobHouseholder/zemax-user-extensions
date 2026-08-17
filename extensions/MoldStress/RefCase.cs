@@ -129,6 +129,8 @@ namespace MoldStress
             foreach (string a in args)
                 if (string.Equals(a, "carried", StringComparison.OrdinalIgnoreCase))
                     proc.FrontCarriesMeltOrientation = true;
+            if (Program.Has(args, "-deposition-support"))
+                proc.FountainDepositionSupport = true;
 
             // Grid, exposed so both registered numbers can be re-taken at
             // convergence. The convergence established earlier was measured on
@@ -319,6 +321,28 @@ namespace MoldStress
                             "      probe: freeze times x{0,-6:G} -> surface {1:E3}, deep {2:E3}, ratio {3:F3}",
                             scale, sS, dS, dS > 0 ? sS / dS : double.PositiveInfinity));
                     }
+
+                    // DEPTH RATIO ACROSS STATIONS. The registered criterion samples
+                    // at the gate, and Blake's envelope gives the gate a zero
+                    // fountain layer, so a single gate number cannot show whether
+                    // the deposition support helps or merely relocates the answer.
+                    // The reference paper measured its depth profiles at three
+                    // positions and gives coordinates for none of them, so the
+                    // criterion's station is not moved - the sweep is reported
+                    // beside it and the reader can see the station dependence.
+                    say("      depth ratio by station (criterion samples s=0):");
+                    foreach (double sf in new[] { 0.0, 0.1, 0.25, 0.5, 1.0 })
+                    {
+                        int idx = (int)Math.Round(sf * (ns - 1));
+                        if (idx < 0) idx = 0;
+                        if (idx > ns - 1) idx = ns - 1;
+                        double sSt = Channels.DnAtDepthFraction(ch.DnFlow, freeze.Z, idx, half, SurfaceFraction);
+                        double dSt = Channels.DnAtDepthFraction(ch.DnFlow, freeze.Z, idx, half, DeepFraction);
+                        say(string.Format(ci,
+                            "        s/L {0:F2} ({1,5:F1} mm)  surface {2:E3}  deep {3:E3}  ratio {4:F2}",
+                            sf, ch.S[idx], sSt, dSt, dSt > 0 ? sSt / dSt : double.PositiveInfinity));
+                    }
+                    say("");
 
                     say("  distance from gate    thickness-averaged |dn|");
                     for (int i = 0; i < ns; i += ns / 10)

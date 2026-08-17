@@ -285,6 +285,23 @@ namespace MoldStress
                         }
 
                         dnFountain = p.CMeltBrewster * 1e-12 * sigmaFrontPa;
+
+                        // BLAKE'S MAXIMUM-RESIDENCE ENVELOPE. Material inside
+                        // z*(s) is core stream - it never reached the front, so it
+                        // was never deposited and receives nothing. See
+                        // Process.FountainDepositionSupport for the source and for
+                        // why this is off by default.
+                        if (proc.FountainDepositionSupport)
+                        {
+                            double sFrac = fill.PathLengthMm > 1e-9
+                                ? fill.S[i] / fill.PathLengthMm : 0.0;
+                            if (sFrac < 0.0) sFrac = 0.0;
+                            if (sFrac > 1.0) sFrac = 1.0;
+                            double zStar = Math.Sqrt(Math.Max(1.0 - (2.0 / 3.0) * sFrac, 0.0));
+                            double halfWall = Math.Max(0.5 * freeze.ThicknessMm, 1e-9);
+                            double zFrac = Math.Abs(freeze.Z[k]) / halfWall;
+                            if (zFrac < zStar) dnFountain = 0.0;
+                        }
                     }
 
                     c.DnFlow[i, k] = dnShear + dnFountain;

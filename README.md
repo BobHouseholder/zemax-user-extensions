@@ -381,9 +381,56 @@ enough to kill the null again.
 
 What it exposes is the real missing piece: **not every depth is front-deposited.**
 Material near the mid-plane is the core stream and is never swept to the wall,
-so the deposition term needs a weight that falls off inward. Choosing that
-weight is the open question, and it is a kinematic question with an answer in
-the literature rather than a constant to pick.
+so the deposition term needs a weight that falls off inward.
+
+### The deposition weight, and what it revealed
+
+That weight is in the literature and is parameter-free. **Blake's
+maximum-residence envelope**, in M. C. Altan, *A Review of Fiber-Reinforced
+Injection Molding: Flow Kinematics and Particle Orientation*, J. Thermoplastic
+Composite Materials **3** (Oct 1990) 275, §2.4.4; pathlines measured by Coyle,
+Blake & Macosko, *AIChE J.* **33**(7) 1168 (1987). Sorting particles by whether
+they ever reached the front gives a dividing height of `1/√3` and an envelope
+`x1m = (3/2)(1 − x3m²)`, i.e. a support boundary
+
+    z*(s) = sqrt(1 − (2/3)·s/L)      in units of the half gap
+
+Material inside `z*` never passed through the front and receives no deposition.
+Implemented as `-deposition-support`. **It is not the default, and the reason is
+the interesting part.** Measured at nz=81:
+
+| | in-plane peak | depth @ gate (criterion) | depth @ s/L 0.1–0.5 |
+|---|---|---|---|
+| without envelope | **1.07×** passes | 0.81 fails | 0.81 |
+| with envelope | **0.28×** fails | 0.02 fails | **2.52** vs published 2.78 |
+
+**At every interior station the depth ratio is 2.52 against a published 2.78** —
+9% low, inside the band, with no fitted parameter. The depth *shape* problem is
+essentially solved by a kinematic result taken off the shelf.
+
+Two things break, and both are diagnostic rather than incidental:
+
+1. **The in-plane peak collapses, 1.07× → 0.28×**, because the core value falls
+   1.39 × 10⁻⁴ → 4.48 × 10⁻⁵ once the core stops receiving deposition. That is
+   the finding: **the in-plane agreement at 1.07× was propped up by depositing
+   fountain orientation into the core, where the literature says none is
+   deposited.** Removing it exposes that the shear channel under-predicts the
+   core by about 3×. That is a better-located problem than "the skin is 10× low",
+   and it is in the channel that has always been the model's weakest.
+2. **The registered criterion samples at s = 0, and `z*(0) = 1`** — the gate is
+   the one station where the envelope admits no deposited material at all. The
+   boundary crosses the criterion's own surface sampling point (0.975 of the
+   half-wall) at s/L = 0.075, so only the first ~7% of the flow length is
+   affected. The reference paper measured its depth profiles at positions A, B
+   and C and publishes coordinates for none of them, so **the criterion's station
+   has NOT been moved to suit** — the ratio is reported across stations beside it
+   instead. This is the fifth time a number on this model has turned on a
+   sampling definition before it turned on physics.
+
+The `s/L = 1.0` column reads infinity: at the far edge the deep sample sits
+inside `z*` and the shear channel is identically zero there, so the denominator
+is exactly 0. Reported rather than suppressed — it is a real degeneracy of
+sampling a ratio at a station where the denominator vanishes.
 
 **What the failure means.** The predicted profile is now core-weighted where the
 real part is skin-peaked. That is not a missing magnitude — it is the balance

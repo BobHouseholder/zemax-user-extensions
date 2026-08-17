@@ -79,6 +79,49 @@ namespace MoldStress
         public bool FrontCarriesMeltOrientation = false;
 
         /// <summary>
+        /// Restrict front deposition to the material that actually passed through
+        /// the flow front, using Blake's maximum-residence envelope.
+        ///
+        /// SOURCE, and it is parameter-free: M. C. Altan, "A Review of
+        /// Fiber-Reinforced Injection Molding: Flow Kinematics and Particle
+        /// Orientation", J. Thermoplastic Composite Materials 3 (Oct 1990) 275,
+        /// section 2.4.4, presenting J. W. Blake's treatment; pathlines measured
+        /// by Coyle, Blake & Macosko, AIChE J. 33(7) 1168 (1987).
+        ///
+        /// Particles are sorted by whether they ever reached the front. For a
+        /// Newtonian profile the dividing height - the one moving at the mean
+        /// velocity - is x3v = 1/sqrt(3) = 0.577, and the envelope is
+        ///
+        ///     x1m = (3/2) * (1 - x3m^2),   1/sqrt(3) < x3m < 1
+        ///
+        /// which inverts to the support boundary used here:
+        ///
+        ///     z*(s) = sqrt(1 - (2/3) * s/L)      in units of the half gap
+        ///
+        /// Material inside z* is core stream: it never passed through the front,
+        /// so it receives no deposition. This is the term the uniform 2*tau_wall
+        /// implementation was missing - it deposited at every depth, including
+        /// material that was never at the front.
+        ///
+        /// CAVEAT, stated because it is being extended beyond its derivation: the
+        /// envelope is derived for Newtonian, isothermal flow. Coyle et al. found
+        /// shear-thinning changed the front SHAPE and kinematics little, which is
+        /// the basis for using it with a Cross-WLF melt, but that is their
+        /// statement about front shape and this is a deposition boundary.
+        ///
+        /// AND NOTE WHERE IT BITES: z*(0) = 1, so at the gate itself the envelope
+        /// admits NO deposited material. The boundary crosses the depth
+        /// criterion's own surface sampling point (0.975 of the half-wall) at
+        /// s/L = 0.075, so only the first ~7% of the flow length is affected -
+        /// but the depth criterion samples at s = 0 exactly, which is that
+        /// station. The reference paper measured its depth profiles at positions
+        /// A, B and C and gives no coordinates for them, so the criterion's
+        /// station is NOT moved to suit; the ratio is reported across stations
+        /// instead and the gate value is reported as what it is.
+        /// </summary>
+        public bool FountainDepositionSupport = false;
+
+        /// <summary>
         /// Grade the shear rate by the narrowing molten channel, |dp/ds| going as
         /// 1/h_melt^3 as the skin closes the gap. OFF by default: it was inert
         /// under the old memory clamp, and with the clamp gone it is not inert but
