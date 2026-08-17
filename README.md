@@ -498,6 +498,48 @@ of the length **passes** it. It passed here while the shape was plainly wrong.
 The peak location is now printed beside the verdict so the gap is visible; the
 registered clause itself is left alone rather than quietly tightened.
 
+### No magnitude term can rescue the envelope — this is a proof, not a measurement
+
+The deposited layer's thickness fraction is `f(s) = 1 − z*(s) = 1 − √(1 − ⅔·s/L)`,
+and **`f(0) = 0` exactly**. The thickness-averaged deposition at the gate is
+therefore zero for *any* magnitude term `M(s)`, because `M` multiplies a layer of
+zero thickness.
+
+That forecloses the whole search. The in-plane clause needs the maximum on the
+gate side; with deposition contributing nothing there, the gate value is pinned
+at the shear-only value, **0.26× of published**. Any `M` large enough to reach the
+factor-of-2 bar (0.5×) necessarily puts the maximum somewhere `f > 0` — away from
+the gate — failing the shape clause. **The two clauses are mutually exclusive
+under a hard envelope support, independently of `M`.**
+
+Confirmed numerically, with a control separating the deposition term from overall
+grid drift:
+
+| grid | shear-only at gate | envelope at gate | deposition at gate |
+|---|---|---|---|
+| nz=41 | 6.233e-5 | 6.781e-5 | **5.48e-6** |
+| nz=81 | 3.071e-5 | 3.348e-5 | **2.77e-6** |
+| nz=161 | 1.037e-5 | 1.176e-5 | **1.39e-6** |
+
+The deposition at the gate halves with every grid doubling — converging to zero as
+the analysis requires. Its nonzero value on coarse grids is a **one-node
+discretisation artifact**: `z*(0) = 1` makes the support a measure-zero set that
+the grid nonetheless resolves with a single node.
+
+**What must change is the support, not the magnitude.** And there is a reason to
+doubt `z*(0) = 1` physically: Blake's envelope classifies material by whether it
+was *transported* to the wall from upstream. It says nothing about the material
+that **constituted the initial front** at the gate, which was itself
+fountain-processed and laid onto the wall there. `z*(0) = 1` is a statement about
+transport history, not evidence that gate-wall material never saw a front.
+
+**A separate defect the control exposed, and it is not about the envelope:** the
+shear-only gate value is itself strongly grid-dependent — 6.233e-5 → 3.071e-5 →
+1.037e-5, still falling steeply at nz=161. **The in-plane number is not converged
+with the fountain off.** The convergence sweep behind the shipped `-nz 321`
+default was run with the fountain ON, so it never covered this configuration.
+Any future work on the shear channel at the gate needs its own sweep first.
+
 ### The depth criterion now uses both channels
 
 Corrected 2026-08-17. The depth clause compared `DnFlow` alone against a profile
