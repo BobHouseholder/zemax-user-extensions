@@ -360,8 +360,30 @@ gets there. The physical answer is the one Mavridis, Hrymak & Vlachopoulos
 it was deformed. It was oriented in the hot core and carried to the wall by
 fountain flow, then quenched. The model has that mechanism but treats it as a
 locally computed strain that then relaxes, which is why tripling it buys only
-27%. Making the front deposit the orientation the melt actually carried is the
-next change, and it is a model change, not a constant.
+27%.
+
+**That change was implemented and it is measurably worse.** Available as
+`-frontmode carried`, not the default. Measured at nz=81:
+
+| | in-plane peak | depth ratio | depth null |
+|---|---|---|---|
+| extensional (default) | **1.07×** passes | 0.81 fails | passes |
+| melt orientation carried | **4.57×** fails | 1.09 fails | **fails** |
+
+The diagnosis of the *cap* stands: the extensional form cannot exceed the
+plateau modulus (`eEff → 1` as Wi → ∞, so σ ≤ G = 2.8 × 10⁵ Pa), while the
+melt's own wall shear stress here is ~5 × 10⁵ Pa, so the cap was binding on the
+wrong quantity. **The implementation is what failed.** `2·τ_wall = dp/ds·(h/2)`
+has no z-dependence, so it lifts every depth by the same amount and leaves
+`exp(−ξ)` as the only thing separating skin from core. That inflated the
+thickness average fourfold, moved the ratio by 0.28, and flattened the profile
+enough to kill the null again.
+
+What it exposes is the real missing piece: **not every depth is front-deposited.**
+Material near the mid-plane is the core stream and is never swept to the wall,
+so the deposition term needs a weight that falls off inward. Choosing that
+weight is the open question, and it is a kinematic question with an answer in
+the literature rather than a constant to pick.
 
 **What the failure means.** The predicted profile is now core-weighted where the
 real part is skin-peaked. That is not a missing magnitude — it is the balance

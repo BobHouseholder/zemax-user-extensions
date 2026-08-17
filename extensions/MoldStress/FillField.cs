@@ -44,6 +44,41 @@ namespace MoldStress
         public double FountainStrain = 1.0;
 
         /// <summary>
+        /// What the melt front deposits. Enable the melt-orientation form with
+        /// -frontmode carried; the extensional form is the DEFAULT because the
+        /// melt-orientation form as written is measurably worse.
+        ///
+        /// THE IDEA, and it still looks right: the extensional form treats
+        /// deposition as a fresh strain imposed on unoriented material, and a
+        /// Maxwell fluid extended at edot for 1/edot cannot build more than its
+        /// own plateau modulus (eEff -> 1 as Wi -> inf, so sigma <= G = 2.8e5 Pa).
+        /// That ceiling is the measured saturation behind the skin deficit -
+        /// tripling FountainStrain moved the depth ratio only 0.81 -> 1.03. The
+        /// material reaching the front is NOT unoriented: it has just come down
+        /// the channel at melt temperature where the wall shear stress is ~5e5 Pa,
+        /// above G. So the cap was binding on the wrong quantity.
+        ///
+        /// WHY IT IS NOT THE DEFAULT, measured 2026-08-17 at nz=81:
+        ///
+        ///   in-plane peak   1.07x -> 4.57x   (passes -> FAILS a factor of 2)
+        ///   depth ratio     0.81  -> 1.09    (fails -> still fails)
+        ///   depth null      passes -> FAILS  (1.09 vs 1.09)
+        ///
+        /// The defect is in the implementation, not obviously in the idea.
+        /// 2*tau_wall = dp/ds * (h/2) has NO z dependence, so it lifts every
+        /// depth by the same amount and leaves exp(-xi) as the only thing
+        /// distinguishing skin from core - which is not enough to produce a
+        /// skin peak. It inflated the thickness average fourfold and barely moved
+        /// the ratio, and it flattened the profile enough to kill the null again.
+        ///
+        /// What is missing is that NOT EVERY DEPTH IS FRONT-DEPOSITED. Material
+        /// near the mid-plane is the core stream; it is never swept to the wall.
+        /// The deposition term needs a weight that falls off inward, and choosing
+        /// that weight is the open question rather than another constant.
+        /// </summary>
+        public bool FrontCarriesMeltOrientation = false;
+
+        /// <summary>
         /// Grade the shear rate by the narrowing molten channel, |dp/ds| going as
         /// 1/h_melt^3 as the skin closes the gap. OFF by default: it was inert
         /// under the old memory clamp, and with the clamp gone it is not inert but

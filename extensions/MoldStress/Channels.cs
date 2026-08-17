@@ -226,15 +226,64 @@ namespace MoldStress
                         double eDot = vFront / halfGap;
                         double wi = lambda * eDot;
                         double eEff = wi * (1.0 - Math.Exp(-1.0 / Math.Max(wi, 1e-12)));
-                        double sigmaFrontPa = p.MeltModulusPa * eEff * proc.FountainStrain
-                                              * Math.Exp(-xiFreeze);
 
-                        // EXTENSION, so the principal stress difference IS sigma.
-                        // The factor of 2 that belongs to simple shear was applied
-                        // here as well and should never have been: in uniaxial
-                        // extension along the flow with the ray along z, the two
-                        // transverse principal stresses are zero and the
-                        // difference is sigma itself.
+                        double sigmaFrontPa;
+                        if (proc.FrontCarriesMeltOrientation)
+                        {
+                            // THE FRONT DEPOSITS THE ORIENTATION THE MELT ALREADY
+                            // CARRIED, 2026-08-17.
+                            //
+                            // The derivation above is sound and still wrong for
+                            // this purpose, because of what it leaves out. It
+                            // treats deposition as a FRESH extensional strain
+                            // imposed on unoriented material, and a Maxwell fluid
+                            // extended at edot for 1/edot cannot build more than
+                            // its own plateau modulus: eEff -> 1 as Wi -> inf, so
+                            // sigma <= G = 2.8e5 Pa however hard the front is
+                            // driven. That ceiling is the saturation measured on
+                            // 2026-08-17 - tripling FountainStrain bought 27%.
+                            //
+                            // But the material arriving at the front is NOT
+                            // unoriented. It has just come down the channel at
+                            // melt temperature, where the fully developed wall
+                            // shear stress is dp/ds * h/2, and for this case that
+                            // is ~5e5 Pa - ABOVE the plateau modulus. The front
+                            // does not create that orientation, it CARRIES it to
+                            // the wall and freezes it there.
+                            //
+                            // This is the asymmetry the model was missing. The
+                            // shear channel assumes every depth's material has sat
+                            // at that depth since t=0 and so shares that depth's
+                            // thermal history; near the wall that history is cold
+                            // from the first instant, the layer never deforms, and
+                            // dnShear collapses to ~0 (measured: ratio 0.02 with
+                            // the front term off). In fountain flow the skin
+                            // material only ARRIVES at the wall when the front
+                            // passes. Until that moment it was hot and shearing.
+                            //
+                            // So the deposited principal stress difference is the
+                            // melt's own, 2 * tau_wall, taken at the near-wall
+                            // source the front sweeps up, and the only attenuation
+                            // is relaxation AFTER deposition - which is what makes
+                            // the profile skin-peaked: the skin freezes at once and
+                            // keeps nearly all of it, the core stays hot and loses
+                            // it. Same exp(-xi) as before, applied to a magnitude
+                            // that is no longer capped at G.
+                            double tauWallMPa = fill.DpDs[i] * halfGap;
+                            sigmaFrontPa = 2.0 * tauWallMPa * 1e6 * proc.FountainStrain
+                                           * Math.Exp(-xiFreeze);
+                        }
+                        else
+                        {
+                            // Superseded 2026-08-17, kept runnable for comparison
+                            // via -frontmode extensional. EXTENSION, so the
+                            // principal stress difference IS sigma - the factor of
+                            // 2 that belongs to simple shear was applied here as
+                            // well and should never have been.
+                            sigmaFrontPa = p.MeltModulusPa * eEff * proc.FountainStrain
+                                           * Math.Exp(-xiFreeze);
+                        }
+
                         dnFountain = p.CMeltBrewster * 1e-12 * sigmaFrontPa;
                     }
 
