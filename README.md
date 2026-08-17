@@ -306,7 +306,7 @@ Measured 2026-08-17 at `-nz 321`, on the paper's own process conditions
 | gate null | maximum moves from x = 0 to x = 100 mm when the gate moves | must track the gate — **passes** |
 | depth ratio | **0.99** surface/deep against a published **2.78** | [1.39, 5.56] — **fails** |
 | depth peak position | maximum at **89%** of the half-wall | beyond 75% — **passes** |
-| depth null | does not discriminate (0.99 vs 0.99) | — **fails** |
+| depth null | **1.35 vs 0.81** after being rebuilt — see below | must invert — **passes** |
 
 **Two rows moved on 2026-08-17, in opposite directions, and neither move was
 the point of the change.** Depth peak position went 68% → 89% and now passes.
@@ -316,19 +316,52 @@ zero. It still passes, and that is a criticism of the clause rather than a
 defence of the model: "maximum on the gate side" is satisfied by a 2.6% tilt.
 A shape clause that a nearly-flat field passes is not measuring shape.
 
-**The depth channel has no working control.** The null reverses the freeze-time
-ordering and the ratio must invert; it returns the same number to two decimals
-(0.99 vs 0.99 at nz=321, 0.81 vs 0.81 at nz=81, so not a grid artefact). The
-tool reports this as a FAIL rather than passing it silently, which is the
-intended behaviour, but it means the depth number currently rests on nothing.
+**The depth null now works — it was the null that was broken, not the channel.**
+Corrected 2026-08-17, third attempt. Earlier that day this README claimed the
+depth channel was "not driven by the freeze history at all", on the evidence of
+a null that would not move and a 1% response to a 30 °C mould change. **That
+claim was wrong, and a positive control refuted it:** scaling every freeze time
+by 100 moves the ratio 0.810 → 0.812, but scaling by 0.01 moves it to 0.908.
+The channel responds to freeze times being SHORTENED and is insensitive to their
+being LENGTHENED — and that insensitivity is correct physics, because once a
+layer has vitrified reduced time stops accumulating and a later nominal freeze
+time adds nothing to the integral.
 
-**A second, independent sign of the same thing:** correcting the mould from
-120 °C to 150 °C — a 30 °C change in the single boundary condition that governs
-how fast the skin freezes — moved the depth ratio by **1%** (0.98 → 0.99). A
-depth profile that barely responds to mould temperature, and a freeze-order null
-that cannot move it, together point at the depth channel not being driven by the
-freeze history at all. That is a sharper lead than the magnitude deficit, and it
-supersedes "the skin is 10× low" as the thing to investigate next.
+The old null inverted `t → tMax − t`, which **lengthens** the freeze time at both
+sampling depths (0.002 → 6.9 s at the wall, 0.85 → 6.05 s at 47%). It perturbed
+exclusively in the direction the model is provably deaf to. It was a
+rearrangement pointing the wrong way — the third version of this null that could
+not fail, after an `Array.Reverse` on a mid-plane-symmetric profile.
+
+The null now mirrors the depth axis of the **temperature history** as well as the
+freeze times (|z| → h/2 − |z|), giving the wall the core's thermal history. That
+inverts the driver the memory integral actually reads, rather than a derived
+label. It discriminates: **1.35 vs 0.81.**
+
+A hypothesis checked and killed on the way: the memory integral's clamp was the
+obvious suspect, since a clamped quantity is deaf to its inputs. It is
+instrumented now and **does not bind — 0 of 39,700 evaluations saturated,
+largest raw value 0.2.**
+
+**Where the depth deficit actually is.** The skin signal comes entirely from
+fountain deposition, and it saturates:
+
+| fountain strain | depth ratio |
+|---|---|
+| 0 (shear only) | **0.02** |
+| 1 (shipped default) | 0.81 |
+| 3 | 1.03 |
+
+The shear channel contributes essentially **nothing** at the wall. That is
+self-consistent rather than a bug: shear stress is largest at the wall, but a
+layer that vitrifies on contact never deforms, so σ relaxes toward τ and never
+gets there. The physical answer is the one Mavridis, Hrymak & Vlachopoulos
+(*J. Rheol.* **32**(6) 639, 1988) give — skin material was not at the wall when
+it was deformed. It was oriented in the hot core and carried to the wall by
+fountain flow, then quenched. The model has that mechanism but treats it as a
+locally computed strain that then relaxes, which is why tripling it buys only
+27%. Making the front deposit the orientation the melt actually carried is the
+next change, and it is a model change, not a constant.
 
 **What the failure means.** The predicted profile is now core-weighted where the
 real part is skin-peaked. That is not a missing magnitude — it is the balance

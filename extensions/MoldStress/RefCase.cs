@@ -160,6 +160,7 @@ namespace MoldStress
             double bandSurfaceDn = 0, bandCoreDn = 0;
             double peakDepthFraction = 0, reversedRatio = 0;
 
+            Channels.ResetClampStats();
             foreach (double azimuth in new[] { 0.0, 180.0 })
             {
                 var e = new MouldedElement
@@ -219,20 +220,99 @@ namespace MoldStress
                     // NULL for the depth clause: make the CORE solidify first,
                     // change nothing else, and require the ratio to move.
                     //
-                    // Array.Reverse was the first attempt and it is a no-op here:
-                    // the freeze-time profile is symmetric about the mid-plane, so
-                    // reversing it returns the same array and the null agreed with
-                    // itself at 33.41 vs 33.41. Inverting the ORDER - t -> tMax - t
-                    // - genuinely swaps which depths freeze first.
+                    // THIRD ATTEMPT AT THIS NULL. The first two could not fail.
+                    //
+                    // (1) Array.Reverse on a profile symmetric about the mid-plane
+                    //     returns the same array; it compared 33.41 with 33.41.
+                    // (2) t -> tMax - t genuinely changed the numbers, and STILL
+                    //     could not move the answer - measured 2026-08-17 by a
+                    //     positive control that scales the freeze times instead of
+                    //     rearranging them. Scaling by 100 moves the ratio 0.810 ->
+                    //     0.812; scaling by 0.01 moves it to 0.908. The channel
+                    //     responds to SHORTENING and is insensitive to LENGTHENING,
+                    //     and that insensitivity is correct physics: once a layer
+                    //     has vitrified, reduced time stops accumulating and a
+                    //     later nominal freeze time adds nothing to the integral.
+                    //     t -> tMax - t LENGTHENS the freeze time at both sampling
+                    //     depths (0.002 -> 6.9 s at the wall, 0.85 -> 6.05 s at
+                    //     47%), so it perturbs exclusively in the direction the
+                    //     model is provably deaf to. It was a rearrangement that
+                    //     happened to point the wrong way.
+                    //
+                    // So invert the DRIVER, not the derived label. Mirror the depth
+                    // axis of the temperature history AND the freeze times together
+                    // (|z| -> half - |z|), which gives the wall the core's thermal
+                    // history and vice versa. Now the core really does solidify
+                    // first, in the quantity the memory integral actually reads,
+                    // and the perturbation is no longer confined to the saturating
+                    // direction.
                     var reversed = FreezeHistory.Build(e.CentreThicknessMm, p, proc, nzGrid, nFdGrid);
-                    double tMax = 0.0;
-                    foreach (double t in reversed.FreezeTimeS) tMax = Math.Max(tMax, t);
-                    for (int k = 0; k < reversed.FreezeTimeS.Length; k++)
-                        reversed.FreezeTimeS[k] = tMax - reversed.FreezeTimeS[k];
+                    {
+                        int nzr = reversed.Z.Length;
+                        double halfR = 0.5 * e.CentreThicknessMm;
+                        var srcFor = new int[nzr];
+                        for (int k = 0; k < nzr; k++)
+                        {
+                            double want = Math.Sign(reversed.Z[k]) * (halfR - Math.Abs(reversed.Z[k]));
+                            int best = 0; double bestD = double.MaxValue;
+                            for (int m = 0; m < nzr; m++)
+                            {
+                                double d = Math.Abs(reversed.Z[m] - want);
+                                if (d < bestD) { bestD = d; best = m; }
+                            }
+                            srcFor[k] = best;
+                        }
+                        var ftOld = (double[])reversed.FreezeTimeS.Clone();
+                        var trOld = (double[])reversed.TrefC.Clone();
+                        double[,] thOld = null;
+                        int nt = 0;
+                        if (reversed.TempHistoryC != null)
+                        {
+                            nt = reversed.TempHistoryC.GetLength(1);
+                            thOld = (double[,])reversed.TempHistoryC.Clone();
+                        }
+                        for (int k = 0; k < nzr; k++)
+                        {
+                            reversed.FreezeTimeS[k] = ftOld[srcFor[k]];
+                            reversed.TrefC[k] = trOld[srcFor[k]];
+                            if (thOld != null)
+                                for (int q = 0; q < nt; q++)
+                                    reversed.TempHistoryC[k, q] = thOld[srcFor[k], q];
+                        }
+                    }
                     var chRev = Channels.Build(e, p, proc, fill, reversed);
                     double sRev = Channels.DnAtDepthFraction(chRev.DnFlow, reversed.Z, 0, half, SurfaceFraction);
                     double dRev = Channels.DnAtDepthFraction(chRev.DnFlow, reversed.Z, 0, half, DeepFraction);
                     reversedRatio = dRev > 0 ? sRev / dRev : double.PositiveInfinity;
+
+                    // POSITIVE CONTROL ON THE NULL ITSELF, added 2026-08-17.
+                    //
+                    // The freeze-order null reports FAIL, and a null that cannot
+                    // move has two possible causes that look identical from the
+                    // outside: the channel ignores the freeze history, or the
+                    // PERTURBATION is too weak to show up. Reversing t -> tMax - t
+                    // is a rearrangement; if the channel's response saturates it
+                    // rearranges nothing. So drive the same input far harder, in
+                    // both directions, and see whether ANY response exists.
+                    //
+                    // This is a control on the control. If these two agree with
+                    // the unperturbed ratio as well, the channel is deaf to
+                    // FreezeTimeS and the null was never capable of failing
+                    // informatively - which is a defect in the model, not in the
+                    // null. If they DO move, the null's perturbation is the weak
+                    // link and it needs rewriting, not the channel.
+                    foreach (double scale in new[] { 0.01, 100.0 })
+                    {
+                        var sc = FreezeHistory.Build(e.CentreThicknessMm, p, proc, nzGrid, nFdGrid);
+                        for (int k = 0; k < sc.FreezeTimeS.Length; k++)
+                            sc.FreezeTimeS[k] *= scale;
+                        var chSc = Channels.Build(e, p, proc, fill, sc);
+                        double sS = Channels.DnAtDepthFraction(chSc.DnFlow, sc.Z, 0, half, SurfaceFraction);
+                        double dS = Channels.DnAtDepthFraction(chSc.DnFlow, sc.Z, 0, half, DeepFraction);
+                        say(string.Format(ci,
+                            "      probe: freeze times x{0,-6:G} -> surface {1:E3}, deep {2:E3}, ratio {3:F3}",
+                            scale, sS, dS, dS > 0 ? sS / dS : double.PositiveInfinity));
+                    }
 
                     say("  distance from gate    thickness-averaged |dn|");
                     for (int i = 0; i < ns; i += ns / 10)
@@ -291,6 +371,19 @@ namespace MoldStress
             say(string.Format(ci,
                 "      null: freeze order reversed, ratio {0:F2} vs {1:F2}  =>  {2}",
                 reversedRatio, gotRatio, depthNull ? "PASS" : "FAIL"));
+
+            // WHY the null cannot move, measured rather than inferred. A clamped
+            // quantity is deaf to its inputs; if the memory integral is saturated
+            // at both sampling depths then reversing the freeze order, or moving
+            // the mould 30 C, changes the INPUT to a function whose OUTPUT is
+            // pinned at 1 either way - and the depth ratio collapses toward unity
+            // because the same constant appears in numerator and denominator.
+            say(string.Format(ci,
+                "      memory clamp: {0} of {1} evaluations saturated ({2:P1}), " +
+                "largest raw value {3:F1}",
+                Channels.ClampHits, Channels.ClampCalls,
+                Channels.ClampCalls > 0 ? (double)Channels.ClampHits / Channels.ClampCalls : 0.0,
+                Channels.MaxRaw));
 
             // --- (b) the null --------------------------------------------------
             // Both runs are symmetric plates, so the profile against distance from

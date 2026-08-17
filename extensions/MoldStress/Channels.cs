@@ -31,6 +31,20 @@ namespace MoldStress
         public Polymer Material;
         public double PeakDnFlow, PeakDepthFraction;
 
+        /// <summary>
+        /// Clamp instrumentation, 2026-08-17. A clamped quantity is insensitive
+        /// to its inputs, and the depth channel shows every symptom of that: a
+        /// freeze-order null returning the same number to two decimals, a 30 C
+        /// mould change moving the ratio by 1%, and a depth ratio sitting at ~1.0
+        /// as though the memory were the same constant at both sampling depths.
+        /// Whether the clamp in MemoryFactorWlf actually BINDS is a measurement,
+        /// not an inference, so it is counted. Reset before a run and read after.
+        /// </summary>
+        public static long ClampCalls, ClampHits;
+        public static double MaxRaw, LastRaw;
+
+        public static void ResetClampStats() { ClampCalls = ClampHits = 0; MaxRaw = LastRaw = 0.0; }
+
         public static Channels Build(MouldedElement e, Polymer p, Process proc,
                                      FillField fill, FreezeHistory freeze)
         {
@@ -441,6 +455,10 @@ namespace MoldStress
             // temperature report about 250x the steady stress.
             //
             // Removing it is only progress WITH that weighting in place.
+            ClampCalls++;
+            if (v > 1.0) ClampHits++;
+            if (v > MaxRaw) MaxRaw = v;
+            LastRaw = v;
             return v < 0 ? 0 : (v > 1 ? 1 : v);
         }
 
