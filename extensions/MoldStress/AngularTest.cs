@@ -28,6 +28,108 @@ namespace MoldStress
     /// </summary>
     internal static class AngularTest
     {
+        /// <summary>
+        /// Length of the astigmatism vector a polariser at alpha sees through the
+        /// model's birefringence field - the quantity Hung measured.
+        /// </summary>
+        public static double AstigVectorLength(MouldedElement e, Polymer p, Process proc,
+                                               double alpha, int NR = 24, int NA = 96)
+        {
+            var fill = FillField.Build(e, p, proc, 101);
+            var freeze = FreezeHistory.Build(Math.Max(e.EdgeThicknessMm, 0.2), p, proc, 81);
+            var ch = Channels.Build(e, p, proc, fill, freeze);
+            double a5 = 0.0, a6 = 0.0;
+            for (int ir = 0; ir < NR; ir++)
+            {
+                double rho = (ir + 0.5) / NR;
+                double r = rho * e.SemiDiameterMm;
+                for (int ia = 0; ia < NA; ia++)
+                {
+                    double phi = 2.0 * Math.PI * (ia + 0.5) / NA;
+                    double fx, fy, s;
+                    StarFiles.FlowDirection(e, r * Math.Cos(phi), r * Math.Sin(phi),
+                                            out fx, out fy, out s);
+                    double theta = Math.Atan2(fy, fx);
+                    int iS = 0; double best = double.MaxValue;
+                    for (int i = 0; i < fill.S.Length; i++)
+                    {
+                        double d = Math.Abs(fill.S[i] - s);
+                        if (d < best) { best = d; iS = i; }
+                    }
+                    double dn = 0.0;
+                    for (int k = 0; k < freeze.NodeCount; k++) dn += Math.Abs(ch.DnFlow[iS, k]);
+                    dn /= freeze.NodeCount;
+                    double phase = dn * Math.Cos(2.0 * (theta - alpha)) * rho;
+                    a5 += phase * Math.Cos(2.0 * phi);
+                    a6 += phase * Math.Sin(2.0 * phi);
+                }
+            }
+            return Math.Sqrt(a5 * a5 + a6 * a6);
+        }
+
+        /// <summary>
+        /// The ORDINAL check from the same paper: a PMMA objective showed shape
+        /// asymmetry dominating with a minimal birefringence contribution, while a
+        /// Zeonex one moulded on a SHORTENED cycle showed the reverse.
+        ///
+        /// Two caveats stated rather than buried. Zeonex is a cyclo-olefin
+        /// POLYMER and our measured constants are for a cyclo-olefin COPOLYMER
+        /// (TOPAS), so it stands in for it. And "shortened moulding time" is
+        /// mapped here to a shorter fill, which raises shear rate - a judgement,
+        /// not something the paper quantifies. Both are why only the paper's own
+        /// comparison is asserted and the equal-process one is reported.
+        /// </summary>
+        public static void OrdinalCheck()
+        {
+            Console.WriteLine("  ordinal check (Hung 2000): PMMA vs Zeonex-class");
+
+            var lens = new MouldedElement
+            {
+                FrontSurface = 1, BackSurface = 2,
+                CentreThicknessMm = 2.0, SemiDiameterMm = 8.0,
+                FrontRadiusMm = 40.0, BackRadiusMm = -40.0,
+            };
+            lens.EdgeThicknessMm = lens.ThicknessAt(lens.SemiDiameterMm);
+            lens.Gate = new GateSpec { Kind = GateKind.RingAllRound, AzimuthDeg = 0,
+                                       WidthMm = 2 * Math.PI * 8.0, ThicknessMm = 0.9 };
+
+            var pmma = Polymers.ByName("MS_PMMA");
+            var coc = Polymers.ByName("MS_COC_TOPAS6017");
+            var normal = new Process { FillTimeS = 1.0, PackPressureMPa = 60.0, PackTimeS = 3.0 };
+            var shortCycle = new Process { FillTimeS = 0.3, PackPressureMPa = 60.0, PackTimeS = 1.0 };
+
+            double pmmaNormal = AstigVectorLength(lens, pmma, normal, 0.0);
+            double cocNormal = AstigVectorLength(lens, coc, normal, 0.0);
+            double cocShort = AstigVectorLength(lens, coc, shortCycle, 0.0);
+            double pmmaShort = AstigVectorLength(lens, pmma, shortCycle, 0.0);
+
+            Console.WriteLine(string.Format(
+                "        PMMA normal {0:E3}   COC normal {1:E3}   COC short {2:E3}   PMMA short {3:E3}",
+                pmmaNormal, cocNormal, cocShort, pmmaShort));
+
+            // The paper's own comparison: its Zeonex lens was the short-cycle one.
+            SelfTest.Check("short-cycle COC exceeds normal-cycle PMMA, as the paper reports",
+                cocShort > pmmaNormal,
+                string.Format("{0:E3} vs {1:E3}, ratio {2:F2}x",
+                    cocShort, pmmaNormal, cocShort / Math.Max(pmmaNormal, 1e-30)));
+
+            // Isolating process from material - reported, not asserted, because
+            // the paper never ran it.
+            Console.WriteLine(string.Format(
+                "        at EQUAL process the model puts {0} higher ({1:F2}x) - the paper does",
+                cocNormal > pmmaNormal ? "COC" : "PMMA",
+                Math.Max(cocNormal, pmmaNormal) / Math.Max(Math.Min(cocNormal, pmmaNormal), 1e-30)));
+            Console.WriteLine("        not test that, so it is reported and not gated.");
+
+            // Shortening the cycle must raise orientation for BOTH materials, or
+            // the process knob is not doing what the paper says it does.
+            SelfTest.Check("a shorter cycle raises orientation for both materials",
+                cocShort > cocNormal && pmmaShort > pmmaNormal,
+                string.Format("COC {0:F2}x, PMMA {1:F2}x",
+                    cocShort / Math.Max(cocNormal, 1e-30),
+                    pmmaShort / Math.Max(pmmaNormal, 1e-30)));
+        }
+
         public static void SelfCheck()
         {
             Console.WriteLine("  angular law (Hung 2000): astigmatism turns at 2x polarisation");

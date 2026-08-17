@@ -32,6 +32,8 @@ namespace MoldStress
             StarFiles.SelfCheck();
             Console.WriteLine();
             AngularTest.SelfCheck();
+            Console.WriteLine();
+            AngularTest.OrdinalCheck();
 
             Console.WriteLine();
             Console.WriteLine(string.Format("  {0} passed, {1} failed", _pass, _fail));
