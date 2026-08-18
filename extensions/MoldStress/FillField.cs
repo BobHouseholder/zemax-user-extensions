@@ -313,7 +313,29 @@ namespace MoldStress
                     w = Math.Max(w, e.Gate.WidthMm);
                 }
                 f.Width[i] = w;
-                f.H[i] = Math.Max(e.ThicknessAt(Math.Min(r, e.SemiDiameterMm)), 1e-4);
+                // FLOOR THE CAVITY AT THE GATE LAND.
+                //
+                // Taking the sagitta out to the full semi-diameter gives a lens a
+                // knife rim - 0.273 mm on the 32 mm plano-convex of reference case
+                // 2 - and dp/ds goes as 1/h^3, so the whole in-plane field is then
+                // set by a rim that does not exist. Measured: in-plane peak 6.60x
+                // the published value, with the maximum sitting on that rim.
+                //
+                // A part cannot be thinner than the gate that feeds it. The model
+                // already depends on that rule elsewhere - tGateSeal assumes the
+                // gate land freezes BEFORE the wall, which inverts if the wall is
+                // thinner - and it is how real moulded optics are built: a lens
+                // carries a flange at least as thick as its gate. The source for
+                // reference case 2 confirms it independently, since a 0.4 mm
+                // one-sided cut was made near the gate and a 0.273 mm rim cannot
+                // survive one.
+                //
+                // This binds only where the sagitta would thin a rim below the
+                // gate land. A constant-thickness part is untouched.
+                double hGeom = e.ThicknessAt(Math.Min(r, e.SemiDiameterMm));
+                double hFloor = (e.Gate != null && e.Gate.ThicknessMm > 1e-4)
+                    ? e.Gate.ThicknessMm : 0.0;
+                f.H[i] = Math.Max(Math.Max(hGeom, hFloor), 1e-4);
             }
 
             // Wall shear rate for the viscosity: 6Q/(W h^2) for a slit.
