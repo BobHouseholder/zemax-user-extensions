@@ -42,6 +42,12 @@ namespace MoldStress
             // verify-the-artifact Q7.
             var p = Polymers.ByName("MS_COC_TOPAS6017").WithProcessTemps(280.0, 150.0);
             var baseProc = new Process { FillTimeS = 1.0, PackPressureMPa = 71.3, PackTimeS = 3.0 };
+            // Honour the model switches, or this diagnostic cannot be used to
+            // investigate the configurations that actually differ.
+            if (Program.Has(args, "-thinned-lambda"))
+                baseProc.ShearThinnedLambdaDuringFill = true;
+            if (Program.Has(args, "-complementary"))
+            { baseProc.ComplementaryShearGate = true; baseProc.FountainDepositionSupport = true; }
 
             var plate = new MouldedElement
             {
@@ -114,6 +120,7 @@ namespace MoldStress
                 double tAbs = tArrive + freeze.FreezeTimeS[k];
                 double memClosed = Channels.MemoryFactor(tArrive, baseProc.FillTimeS, tAbs,
                                                          lambda0, baseProc.PackTimeS);
+                double tau = fill.DpDs[0] * Math.Abs(freeze.Z[k]);
                 double memWlf = memClosed;
                 if (freeze.TimeGridS != null && freeze.TempHistoryC != null)
                 {
@@ -121,9 +128,12 @@ namespace MoldStress
                     for (int q = 0; q < hist.Length; q++) hist[q] = freeze.TempHistoryC[k, q];
                     memWlf = Channels.MemoryFactorWlf(tArrive, baseProc.FillTimeS, tAbs,
                                                       freeze.TimeGridS, hist, p, lambda0,
-                                                      baseProc.PackTimeS);
+                                                      baseProc.PackTimeS, null, false,
+                                                      double.PositiveInfinity,
+                                                      baseProc.ShearThinnedLambdaDuringFill,
+                                                      fill.EtaPaS > 0
+                                                          ? tau * 1e6 / fill.EtaPaS : 0.0);
                 }
-                double tau = fill.DpDs[0] * Math.Abs(freeze.Z[k]);
                 // THE THERMAL CHANNEL, printed 2026-08-17 because the depth
                 // criterion does not look at it. Isayev (J. Polym. Sci. B, 2006)
                 // decomposes residual birefringence into a flow part, peaking near

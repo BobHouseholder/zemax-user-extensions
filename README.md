@@ -569,6 +569,42 @@ with the fountain off.** The convergence sweep behind the shipped `-nz 321`
 default was run with the fountain ON, so it never covered this configuration.
 Any future work on the shear channel at the gate needs its own sweep first.
 
+### RETRACTED: the null failure under `-thinned-lambda` was NOT an instrument problem
+
+**The section below is wrong and is kept only so the error is visible.** It
+concluded, from the probes, that the null was "aimed where the model cannot
+respond". Measuring the memory profile itself refutes that:
+
+| depth | mem_default | mem_thinned |
+|---|---|---|
+| 95% | 0.0024 | **0.9708** |
+| 85% | 0.0442 | **1.0000** |
+| 75% | 0.1382 | **1.0000** |
+| 50% | 0.4509 | **0.9973** |
+| 25% | 0.6699 | **0.9591** |
+| 5% | 0.7092 | **0.9193** |
+
+Under the thinned lambda the retained fraction is **0.92 to 1.00 across the whole
+depth**, against 0.002 to 0.71 for the default — a factor of 300 collapsed to
+nothing. **The memory bracket is saturated everywhere**, so the model has no
+freeze-ORDER dependence left to detect, and the null correctly reports FAIL.
+
+**Why the probe evidence misled me.** The x0.01 freeze-time scaling moves the
+answer 79-92%, which I read as "the channel is responsive, so the null's
+direction must be the problem". It moves the answer because it drags layers OUT
+of saturation — a magnitude effect. It says nothing about whether ordering
+matters, and ordering is what the clause names. **A probe that de-saturates is
+not evidence that the saturated quantity has structure.**
+
+**What this means for `-thinned-lambda`, and it is worse than a failing control.**
+Memory near 1 everywhere means every layer retains essentially all of its shear
+orientation — the model has stopped representing relaxation at all, including for
+a core that stays molten for 4 s after filling ends. Its depth ratio of 1.91 is
+obtained by switching off the physics the depth profile is supposed to come from.
+That is a right answer for the wrong reason, and it is exactly what the null
+exists to catch. **The null needed no rebuilding; the fifth version would have
+been built to silence a correct alarm.**
+
 ### The null failure under `-thinned-lambda` is an instrument problem, not evidence
 
 Checked 2026-08-17, because "the control fails" would otherwise read as a verdict
