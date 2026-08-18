@@ -209,7 +209,60 @@ namespace MoldStress
                     // Below Tg the element is solid: no loading, no relaxation.
                     if (T <= p.TgC) continue;
 
-                    double lam = Math.Max(FillField.CrossWlf(p, 0.0, T, 0.0) / G, 1e-9);
+                    // LambdaScale applies here too. The Eulerian channel honours it
+                    // and this model did not, so the two disagreed about the
+                    // relaxation time whenever it was set - and it exists
+                    // precisely so the relaxation time can be TESTED as a lever.
+                    //
+                    // It is also the physically open constant. lambda = eta0/G is
+                    // the Maxwell time; the terminal relaxation time for chain
+                    // ORIENTATION is longer, by a factor of order 3-6 depending on
+                    // the definition, because eta0 ~ G_N0 * tau_d / 5 for an
+                    // entangled melt. Orientation is what freezes in, so this
+                    // model relaxing it at the Maxwell time is a choice, not a
+                    // derivation.
+                    // SHEAR-THINNED WHILE BEING SHEARED, at rest otherwise.
+                    //
+                    // lambda = eta(T, gammaDot)/G. An element still in the channel
+                    // is under fill shear and its viscosity is thinned by ~29x
+                    // here, so it builds orientation ~29x faster than the
+                    // melt-at-rest time allows. A deposited element sits at a
+                    // no-slip wall with no shear at all, so it relaxes at the
+                    // zero-shear time.
+                    //
+                    // RETRACTED, same day: an earlier version of this comment
+                    // claimed the thinning "does not saturate here" because an
+                    // element stops being loaded once deposited. Measured
+                    // immediately after writing it - core 2.8e-4 against a
+                    // published 1.8e-4 and the ratio flattened to 1.14 - so it
+                    // saturates here too. The claim was written before the run.
+                    //
+                    // The shear rate must be solved SELF-CONSISTENTLY. Taking
+                    // gammaDot = tau/eta_fill uses one fill-wide viscosity and so
+                    // overestimates the rate in the core, where the true local
+                    // viscosity is higher and the material thins less. Solving
+                    // eta(gammaDot)*gammaDot = tau by fixed point gives each
+                    // element the thinning its own stress earns.
+                    double gammaDot = 0.0;
+                    if (!q.Deposited && t <= tFill)
+                    {
+                        int nd = (int)Math.Round((q.S / L) * (fill.S.Length - 1));
+                        nd = Math.Max(0, Math.Min(fill.S.Length - 1, nd));
+                        double tauPa = fill.DpDs[nd] * q.Y0 * 1e6;
+                        // eta(gammaDot) * gammaDot = tau, by fixed point on the
+                        // Cross model at this element's own temperature.
+                        double etaIt = FillField.CrossWlf(p, 0.0, T, 0.0);
+                        for (int it2 = 0; it2 < 40; it2++)
+                        {
+                            double gd2 = tauPa / Math.Max(etaIt, 1e-9);
+                            double etaNew = FillField.CrossWlf(p, gd2, T, 0.0);
+                            if (Math.Abs(etaNew - etaIt) <= 1e-6 * etaIt) { etaIt = etaNew; break; }
+                            etaIt = 0.5 * (etaIt + etaNew);          // damped, for stability
+                        }
+                        gammaDot = tauPa / Math.Max(etaIt, 1e-9);
+                    }
+                    double lam = Math.Max(proc.LambdaScale *
+                                          FillField.CrossWlf(p, gammaDot, T, 0.0) / G, 1e-9);
                     double dXi = dt / lam;
 
                     if (!q.Deposited)
@@ -332,9 +385,12 @@ namespace MoldStress
             Console.WriteLine("MoldStress - Lagrangian particle model (A4b)");
             Console.WriteLine("  " + Program.ScopeLabel);
             Console.WriteLine("  A DIFFERENT MODEL, not a correction to the shipped one.");
+            Console.WriteLine(string.Format(ci,
+                "  lambda scale {0:F2} (1.0 = the Maxwell time eta0/G)", proc.LambdaScale));
             Console.WriteLine();
 
             int nPart = (int)Program.Value(args, "-particles", 400.0);
+            proc.LambdaScale = Program.Value(args, "-lambdascale", 1.0);
             var lag = Build(plate, p, proc, fill, freeze, nPart);
 
             Console.WriteLine(string.Format(ci,

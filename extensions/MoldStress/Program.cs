@@ -167,7 +167,7 @@ namespace MoldStress
         private static readonly string[] ValueFlags = {
             "-file", "-filltime", "-fountain", "-frontmode", "-gateconfig",
             "-materials", "-melttemp", "-moldtemp", "-nz", "-nzexport",
-            "-out", "-outdir", "-packpressure", "-packtime", "-particles",
+            "-lambdascale", "-out", "-outdir", "-packpressure", "-packtime", "-particles",
         };
 
         /// <summary>Flags that stand alone.</summary>
