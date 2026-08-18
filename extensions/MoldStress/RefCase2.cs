@@ -61,6 +61,46 @@ namespace MoldStress
     /// 5 fringes observed against 4 predicted. Agreeing with it closely is
     /// agreeing with something already known to be about 20% low.
     /// </summary>
+    /// WHAT THE IN-PLANE PEAK CLAUSE CURRENTLY TESTS - read this before trying to
+    /// close its 13x, 2026-08-18.
+    ///
+    /// Of this case's three clauses, TWO ARE SCALE-FREE and both pass: layer
+    /// removal is a normalised cumulative fraction, and in-plane shape is a
+    /// normalised decay along the flow. The in-plane peak is the ONLY magnitude
+    /// measure, and it is the only failure. So the case says: shape right,
+    /// magnitude 13x high.
+    ///
+    /// Magnitude is 2 * C_melt * tau * memory, and the two factors were separated:
+    ///
+    ///     quantity    case 1   case 2   note
+    ///     memory       0.235    0.143   model output; case 1 agrees with its
+    ///                                   measurement to 16%, so retention is sound
+    ///     tau_wall     0.297    1.670   MPa, from the flow solve - 5.6x
+    ///
+    /// TAU IS THE WHOLE OF IT, AND TAU IS UNPHYSICAL HERE. 1.67 MPa sits above the
+    /// melt-fracture threshold for polymer melts (~0.1-0.5 MPa); case 1's 0.297 MPa
+    /// is inside the normal moulding range. A melt would not flow smoothly at all
+    /// in the regime this solve puts case 2 in.
+    ///
+    /// AND BOTH INPUTS THAT SET IT ARE UNSOURCED:
+    ///   Q  8410 mm3/s, from a screw rate that assumes the WHOLE screw output
+    ///      enters this one cavity - while the paper shots 27 g for a 0.92 g part,
+    ///      a ratio of 29 that a single-cavity sprue and runner does not explain.
+    ///   W  12.6 mm, one eighth of the circumference, CHOSEN HERE. The paper places
+    ///      a gate on the Y axis and never states its width.
+    ///
+    /// So the in-plane peak clause is NOT presently a test of the birefringence
+    /// model. It is a test of two flow inputs nobody has sourced, and it should
+    /// not be "fixed" by tuning the model. It becomes evaluable when the gate
+    /// width and the cavity count are known - and Q is a weak lever in any case,
+    /// since Cross gives tau ~ Q^0.29.
+    ///
+    /// The finding that IS about the model: case 2's depth profile peaks at 60% of
+    /// the half-wall (dn_flow 9.66e-4 there against 1.49e-4 at the wall), the same
+    /// mid-depth peak the Eulerian channel shows on case 1. Case 1's in-plane
+    /// magnitude passes anyway because its thickness average happens to land near
+    /// the measurement; case 2's does not. Both carry the same defect and only one
+    /// is caught by its magnitude clause.
     internal static class RefCase2
     {
         public const double PublishedInPlanePeakDn = 3.7e-5;
@@ -182,6 +222,43 @@ namespace MoldStress
             var freeze = FreezeHistory.Build(lens.CentreThicknessMm, p, proc, nz, 10 * nz);
             var ch = Channels.Build(lens, p, proc, fill, freeze);
             double half = 0.5 * lens.CentreThicknessMm;
+
+            // DEPTH DIAGNOSTIC at the gate station, so this case can be compared
+            // against case 1's on the SAME quantities. The relaxation half of the
+            // memory integral has been eliminated (the clock stops ~90 K above
+            // Tg), so what is left to examine is the BUILD-UP: how much reduced
+            // time each layer accumulates while it is still being loaded, and how
+            // much of the local shear stress it therefore reaches.
+            {
+                int nzd = freeze.NodeCount;
+                double halfd = 0.5 * lens.CentreThicknessMm;
+                double lam0 = FillField.CrossWlf(p, 0.0, p.MeltTempC, 0.0) / p.MeltModulusPa;
+                say2(string.Format(ci,
+                    "  lambda(melt {0:F0} C) = {1:E2} s against a fill of {2:F4} s  =>  " +
+                    "xi available over the fill = {3:F2}",
+                    p.MeltTempC, lam0, proc.FillTimeS, proc.FillTimeS / lam0));
+                say2("  depth   t_freeze     xi_frz    memory    tau_visc     dn_flow");
+                for (int k = nzd - 1; k >= nzd / 2; k -= Math.Max(1, nzd / 10))
+                {
+                    double f = Math.Abs(freeze.Z[k]) / halfd;
+                    double tAbs = freeze.FreezeTimeS[k];
+                    double xi = 0.0, mem = 0.0;
+                    if (freeze.TimeGridS != null && freeze.TempHistoryC != null)
+                    {
+                        var hist = new double[freeze.TimeGridS.Length];
+                        for (int q = 0; q < hist.Length; q++) hist[q] = freeze.TempHistoryC[k, q];
+                        xi = Channels.ReducedTimeToFreeze(freeze.TimeGridS, hist, p, tAbs);
+                        mem = Channels.MemoryFactorWlf(0.0, proc.FillTimeS, tAbs,
+                                                       freeze.TimeGridS, hist, p, lam0,
+                                                       proc.PackTimeS);
+                    }
+                    double tau = fill.DpDs[0] * Math.Abs(freeze.Z[k]) * (fill.H[0] / freeze.ThicknessMm);
+                    say2(string.Format(ci,
+                        "  {0,5:P0}  {1,9:F4}  {2,9:F3}  {3,8:F4}  {4,10:E2}  {5,10:E2}",
+                        f, tAbs, xi, mem, tau, Math.Abs(ch.DnFlow[0, k])));
+                }
+                say2("");
+            }
 
             // ---- (a) in-plane -------------------------------------------------
             int ns = ch.S.Length, nzc = freeze.NodeCount;
