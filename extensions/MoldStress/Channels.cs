@@ -380,6 +380,36 @@ namespace MoldStress
                         }
                     }
 
+                    // COMPLEMENTARY GATE, 2026-08-17. The two channels were
+                    // double-counting the skin, measured by decomposition: at the
+                    // wall the shear channel contributes 4.0e-5 under the
+                    // melt-at-rest lambda and 5.15e-4 under the shear-thinned one,
+                    // ON TOP OF an unchanged 1.12e-4 fountain deposit. Both claim
+                    // the same material.
+                    //
+                    // They cannot both hold. Material outside z*(s) reached the
+                    // wall THROUGH THE FRONT and is thereafter at a no-slip
+                    // boundary where the velocity is zero, so it is not sheared
+                    // there; before deposition it was in the core, where tau is
+                    // LOW, not at the wall where tau is highest. Crediting it with
+                    // the full wall shear history is attributing a stress it never
+                    // experienced.
+                    //
+                    // Blake's envelope already answers which material that is. It
+                    // was gating only the deposition term; the partition is
+                    // complementary - front-deposited material gets the fountain,
+                    // core-stream material gets the shear, neither gets both.
+                    if (proc.ComplementaryShearGate && proc.FountainDepositionSupport)
+                    {
+                        double sFr = fill.PathLengthMm > 1e-9
+                            ? fill.S[i] / fill.PathLengthMm : 0.0;
+                        if (sFr < 0.0) sFr = 0.0;
+                        if (sFr > 1.0) sFr = 1.0;
+                        double zStarC = Math.Sqrt(Math.Max(1.0 - (2.0 / 3.0) * sFr, 0.0));
+                        double halfWc = Math.Max(0.5 * freeze.ThicknessMm, 1e-9);
+                        if (Math.Abs(freeze.Z[k]) / halfWc >= zStarC) dnShear = 0.0;
+                    }
+
                     c.DnFlow[i, k] = dnShear + dnFountain;
 
                     c.SigmaThermalMPa[i, k] = sigma[k];

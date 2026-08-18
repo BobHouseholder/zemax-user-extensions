@@ -122,6 +122,19 @@ namespace MoldStress
         public bool FountainDepositionSupport = false;
 
         /// <summary>
+        /// Apply Blake's envelope COMPLEMENTARILY: front-deposited material
+        /// (outside z*) gets the fountain term and NOT the shear term; core-stream
+        /// material (inside z*) gets shear and no deposition. Requires
+        /// FountainDepositionSupport, which supplies the boundary.
+        ///
+        /// Without it the two channels double-count the skin - measured by
+        /// decomposition at the wall: shear contributes 4.0e-5 under the
+        /// melt-at-rest lambda and 5.15e-4 under the shear-thinned one, on top of
+        /// an unchanged 1.12e-4 fountain deposit, both claiming the same material.
+        /// </summary>
+        public bool ComplementaryShearGate = false;
+
+        /// <summary>
         /// Scale the front deposition by the shear window available to the melt
         /// FEEDING the front at that station, so the deposited magnitude decays
         /// along the flow the way the shear channel already does.
