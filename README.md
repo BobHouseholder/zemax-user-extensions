@@ -643,6 +643,52 @@ x0.01 freeze-time scaling demonstrably does, though it tests sensitivity to the
 freeze-history *magnitude* rather than to its *ordering*, which is what the
 registered clause names.
 
+### Why the profile peaks at 50%, and why no further term will fix it
+
+Measured cause, on the fixed freeze history at the corrected conditions:
+`mem_wlf` **rises inward** — 0.000 at the wall, 0.138 at 75%, 0.451 at 50%, 0.710
+at the mid-plane — while `tau_visc` falls linearly from the wall. Their product
+peaks mid-depth. The reference peaks at the skin.
+
+**That is not a missing term. It is the shear channel's Lagrangian assumption.**
+It computes, for each depth, the stress a fluid element would build up *having sat
+at that depth since t = 0*, sheared at the local rate until it freezes. Under that
+assumption the wall layer must retain nothing — it freezes at 0.094 s, before it
+can build anything — and the core must retain the most, because it stays molten
+longest. The profile it produces is the correct answer to the wrong history.
+
+In fountain flow the skin never sat at the wall. It was deformed in the hot core,
+carried to the wall by the advancing front, and quenched on arrival — so it
+retains what it was already carrying. The two channels disagree about the same
+material, which is why removing the double-count changed the magnitude without
+changing the shape.
+
+**Eight configurations measured against this, none adopted** (nz=161; in-plane bar
+is a factor of 2, depth band [1.39, 5.56], depth read at the criterion's station):
+
+| configuration | in-plane | peak at | far edge | depth |
+|---|---|---|---|---|
+| default | **1.16×** | 0 mm | 46.5% | 0.82 |
+| carried melt orientation | 3.48× | 0 mm | 82.1% | 1.47 |
+| + Blake envelope | 1.93× | 92 mm | **268%** | 0.31 |
+| + complementary gate | 1.87× | 99 mm | **268%** | 0.31 |
+| + thinned λ | 2.46× | 15 mm | 76.8% | 1.91 |
+| thinned λ alone | 2.87× | 0 mm | 18.9% | 1.92 |
+| thinned λ + complementary | 2.35× | 4 mm | 14.8% | 1.91 |
+| Blake envelope alone | 0.70× | 51 mm | 54.8% | 0.31 |
+
+Two structural results close off whole families rather than single attempts.
+**Every envelope configuration reads 0.31 at the criterion's station**, because
+`z*(0) = 1` admits no deposited material at the gate — the `f(0) = 0` argument,
+which is analytic. And **the only lever that moves the depth ratio is the
+shear-thinned λ**, which works by saturating the memory bracket to 0.92–1.00
+everywhere: it does not correct the depth dependence, it removes it.
+
+**What would actually fix it is not a term but a history.** The shear channel
+needs each element's own path — where it was, how hard it was sheared, when it
+arrived — rather than a standing assumption that it never moved. That is a
+Lagrangian particle model, and it is a different program from the one here.
+
 ### The depth criterion now uses both channels
 
 Corrected 2026-08-17. The depth clause compared `DnFlow` alone against a profile
