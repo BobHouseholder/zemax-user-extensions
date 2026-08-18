@@ -569,6 +569,44 @@ with the fountain off.** The convergence sweep behind the shipped `-nz 321`
 default was run with the fountain ON, so it never covered this configuration.
 Any future work on the shear channel at the gate needs its own sweep first.
 
+### The null failure under `-thinned-lambda` is an instrument problem, not evidence
+
+Checked 2026-08-17, because "the control fails" would otherwise read as a verdict
+on the physics. The probes are the positive control on the null and they separate
+the two possible causes:
+
+| config | null (mirror T history) | probe x0.01 | probe x100 | max memory |
+|---|---|---|---|---|
+| default | 2.384 vs 0.583 — **+309%** PASS | 1.303 vs 0.820 (+59%) | 0.820 (0%) | 0.7 |
+| `-thinned-lambda` | 1.602 vs 1.757 — **-9%** FAIL | 0.406 vs 1.92 (**-79%**) | 2.024 (+5%) | **1.0** |
+| `+ -complementary` | 1.896 vs 1.714 — **+11%** FAIL | 0.147 vs 1.91 (**-92%**) | 2.036 (+7%) | 1.0 |
+
+Under the thinned lambda the channel moves **79-92%** for a freeze-time
+perturbation while the null's own perturbation moves it **9%**. The subject is
+not deaf; the null is aimed where the model cannot respond. Same class as the
+`t -> tMax - t` version, reached by a different route.
+
+**The mechanism, and it is visible in the last column.** The retained fraction
+reaches **1.0** under the thinned lambda against 0.7 under the default — the
+physical ceiling of the memory bracket. Mirroring the temperature history makes
+some layers hotter and some colder, and the ones it would push *up* are already
+at full retention, so a large part of the profile cannot move in the direction
+the perturbation pushes. The asymmetry is the same one the default shows
+(responds to shortening, deaf to lengthening); the thinned lambda simply moves
+more of the depth range into the saturated part of it.
+
+**The clamp is again NOT the cause** — 0 of 95,600 evaluations saturated in every
+configuration. That hypothesis has now been tested and refuted twice by counting
+rather than assumed either way.
+
+**What follows for the thinned-lambda result.** Its failing null is not a reason
+to reject it — but its passing depth ratio is not validated either, because the
+control that would guard it cannot discriminate in that regime. A fifth version
+of this null needs a perturbation that stays in the responsive direction; the
+x0.01 freeze-time scaling demonstrably does, though it tests sensitivity to the
+freeze-history *magnitude* rather than to its *ordering*, which is what the
+registered clause names.
+
 ### The depth criterion now uses both channels
 
 Corrected 2026-08-17. The depth clause compared `DnFlow` alone against a profile
