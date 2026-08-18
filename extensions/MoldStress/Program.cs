@@ -52,6 +52,7 @@ namespace MoldStress
                 if (Has(args, "-run")) return Runner.Run(args);
                 if (Has(args, "-refcase")) return RefCase.Run(args);
                 if (Has(args, "-depthdiag")) return DepthDiag.Run(args);
+                if (Has(args, "-lagrangian")) return Lagrangian.Run(args);
 
                 // An UNRECOGNISED argument used to print usage and exit 0 - the
                 // does-nothing-reports-success pattern this project keeps meeting.
@@ -166,14 +167,14 @@ namespace MoldStress
         private static readonly string[] ValueFlags = {
             "-file", "-filltime", "-fountain", "-frontmode", "-gateconfig",
             "-materials", "-melttemp", "-moldtemp", "-nz", "-nzexport",
-            "-out", "-outdir", "-packpressure", "-packtime",
+            "-out", "-outdir", "-packpressure", "-packtime", "-particles",
         };
 
         /// <summary>Flags that stand alone.</summary>
         private static readonly string[] BoolFlags = {
             "-complementary", "-deposition-decay", "-deposition-support",
             "-depthdiag", "-directindex", "-gates", "-h", "-help", "-quiet",
-            "-refcase", "-ribbon", "-run", "-selftest", "-thinned-lambda",
+            "-lagrangian", "-refcase", "-ribbon", "-run", "-selftest", "-thinned-lambda",
             "-writecatalog",
         };
 
