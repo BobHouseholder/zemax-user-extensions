@@ -239,9 +239,11 @@ namespace MoldStress
                 if (ch.DepthShapeApplied != null)
                 {
                     Console.WriteLine(
-                        "  depth shape: {0}, {1} gap node(s) over h/h0 {2:F3}-{3:F3}, min band count {4}",
+                        "  depth shape: {0}, {1} gap node(s) over h/h0 {2:F3}-{3:F3}, "
+                        + "min band count {4}, cache {5} solved / {6} reused",
                         ch.DepthShapeSource, ch.DepthShapeNodes,
-                        ch.DepthShapeGapMin, ch.DepthShapeGapMax, ch.DepthShapeMinCount);
+                        ch.DepthShapeGapMin, ch.DepthShapeGapMax, ch.DepthShapeMinCount,
+                        Lagrangian.ShapeMisses, Lagrangian.ShapeHits);
                     Console.Write("    phi(z/h):");
                     for (int f = 10; f >= 0; f -= 2)
                     {

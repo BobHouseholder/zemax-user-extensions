@@ -543,11 +543,10 @@ namespace MoldStress
                 {
                     nodeR[m] = nNode == 1 ? gMax
                              : gMin + (gMax - gMin) * m / (double)(nNode - 1);
-                    var fz = freeze.ScaledToGap(nodeR[m]);
-                    var lg = Lagrangian.Build(e, p, proc, fill, fz,
-                                              Math.Max(200, proc.DepthShapeParticles));
                     int mc;
-                    nodePhi[m] = lg.DepthShape(fz.Z, Math.Max(0.5 * fz.ThicknessMm, 1e-9), out mc);
+                    nodePhi[m] = Lagrangian.CachedDepthShape(
+                        e, p, proc, fill, freeze, nodeR[m],
+                        Math.Max(200, proc.DepthShapeParticles), out mc);
                     if (mc < minCount) minCount = mc;
                 }
 

@@ -110,6 +110,171 @@ namespace MoldStress
             return (m + 2.0) / (m + 1.0) * (1.0 - Math.Pow(Math.Abs(yOverH), m + 1.0));
         }
 
+        // ---- the depth shape, cached between builds -------------------------
+        //
+        // Making the shape the default turned -selftest from near-instant into
+        // 2m45, because every Channels.Build does a particle solve per gap node
+        // and the self-tests build many times over the same geometry. Nothing
+        // about the shape depends on the caller: for a given material, fill
+        // field, freeze history, gap ratio and particle count it is the same
+        // array every time.
+        //
+        // THE KEY IS THE HAZARD, so it is derived rather than guessed. Build
+        // reads exactly four fields of Process - FillTimeS, FountainStrain,
+        // LambdaScale, PackTimeS - and reads Polymer, FillField and FreezeHistory
+        // wholesale, so those three are keyed by REFERENCE: a caller that wants a
+        // different answer constructs a different object (RefCase's zero-CTE
+        // polymer and its mirrored freeze history both do), and identity can only
+        // cost a miss, never produce a wrong hit. The process fields are keyed by
+        // VALUE because a Process IS mutated in place between builds.
+        //
+        // MouldedElement is not in the key because Build does not read it - the
+        // parameter is unused. If that changes, THIS KEY GOES STALE SILENTLY and
+        // starts handing one element's shape to another. Anything added to Build
+        // that reads e, or reads a fifth field of Process, has to be added here
+        // in the same edit.
+        private sealed class ShapeKey : IEquatable<ShapeKey>
+        {
+            public Polymer P; public FillField Fill; public FreezeHistory Freeze;
+            public double Ratio; public int Particles;
+            public double FillTime, Fountain, LambdaScale, PackTime;
+
+            // BY CONTENT, NOT BY REFERENCE. The first version keyed the fill
+            // field and freeze history on object identity, which is trivially
+            // safe and turned out to be useless: -selftest reported 32 solved and
+            // 0 reused, because each section constructs its own FillField and
+            // FreezeHistory even when the geometry is identical. Identity can
+            // only cost a miss, and here it cost every one of them.
+            //
+            // Comparing contents costs a few hundred thousand double comparisons
+            // per lookup against a particle solve of several seconds, so the
+            // trade is not close. Only the arrays Build actually reads are
+            // compared - the temperature history included, because the particle
+            // temperature interpolation reads it.
+            private static bool Same(double[] a, double[] b)
+            {
+                if (ReferenceEquals(a, b)) return true;
+                if (a == null || b == null || a.Length != b.Length) return false;
+                for (int i = 0; i < a.Length; i++) if (!a[i].Equals(b[i])) return false;
+                return true;
+            }
+            private static bool Same(double[,] a, double[,] b)
+            {
+                if (ReferenceEquals(a, b)) return true;
+                if (a == null || b == null) return false;
+                if (a.GetLength(0) != b.GetLength(0) || a.GetLength(1) != b.GetLength(1)) return false;
+                for (int i = 0; i < a.GetLength(0); i++)
+                    for (int j = 0; j < a.GetLength(1); j++)
+                        if (!a[i, j].Equals(b[i, j])) return false;
+                return true;
+            }
+
+            public bool Equals(ShapeKey o)
+            {
+                if (o == null) return false;
+                if (!(Ratio.Equals(o.Ratio) && Particles == o.Particles
+                      && FillTime.Equals(o.FillTime) && Fountain.Equals(o.Fountain)
+                      && LambdaScale.Equals(o.LambdaScale) && PackTime.Equals(o.PackTime)))
+                    return false;
+                // The polymer stays keyed by reference: it is a value-like record
+                // with many fields, callers construct a new one when they want a
+                // different answer, and a miss is harmless.
+                if (!ReferenceEquals(P, o.P)) return false;
+                if (!Freeze.ThicknessMm.Equals(o.Freeze.ThicknessMm)) return false;
+                if (!Fill.PathLengthMm.Equals(o.Fill.PathLengthMm)) return false;
+                return Same(Freeze.Z, o.Freeze.Z)
+                    && Same(Freeze.FreezeTimeS, o.Freeze.FreezeTimeS)
+                    && Same(Freeze.TimeGridS, o.Freeze.TimeGridS)
+                    && Same(Freeze.TempHistoryC, o.Freeze.TempHistoryC)
+                    && Same(Fill.H, o.Fill.H)
+                    && Same(Fill.DpDs, o.Fill.DpDs)
+                    && Same(Fill.S, o.Fill.S);
+            }
+            public override bool Equals(object o) { return Equals(o as ShapeKey); }
+
+            // Cheap digest - dimensions and a strided sample. Collisions only
+            // cost an Equals call, which is exact.
+            private static int Digest(int h, double[] a)
+            {
+                if (a == null) return h * 31;
+                h = h * 31 + a.Length;
+                int step = Math.Max(1, a.Length / 16);
+                for (int i = 0; i < a.Length; i += step) h = h * 31 + a[i].GetHashCode();
+                return h;
+            }
+            public override int GetHashCode()
+            {
+                int h = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(P);
+                h = h * 31 + Ratio.GetHashCode();
+                h = h * 31 + Particles;
+                h = h * 31 + FillTime.GetHashCode();
+                h = h * 31 + Fountain.GetHashCode();
+                h = h * 31 + LambdaScale.GetHashCode();
+                h = h * 31 + PackTime.GetHashCode();
+                h = h * 31 + Freeze.ThicknessMm.GetHashCode();
+                h = h * 31 + Fill.PathLengthMm.GetHashCode();
+                h = Digest(h, Freeze.Z);
+                h = Digest(h, Freeze.FreezeTimeS);
+                h = Digest(h, Freeze.TimeGridS);
+                h = Digest(h, Fill.H);
+                h = Digest(h, Fill.DpDs);
+                return h;
+            }
+        }
+
+        private sealed class ShapeEntry { public double[] Phi; public int MinCount; }
+
+        private static readonly Dictionary<ShapeKey, ShapeEntry> ShapeCache =
+            new Dictionary<ShapeKey, ShapeEntry>();
+        private static readonly object ShapeLock = new object();
+
+        /// <summary>Cache statistics, so a cache that never hits is visible.</summary>
+        public static long ShapeHits, ShapeMisses;
+
+        /// <summary>
+        /// The depth shape at one gap ratio, solved once per distinct input.
+        /// The returned array is a COPY: the caller renormalises in place, and
+        /// handing out the cached instance would let one build corrupt the next.
+        /// </summary>
+        public static double[] CachedDepthShape(MouldedElement e, Polymer p, Process proc,
+                                                FillField fill, FreezeHistory freeze,
+                                                double gapRatio, int nParticles,
+                                                out int minCount)
+        {
+            var key = new ShapeKey
+            {
+                P = p, Fill = fill, Freeze = freeze,
+                Ratio = gapRatio, Particles = nParticles,
+                FillTime = proc.FillTimeS, Fountain = proc.FountainStrain,
+                LambdaScale = proc.LambdaScale, PackTime = proc.PackTimeS,
+            };
+
+            ShapeEntry hit;
+            lock (ShapeLock)
+            {
+                if (ShapeCache.TryGetValue(key, out hit))
+                {
+                    ShapeHits++;
+                    minCount = hit.MinCount;
+                    return (double[])hit.Phi.Clone();
+                }
+            }
+
+            var fz = freeze.ScaledToGap(gapRatio);
+            var lag = Build(e, p, proc, fill, fz, nParticles);
+            int mc;
+            double[] phi = lag.DepthShape(fz.Z, Math.Max(0.5 * fz.ThicknessMm, 1e-9), out mc);
+
+            lock (ShapeLock)
+            {
+                ShapeMisses++;
+                if (ShapeCache.Count > 512) ShapeCache.Clear();
+                ShapeCache[key] = new ShapeEntry { Phi = (double[])phi.Clone(), MinCount = mc };
+            }
+            minCount = mc;
+            return phi;
+        }
+
         public static Lagrangian Build(MouldedElement e, Polymer p, Process proc,
                                        FillField fill, FreezeHistory freeze,
                                        int nParticles = 400)

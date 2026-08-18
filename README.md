@@ -430,9 +430,18 @@ in-plane peak outstanding.
 
 **It costs time, and that is the honest price of the default.** The shape is a
 particle solve per gap node, so builds that took under a second take tens of
-seconds: `-selftest` runs in about 2m45 where it used to be near-instant, and a
-reference case takes 2-3 minutes. Nothing is cached between builds yet, which is
-the obvious place to get it back.
+seconds: `-selftest` runs in about 2m05 and a reference case in 35-85 seconds,
+against near-instant before.
+
+Shapes are cached between builds, keyed on the CONTENTS of the fill field, freeze
+history and the four process fields the solve reads. It is worth less than it
+sounds: `-selftest` reuses 6 of 32 requests and case 1 reuses 1 of 6, because
+these runs mostly ask for genuinely different things - a mirrored freeze history,
+a zero-CTE polymer, freeze times scaled by a probe, one gap node per station. The
+cache removes the repeats and there are not many. Keying it on object identity
+instead, which was the first version, reused NOTHING at all: each self-test
+section builds its own fill field and freeze history even where the geometry is
+identical.
 
 The middle row is why the per-station solve exists. A single part-wide shape
 makes `DnFlow[i,k] = A_i * phi[k]`, so the normalised depth profile is identical

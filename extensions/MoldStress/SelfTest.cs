@@ -37,6 +37,10 @@ namespace MoldStress
 
             Console.WriteLine();
             Console.WriteLine(string.Format("  {0} passed, {1} failed", _pass, _fail));
+            if (Lagrangian.ShapeMisses + Lagrangian.ShapeHits > 0)
+                Console.WriteLine(string.Format(
+                    "  depth-shape cache: {0} solved, {1} reused",
+                    Lagrangian.ShapeMisses, Lagrangian.ShapeHits));
             return _fail == 0 ? 0 : 1;
         }
 
