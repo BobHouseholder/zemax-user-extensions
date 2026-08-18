@@ -69,6 +69,15 @@ namespace MoldStress
         public double[,] MemoryUsed;
         public double[,] TauViscMPa;
 
+        /// <summary>
+        /// The depth shape applied on top of the per-station magnitude, and where
+        /// it came from. Null when the Eulerian per-depth history is used, which
+        /// is the default. Mean over the wall is 1 by construction.
+        /// </summary>
+        public double[] DepthShapeApplied;
+        public int DepthShapeMinCount;
+        public string DepthShapeSource = "eulerian";
+
         public double[,] SigmaThermalMPa;  // in-plane equibiaxial residual stress
         public double[,] DnDensity;        // isotropic index change
         public Polymer Material;
@@ -475,6 +484,59 @@ namespace MoldStress
                     c.DnTotalOutOfPlane[i, k] =
                         c.DnFlow[i, k] + p.KGlassBrewster * 1e-6 * sigma[k];
                     c.DnDensity[i, k] = llFactor * compressibilityPerMPa * (fill.P[i] - pMean);
+                }
+            }
+
+            // ---- THE PORT: depth shape from the Lagrangian, magnitude from here.
+            //
+            // Applied as a normalised reweighting rather than a replacement, so
+            // the transfer is surgical. phi has mean 1 over the wall, so each
+            // station's thickness average is multiplied by 1 - every clause that
+            // reads a thickness average is invariant BY CONSTRUCTION, and only the
+            // depth clauses can respond. That invariant is asserted below rather
+            // than assumed, because a reweighting that quietly changed the
+            // magnitude would look exactly like a model improvement.
+            //
+            // What this does NOT do: it does not give the Eulerian channel the
+            // Lagrangian's along-flow behaviour, its deposition ordering, or its
+            // per-station shape variation. The shape is taken once for the part
+            // and applied at every station, so a part whose deposited fraction
+            // grows strongly along the flow is not represented. Stated here
+            // because the limitation is invisible in the output.
+            if (proc.LagrangianDepthHistory)
+            {
+                var lag = Lagrangian.Build(e, p, proc, fill, freeze, 4000);
+                double halfW = Math.Max(0.5 * freeze.ThicknessMm, 1e-9);
+                int minCount;
+                double[] phi = lag.DepthShape(freeze.Z, halfW, out minCount);
+                c.DepthShapeApplied = phi;
+                c.DepthShapeMinCount = minCount;
+                c.DepthShapeSource = "lagrangian";
+
+                for (int i = 0; i < ns; i++)
+                {
+                    double before = 0.0;
+                    for (int k = 0; k < nz; k++) before += Math.Abs(c.DnFlow[i, k]);
+                    before /= nz;
+
+                    for (int k = 0; k < nz; k++) c.DnFlow[i, k] = before * phi[k];
+
+                    double after = 0.0;
+                    for (int k = 0; k < nz; k++) after += Math.Abs(c.DnFlow[i, k]);
+                    after /= nz;
+                    if (before > 1e-30 && Math.Abs(after - before) / before > 1e-9)
+                        throw new InvalidOperationException(string.Format(
+                            "Lagrangian depth port moved the thickness average at station {0}: "
+                            + "{1:E6} -> {2:E6}. The shape must be mean-1; it is not.",
+                            i, before, after));
+
+                    // The out-of-plane sum is built from DnFlow, so it has to be
+                    // rebuilt after DnFlow moves. Leaving it stale would have made
+                    // the depth clause read the OLD shape while the in-plane clause
+                    // read the new one.
+                    for (int k = 0; k < nz; k++)
+                        c.DnTotalOutOfPlane[i, k] =
+                            c.DnFlow[i, k] + p.KGlassBrewster * 1e-6 * c.SigmaThermalMPa[i, k];
                 }
             }
 

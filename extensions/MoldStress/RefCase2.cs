@@ -220,6 +220,7 @@ namespace MoldStress
             // level below where the unknown-argument guard was added: the guard
             // asks whether a flag EXISTS, not whether the mode reads it.
             if (Program.Has(args, "-relax-below-tg")) proc.RelaxBelowTg = true;
+            if (Program.Has(args, "-lagrangian-depth")) proc.LagrangianDepthHistory = true;
             if (Program.Has(args, "-fountain"))
                 proc.FountainStrain = Program.Value(args, "-fountain", 1.0);
             if (Program.Has(args, "-thinned-lambda")) proc.ShearThinnedLambdaDuringFill = true;

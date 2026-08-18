@@ -76,6 +76,9 @@ namespace MoldStress
         public bool[] WasDeposited;     // true if the front laid it down
         public double[] ArrivalHeight;  // the y0 it started at, mm
         public double[] SFinal;         // resting station along the flow, mm
+        public double[] Weights;        // volumetric weight, carried out so the
+                                        // field can be volume-averaged rather
+                                        // than count-averaged
         public double PathLengthMm;
 
         public double DepositedFraction;   // of the half-gap, at the reporting station
@@ -370,6 +373,7 @@ namespace MoldStress
                 WasDeposited = ordered.Select(q => q.Deposited).ToArray(),
                 ArrivalHeight = ordered.Select(q => q.Y0).ToArray(),
                 SFinal = ordered.Select(q => q.SFinal).ToArray(),
+                Weights = ordered.Select(q => q.Weight).ToArray(),
                 PathLengthMm = L,
                 DepositedFraction = parts.Count(q => q.Deposited) / (double)parts.Count,
             };
@@ -382,6 +386,63 @@ namespace MoldStress
             double placed = lag.Z.Count(z => z >= -1e-9 && z <= H + 1e-9);
             lag.MassBalanceError = Math.Abs(placed - parts.Count) / (double)parts.Count;
             return lag;
+        }
+
+        /// <summary>
+        /// THE DEPTH SHAPE THIS MODEL PRODUCES, on the Eulerian channel's own
+        /// grid, normalised so its mean over the wall is exactly 1.
+        ///
+        /// This is the porting surface. The Eulerian channel's failure is a SHAPE
+        /// failure - it peaks at 60% of the half-wall where the measurements peak
+        /// at the skin - and its along-flow behaviour passes the in-plane clauses
+        /// on both reference cases. So what crosses over is the depth
+        /// distribution, and normalising to mean 1 is what makes that transfer
+        /// surgical: a station's thickness average is multiplied by 1 and cannot
+        /// move, so every clause that reads a thickness average is invariant by
+        /// construction and only the depth clauses can respond. If an in-plane
+        /// number changes, the port is wrong, and that is asserted rather than
+        /// hoped for.
+        ///
+        /// Volume-weighted, not count-weighted. Particles carry a weight u(y0)
+        /// because the volumetric flux at a height is proportional to the speed
+        /// there; averaging by count would over-represent the slow near-wall
+        /// material, which is precisely the material this model exists to place
+        /// correctly. (InPlaneProfile below still averages by count - it predates
+        /// the weight being carried out, and its clause is a shape comparison
+        /// that the weighting does not decide.)
+        ///
+        /// Band-averaged for the same reason DnAtFraction is: adjacent core
+        /// particles differ by three orders because a core element's final
+        /// orientation depends sharply on when it freezes relative to the flow
+        /// stopping. minCount is returned so a thin band cannot pass silently.
+        /// </summary>
+        public double[] DepthShape(double[] zSignedMm, double halfMm, out int minCount)
+        {
+            int nz = zSignedMm.Length;
+            var phi = new double[nz];
+            double band = Math.Max(0.05 * halfMm, 2.0 * halfMm / Math.Max(nz - 1, 1));
+            minCount = int.MaxValue;
+
+            for (int k = 0; k < nz; k++)
+            {
+                double target = Math.Abs(zSignedMm[k]);
+                double num = 0.0, den = 0.0; int n = 0;
+                for (int i = 0; i < Z.Length; i++)
+                {
+                    if (Math.Abs(Z[i] - target) > band) continue;
+                    double w = Weights != null ? Weights[i] : 1.0;
+                    num += w * Math.Abs(DnFlow[i]); den += w; n++;
+                }
+                phi[k] = den > 0.0 ? num / den : 0.0;
+                if (n < minCount) minCount = n;
+            }
+
+            double mean = 0.0;
+            for (int k = 0; k < nz; k++) mean += phi[k];
+            mean /= Math.Max(nz, 1);
+            if (mean <= 0.0) { for (int k = 0; k < nz; k++) phi[k] = 1.0; return phi; }
+            for (int k = 0; k < nz; k++) phi[k] /= mean;
+            return phi;
         }
 
         /// <summary>

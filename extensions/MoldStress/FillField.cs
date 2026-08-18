@@ -186,6 +186,28 @@ namespace MoldStress
         /// it drives orientation into the CORE - measured, depth ratio 2.07 -> 0.22
         /// - which is the opposite of the published skin-peaked profile.
         /// </summary>
+        /// <summary>
+        /// Take the flow channel's DEPTH SHAPE from the Lagrangian particle model
+        /// instead of from the Eulerian per-depth history, preserving each
+        /// station's thickness average exactly.
+        ///
+        /// The Eulerian channel assumes every layer sat at its final depth since
+        /// t=0. Under that assumption the memory factor is the product of two
+        /// monotone factors running in opposite directions - build-up needs
+        /// reduced time, retention is destroyed by it - so it MUST peak somewhere
+        /// between wall and core, and it does, at 60% of the half-wall on both
+        /// reference cases. The measurements peak at the skin. That is not a
+        /// missing term: tripling the deposition raises the wall from 1.49e-4 to
+        /// 4.47e-4 and leaves the peak at 60%, and eight configurations of extra
+        /// terms were measured and rejected before this.
+        ///
+        /// Lagrangian.cs already carries the right history - skin material was
+        /// sheared in the hot core and carried to the wall by the front - and this
+        /// flag is what lets the shipped channel use it without becoming it.
+        /// Off by default until it is measured on both cases.
+        /// </summary>
+        public bool LagrangianDepthHistory = false;
+
         public bool ChannelNarrowing = false;
     }
 

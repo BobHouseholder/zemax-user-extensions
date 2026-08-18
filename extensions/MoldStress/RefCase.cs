@@ -122,6 +122,7 @@ namespace MoldStress
             // time only) and remain the declared defaults.
             var proc = new Process { FillTimeS = 1.0, PackPressureMPa = 71.3, PackTimeS = 3.0 };
             if (Program.Has(args, "-relax-below-tg")) proc.RelaxBelowTg = true;
+            if (Program.Has(args, "-lagrangian-depth")) proc.LagrangianDepthHistory = true;
             if (Program.Has(args, "-fountain"))
                 proc.FountainStrain = Program.Value(args, "-fountain", 1.0);
             // -frontmode carried|extensional. This used to scan args for the BARE
@@ -221,6 +222,25 @@ namespace MoldStress
                 var fill = FillField.Build(e, p, proc, 101);
                 var freeze = FreezeHistory.Build(e.CentreThicknessMm, p, proc, nzGrid, nFdGrid);
                 var ch = Channels.Build(e, p, proc, fill, freeze);
+
+                // When the depth shape is ported in, SAY SO and say what it is.
+                // A reweighting that silently replaced the profile would present
+                // a different model's answer under this model's name, and the
+                // sample count per band is the thing that decides whether the
+                // shape is a measurement or noise.
+                if (ch.DepthShapeApplied != null)
+                {
+                    Console.WriteLine("  depth shape: {0}, min band count {1}",
+                        ch.DepthShapeSource, ch.DepthShapeMinCount);
+                    Console.Write("    phi(z/h):");
+                    for (int f = 10; f >= 0; f -= 2)
+                    {
+                        int kk = (int)Math.Round((freeze.NodeCount - 1) * (0.5 + 0.05 * f));
+                        kk = Math.Max(0, Math.Min(freeze.NodeCount - 1, kk));
+                        Console.Write("  {0}%={1:F3}", f * 10, ch.DepthShapeApplied[kk]);
+                    }
+                    Console.WriteLine();
+                }
 
                 // Thickness average of |dn| at each station along the flow - what
                 // a polarimeter reading through the plate actually integrates.
@@ -566,11 +586,31 @@ namespace MoldStress
                 bandRatio));
 
             // NULL for the depth clause.
-            bool depthNull = (gotRatio - 1.0) * (reversedRatio - 1.0) < 0
-                             || Math.Abs(reversedRatio - gotRatio) / Math.Max(gotRatio, 1e-30) > 0.5;
+            // This passes on EITHER of two things and they are not the same
+            // claim, so it now says which one fired. The clause was labelled
+            // "must invert" while the code accepted a >50% change as well, and
+            // under the Lagrangian depth port that difference became material:
+            // the ratio goes 3.45 -> 1231, a 35,600% response that does NOT
+            // cross 1. Reported as an inversion it would have been a false
+            // description of how the model answered the control.
+            //
+            // Both branches are legitimate - a control that moves the answer by
+            // two orders is not a dead control - but "inverted" and "responded
+            // enormously in the same direction" are different findings, and the
+            // second needs its direction explained rather than absorbed. Here it
+            // is the CORE that collapses: mirroring the freeze order makes the
+            // core freeze first, so core material freezes with almost no
+            // accumulated orientation and the denominator goes to nearly zero.
+            bool nullInverts = (gotRatio - 1.0) * (reversedRatio - 1.0) < 0;
+            double nullChange = Math.Abs(reversedRatio - gotRatio) / Math.Max(gotRatio, 1e-30);
+            bool depthNull = nullInverts || nullChange > 0.5;
             say(string.Format(ci,
-                "      null: freeze order reversed, ratio {0:F2} vs {1:F2}  =>  {2}",
-                reversedRatio, gotRatio, depthNull ? "PASS" : "FAIL"));
+                "      null: freeze order reversed, ratio {0:F2} vs {1:F2} ({3})  =>  {2}",
+                reversedRatio, gotRatio, depthNull ? "PASS" : "FAIL",
+                nullInverts
+                    ? "inverts across 1"
+                    : string.Format(ci, "does NOT invert; passes on a {0:P0} change, same side of 1",
+                                    nullChange)));
 
             // WHY the null cannot move, measured rather than inferred. A clamped
             // quantity is deaf to its inputs; if the memory integral is saturated
