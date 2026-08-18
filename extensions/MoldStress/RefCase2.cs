@@ -159,23 +159,56 @@ namespace MoldStress
             // the whole thickness while the numerator is one outer layer. That
             // assumption is stated because it halves the answer if wrong, and the
             // two-sided figure is printed beside it.
+            // ONE-SIDED, OVER 0.8 mm - settled from the figure, 2026-08-18.
+            //
+            // Fig. 10's caption reads "layer thickness removed FROM THE SURFACE
+            // near the gate area" - singular - and the text says 50% came off
+            // "after 0.4 mm, NAMELY HALF OF GATE THICKNESS". The gate land is
+            // 0.8 mm, so removal runs from ONE face into a 0.8 mm body. Fig. 10's
+            // right-hand axis closes it: removed birefringence runs 0 to
+            // 1.84e-5, so 46.2% is ~1.7e-5 against a total near 3.7e-5, which is
+            // exactly the measured gate reading. The layer removal decomposes the
+            // gate value, over 0.8 mm.
+            //
+            // This was previously integrated over the 2.0 mm centre thickness and
+            // reported one- and two-sided side by side, which was an assumption
+            // dressed as a choice. It also exposes a GEOMETRY error here: a
+            // 0.273 mm rim cannot survive a 0.4 mm cut, so the real lens must
+            // carry a flange of about the gate thickness at its rim and the
+            // sagitta-to-the-full-semi-diameter model of it is wrong. Until the
+            // flange is modelled, the comparison is made at the station whose
+            // LOCAL gap is closest to 0.8 mm, and that station is reported.
+            int iCmp = 0; double bestGap = double.MaxValue;
+            for (int i2 = 0; i2 < ns; i2++)
+            {
+                double d = Math.Abs(fill.H[Math.Min(i2, fill.H.Length - 1)] - 0.8);
+                if (d < bestGap) { bestGap = d; iCmp = i2; }
+            }
+            double hCmp = fill.H[Math.Min(iCmp, fill.H.Length - 1)];
+            double halfCmp = 0.5 * hCmp;
+            Console.WriteLine(string.Format(ci,
+                "  layer removal - ONE-SIDED, at the station where the gap is {0:F3} mm " +
+                "(s = {1:F1} mm), against the paper's 0.8 mm gate region",
+                hCmp, ch.S[iCmp]));
             double total = 0.0;
-            for (int k = 0; k < nzc; k++) total += Math.Abs(ch.DnTotalOutOfPlane[0, k]);
-            Console.WriteLine("  layer removal - cumulative retardance in the outer t mm");
-            Console.WriteLine("    t (mm)   measured   model 1-sided   model 2-sided");
+            for (int k = 0; k < nzc; k++) total += Math.Abs(ch.DnTotalOutOfPlane[iCmp, k]);
+            Console.WriteLine("    t (mm)   measured   model");
             int nOk = 0;
             for (int j = 0; j < RemovalDepthMm.Length; j++)
             {
                 double t = RemovalDepthMm[j], outer = 0.0;
+                double zCut = halfCmp - t * (halfCmp / 0.4);   // t scaled to this gap
                 for (int k = 0; k < nzc; k++)
-                    if (Math.Abs(freeze.Z[k]) >= half - t) outer += Math.Abs(ch.DnTotalOutOfPlane[0, k]);
-                double oneSided = total > 0 ? 0.5 * outer / total : 0.0;   // one face only
-                double twoSided = total > 0 ? outer / total : 0.0;
-                bool ok = Math.Abs(oneSided - RemovedFraction[j]) <= 0.10;  // 10 points
+                {
+                    double zLoc = freeze.Z[k] * (hCmp / freeze.ThicknessMm);
+                    if (Math.Abs(zLoc) >= zCut) outer += Math.Abs(ch.DnTotalOutOfPlane[iCmp, k]);
+                }
+                double oneSided = total > 0 ? 0.5 * outer / total : 0.0;
+                bool ok = Math.Abs(oneSided - RemovedFraction[j]) <= 0.10;
                 if (ok) nOk++;
                 Console.WriteLine(string.Format(ci,
-                    "    {0,5:F1}    {1,7:P1}    {2,10:P1}     {3,10:P1}   {4}",
-                    t, RemovedFraction[j], oneSided, twoSided, ok ? "ok" : "off"));
+                    "    {0,5:F1}    {1,7:P1}    {2,7:P1}   {3}",
+                    t, RemovedFraction[j], oneSided, ok ? "ok" : "off"));
             }
             bool removalOk = nOk >= 3;
             Console.WriteLine(string.Format(ci,
