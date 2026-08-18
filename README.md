@@ -271,6 +271,18 @@ index onto a stressed surface silently empties the retardance map), which is why
 the density term rides in the stress tensor as a hydrostatic component; and
 `GetRetardanceMap`'s first argument is a sampling selector, not a point count.
 
+**The depth distribution of the flow channel comes from a Lagrangian particle
+model, and that is the default.** The Eulerian channel computes, for each depth,
+the stress an element would build up having sat there since t=0 - and under that
+assumption the retained orientation must peak between wall and core, because
+build-up and retention run in opposite directions in reduced time. Measurements
+peak at the skin, because in fountain flow the skin never sat at the wall: it was
+sheared in the hot core, carried to the wall by the advancing front and quenched
+on arrival. The particle model carries that history; the shape it produces is
+solved per station on the local gap and applied to the Eulerian per-station
+magnitude, normalised so that no thickness-averaged quantity can move. It costs
+tens of seconds per build. `-eulerian-depth` turns it off.
+
 **Fountain flow is ON by default.** Material reaching the cavity wall got there
 through the melt front, turning through roughly a right angle and stretching on
 the way; that strain is imposed once at deposition and then relaxes, so the skin
@@ -346,13 +358,18 @@ Candidate sources for further checks are in
 | in-plane peak | 1.398e-4 against a published 1.2e-4 - **1.16x** | within a factor of 2 | PASS |
 | in-plane shape | maximum at the gate, 46.5% of it at the far edge | must decay from the gate | PASS |
 | gate null | peak moves x=0 -> x=100 mm when the gate moves | must track the gate | PASS |
-| depth ratio | **0.82** surface/deep against a published 2.78 | [1.39, 5.56] | **FAIL** |
-| depth peak position | maximum at **53%** of the half-wall | beyond 75% | **FAIL** |
-| depth null (flow) | 2.38 vs 0.58 with the freeze order mirrored | must invert | PASS |
-| depth null (thermal) | CTE=0 collapses to flow-only, and the channel is material (0.82 vs 0.58) | must collapse | PASS |
+| depth ratio | **3.45** surface/deep against a published 2.78 | [1.39, 5.56] | PASS |
+| depth peak position | maximum at **93%** of the half-wall | beyond 75% | PASS |
+| depth null (flow) | denominator collapses to exactly 0 with the freeze order mirrored | must respond | PASS |
+| depth null (thermal) | CTE=0 collapses to flow-only, and the channel is material | must collapse | PASS |
 
-Converged from **nz=41** since the freeze-history fix: 1.16x / 0.82 at nz 41, 81
-and 161, 1.17x / 0.82 at 321.
+**`-refcase` now reports the registered criterion as MET.** It did not before
+2026-08-18; the depth ratio was 0.82 and the peak sat at 53% of the half-wall.
+What changed is the depth history, not a constant - see below. `-eulerian-depth`
+restores the previous behaviour exactly, including both failures.
+
+Converged from **nz=41** since the freeze-history fix, and the depth ratio is
+flat at 3.43-3.46 across nz 41/81/161/321.
 
 ### Case 2 - ZEONEX 480R plano-convex lens
 
@@ -387,8 +404,9 @@ build-up needs reduced time, retention is destroyed by it - so the product must
 peak somewhere between wall and core. At the wall a layer freezes before it can
 build anything; at the core it builds fully and then relaxes.
 
-**A port of the Lagrangian depth history is available as `-lagrangian-depth`,
-off by default.** It takes the depth SHAPE from `Lagrangian.cs` and applies it to
+**The flow channel's depth shape comes from the Lagrangian particle model, and
+this is the default since 2026-08-18.** `-eulerian-depth` turns it off and
+restores the previous behaviour exactly. It takes the depth SHAPE from `Lagrangian.cs` and applies it to
 the Eulerian per-station magnitude, normalised to mean 1 over the wall - so each
 station's thickness average is multiplied by 1 and cannot move. Every clause that
 reads a thickness average is invariant by construction, asserted at runtime
@@ -403,12 +421,18 @@ collapses to a single solve, so the plate case costs exactly what it did.
 
 | | case 1 depth ratio | case 1 peak position | case 2 layer removal |
 |---|---|---|---|
-| Eulerian (default) | 0.82 **FAIL** | 53% **FAIL** | 3 of 4 **PASS** |
-| `-lagrangian-depth`, one shape per part | 3.45 PASS | 93% PASS | 2 of 4 **FAIL** |
-| `-lagrangian-depth`, per-station | **3.44 PASS** | **94% PASS** | **3 of 4 PASS** |
+| `-eulerian-depth` (was the default) | 0.82 **FAIL** | 53% **FAIL** | 3 of 4 **PASS** |
+| Lagrangian, one shape per part | 3.45 PASS | 93% PASS | 2 of 4 **FAIL** |
+| **Lagrangian, per-station (default)** | **3.45 PASS** | **93% PASS** | **3 of 4 PASS** |
 
-With it on, **case 1 reports the registered criterion as MET** and case 2 has only
-its in-plane peak outstanding.
+On the default, **case 1 meets the registered criterion** and case 2 has only its
+in-plane peak outstanding.
+
+**It costs time, and that is the honest price of the default.** The shape is a
+particle solve per gap node, so builds that took under a second take tens of
+seconds: `-selftest` runs in about 2m45 where it used to be near-instant, and a
+reference case takes 2-3 minutes. Nothing is cached between builds yet, which is
+the obvious place to get it back.
 
 The middle row is why the per-station solve exists. A single part-wide shape
 makes `DnFlow[i,k] = A_i * phi[k]`, so the normalised depth profile is identical
@@ -426,6 +450,23 @@ to matter by 11%, and at 16000 that falls to 1-3% and goes non-monotone, so most
 of it was particle noise; 6 nodes ships. Both are settable with
 `-shape-particles` and `-shape-nodes`. A reference case takes 2-3 minutes with
 the shape on.
+
+**Two self-tests had to move, and neither was a numerical regression.** Both
+were written for the Eulerian decomposition that the port replaces, so both are
+now pinned to `-eulerian-depth`, where the property they assert is true and still
+worth guarding. "The fountain is the same at the gate and the far edge" assumed
+the fountain is a separable additive term at a fixed depth; under the port it is
+folded into the station's thickness average and redistributed by a shape. "Shear
+birefringence vanishes at the mid-plane" holds because an Eulerian element there
+has sat at zero shear stress since t=0 - give the material a path and the element
+now at the mid-plane arrived from somewhere with nonzero shear, so it carries
+orientation. Asserting that on the default path would be asserting the assumption
+the port exists to remove.
+
+The default path gained two checks of its own: the port must leave the thickness
+average alone (it matches to 1.2e-16) and it must actually move the skin value
+(7.37e-5 -> 8.45e-4), so the first cannot pass on a port that did nothing. 57
+self-tests pass, 0 fail.
 
 **One clause cannot test the interpolation, and says so.** Case 2's layer removal
 samples s = 0, which is the minimum gap and therefore the first interpolation

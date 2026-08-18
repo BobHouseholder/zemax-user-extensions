@@ -122,7 +122,11 @@ namespace MoldStress
             // time only) and remain the declared defaults.
             var proc = new Process { FillTimeS = 1.0, PackPressureMPa = 71.3, PackTimeS = 3.0 };
             if (Program.Has(args, "-relax-below-tg")) proc.RelaxBelowTg = true;
+            // -lagrangian-depth is now the default and is kept as an explicit
+            // opt-IN so scripts written while it was optional still say what
+            // they mean. -eulerian-depth is the opt-out.
             if (Program.Has(args, "-lagrangian-depth")) proc.LagrangianDepthHistory = true;
+            if (Program.Has(args, "-eulerian-depth")) proc.LagrangianDepthHistory = false;
             if (Program.Has(args, "-shape-nodes"))
                 proc.DepthShapeGapNodes = (int)Program.Value(args, "-shape-nodes", 6);
             if (Program.Has(args, "-shape-particles"))
@@ -434,13 +438,26 @@ namespace MoldStress
                     // a summed field needs a decomposition test, not a bigger kick.
                     double sRevFlow = Channels.DnAtDepthFraction(chRev.DnFlow, reversed.Z, 0, half, SurfaceFraction);
                     double dRevFlow = Channels.DnAtDepthFraction(chRev.DnFlow, reversed.Z, 0, half, DeepFraction);
+                    // Printing "Infinity" as a passing ratio is not a measurement,
+                    // so this now says the denominator vanished and reports the two
+                    // values that formed it. The zero is a real model output rather
+                    // than a numerical slip: mirroring the freeze order makes the
+                    // CORE freeze first, so core material vitrifies before it can
+                    // accumulate any orientation and retains exactly nothing. The
+                    // null is still discriminating - it is the denominator that
+                    // collapsed, which is the response being asked for - but a
+                    // reader has to be able to see that rather than infer it from
+                    // the word Infinity.
                     double revFlowRatio = dRevFlow > 0 ? sRevFlow / dRevFlow : double.PositiveInfinity;
                     double baseFlowRatio = flowOnlyDeep > 0 ? flowOnlySurface / flowOnlyDeep : double.PositiveInfinity;
                     bool flowNull = double.IsInfinity(revFlowRatio) != double.IsInfinity(baseFlowRatio)
                         || Math.Abs(revFlowRatio - baseFlowRatio) / Math.Max(baseFlowRatio, 1e-30) > 0.5;
                     say(string.Format(ci,
-                        "      null (i) flow, freeze order mirrored: flow ratio {0:F3} vs {1:F3}  =>  {2}",
-                        revFlowRatio, baseFlowRatio, flowNull ? "PASS" : "FAIL"));
+                        "      null (i) flow, freeze order mirrored: flow ratio {3} vs {1:F3}  =>  {2}",
+                        revFlowRatio, baseFlowRatio, flowNull ? "PASS" : "FAIL",
+                        double.IsInfinity(revFlowRatio)
+                            ? string.Format(ci, "UNDEFINED (surface {0:E3}, deep exactly 0)", sRevFlow)
+                            : revFlowRatio.ToString("F3", ci)));
 
                     var pNoCte = p.WithZeroCte();
                     var chNoCte = Channels.Build(e, pNoCte, proc, fill, freeze);

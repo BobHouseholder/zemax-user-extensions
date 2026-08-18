@@ -220,7 +220,11 @@ namespace MoldStress
             // level below where the unknown-argument guard was added: the guard
             // asks whether a flag EXISTS, not whether the mode reads it.
             if (Program.Has(args, "-relax-below-tg")) proc.RelaxBelowTg = true;
+            // -lagrangian-depth is now the default and is kept as an explicit
+            // opt-IN so scripts written while it was optional still say what
+            // they mean. -eulerian-depth is the opt-out.
             if (Program.Has(args, "-lagrangian-depth")) proc.LagrangianDepthHistory = true;
+            if (Program.Has(args, "-eulerian-depth")) proc.LagrangianDepthHistory = false;
             if (Program.Has(args, "-shape-nodes"))
                 proc.DepthShapeGapNodes = (int)Program.Value(args, "-shape-nodes", 6);
             if (Program.Has(args, "-shape-particles"))

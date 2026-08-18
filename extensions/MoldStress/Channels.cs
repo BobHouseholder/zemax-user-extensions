@@ -1114,6 +1114,25 @@ namespace MoldStress
                                              WidthMm = 100, ThicknessMm = 0.9 };
                 var fillF = FillField.Build(plateF, pf, procOn, 51);
                 var frF = FreezeHistory.Build(plateF.CentreThicknessMm, pf, procOn, 81);
+                // THESE CHECKS ARE ABOUT THE EULERIAN DECOMPOSITION, so they are
+                // pinned to it. They ask what the fountain term contributes at a
+                // fixed depth by subtracting a run with it off - which assumes the
+                // fountain is a separable additive term at that depth. Under the
+                // Lagrangian depth port it is not: it is folded into the station's
+                // thickness average and then redistributed by a shape, so the
+                // subtraction returns the difference of two magnitudes scaled by
+                // the same shape and the "must not vary along the flow" property
+                // stops holding. That is the port changing the decomposition, not
+                // the fountain picking up the shear field, and it failed exactly
+                // this way when the port became the default (1.19e-4 vs 2.68e-4).
+                //
+                // Deleting them would lose a real guard on the Eulerian channel,
+                // which still ships and is still reachable with -eulerian-depth.
+                // So they keep testing what they were written to test, on the path
+                // where the property is true, and the default path gets its own
+                // checks below.
+                procOn.LagrangianDepthHistory = false;
+                procOff.LagrangianDepthHistory = false;
                 var cOn = Build(plateF, pf, procOn, fillF, frF);
                 var cOff = Build(plateF, pf, procOff, fillF, frF);
 
@@ -1173,12 +1192,56 @@ namespace MoldStress
             // measured with the fountain off, because deposition does not vanish
             // there and has no reason to. Running this on the total was fine only
             // while the fountain was gated off by default.
+            //
+            // Also pinned to the Eulerian path, and for a reason worth stating:
+            // this is NOT true under a Lagrangian history and should not be. It
+            // holds because an Eulerian element at the mid-plane has sat there
+            // since t=0 where the shear stress is exactly zero. Give the material
+            // a path and the element now at the mid-plane arrived from somewhere
+            // with nonzero shear - it is the last material the front laid down -
+            // so it carries orientation, and the model that says otherwise is the
+            // one this port exists to replace. Asserting it on the default path
+            // would be asserting the assumption that was wrong.
             var procNoF = new Process { FillTimeS = proc.FillTimeS, PackTimeS = proc.PackTimeS,
                                         PackPressureMPa = proc.PackPressureMPa,
-                                        FountainStrain = 0.0 };
+                                        FountainStrain = 0.0,
+                                        LagrangianDepthHistory = false };
             var cShear = Build(plate, p, procNoF, fill, freeze);
-            SelfTest.Near("shear birefringence vanishes at the mid-plane",
+            SelfTest.Near("shear birefringence vanishes at the mid-plane (Eulerian path)",
                 cShear.DnFlow[0, freeze.NodeCount / 2], 0.0, 1e-12);
+
+            // --- and what the DEFAULT path must satisfy instead ---------------
+            // The port's whole safety argument is that it moves the depth shape
+            // and nothing else. That is enforced at runtime by an assertion
+            // inside Build, which only fires on the station it is checking; this
+            // checks it end to end, on the quantity the in-plane clauses read.
+            {
+                var procE = new Process { FillTimeS = proc.FillTimeS, PackTimeS = proc.PackTimeS,
+                                          PackPressureMPa = proc.PackPressureMPa,
+                                          LagrangianDepthHistory = false };
+                var procL = new Process { FillTimeS = proc.FillTimeS, PackTimeS = proc.PackTimeS,
+                                          PackPressureMPa = proc.PackPressureMPa,
+                                          LagrangianDepthHistory = true,
+                                          DepthShapeParticles = 1000 };
+                var cE = Build(plate, p, procE, fill, freeze);
+                var cL = Build(plate, p, procL, fill, freeze);
+                int nzS = freeze.NodeCount;
+                double avgE = 0.0, avgL = 0.0;
+                for (int k = 0; k < nzS; k++)
+                {
+                    avgE += Math.Abs(cE.DnFlow[0, k]);
+                    avgL += Math.Abs(cL.DnFlow[0, k]);
+                }
+                SelfTest.Near("the depth port leaves the thickness average alone",
+                    avgL / nzS, avgE / nzS, 1e-9);
+
+                // ... and it must actually MOVE the shape, or the check above is
+                // passing on a port that did nothing.
+                double topE = Math.Abs(cE.DnFlow[0, nzS - 2]), topL = Math.Abs(cL.DnFlow[0, nzS - 2]);
+                SelfTest.Check("the depth port moves the skin value",
+                    topE > 0.0 && Math.Abs(topL - topE) / topE > 0.25,
+                    string.Format("skin {0:E3} -> {1:E3}", topE, topL));
+            }
 
             // ... and it must peak between the surface and the core, not at
             // either end. That is the signature the reference case reports.

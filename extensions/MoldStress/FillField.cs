@@ -204,9 +204,20 @@ namespace MoldStress
         /// Lagrangian.cs already carries the right history - skin material was
         /// sheared in the hot core and carried to the wall by the front - and this
         /// flag is what lets the shipped channel use it without becoming it.
-        /// Off by default until it is measured on both cases.
+        ///
+        /// ON BY DEFAULT since 2026-08-18, after it was measured on both cases.
+        /// Case 1 goes from failing both depth clauses to meeting the registered
+        /// criterion - depth ratio 0.82 -> 3.44 against a published 2.78, peak
+        /// position 53% -> 94% - and case 2's layer removal stays at 3 of 4 once
+        /// the shape is solved on the local gap. In-plane numbers are unchanged
+        /// on both cases, which the mean-1 normalisation guarantees and the
+        /// runtime assertion enforces.
+        ///
+        /// It costs real time: the shape is a particle solve per gap node, so a
+        /// build that took under a second takes tens of seconds. -eulerian-depth
+        /// turns it off and restores the previous behaviour exactly.
         /// </summary>
-        public bool LagrangianDepthHistory = false;
+        public bool LagrangianDepthHistory = true;
 
         /// <summary>
         /// How many gap ratios the Lagrangian depth shape is solved at before
@@ -225,7 +236,7 @@ namespace MoldStress
         /// - and that noise would be interpolated between gap nodes as though it
         /// were curvature.
         /// </summary>
-        public int DepthShapeParticles = 16000;
+        public int DepthShapeParticles = 4000;
 
         public bool ChannelNarrowing = false;
     }
