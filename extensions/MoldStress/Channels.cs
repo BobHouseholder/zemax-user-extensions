@@ -52,6 +52,23 @@ namespace MoldStress
         /// solid material below Tg, so C_melt does not apply to it.
         /// </summary>
         public double[,] DnTotalOutOfPlane;
+        /// <summary>
+        /// The memory factor and shear stress the model ACTUALLY USED, stored per
+        /// (station, depth) rather than left to be recomputed.
+        ///
+        /// Three separate diagnostics have now been caught recomputing these with
+        /// a different call than Channels.Build makes - DepthDiag's memory column
+        /// evaluating the isothermal closed form, DepthDiag running different
+        /// process conditions, and RefCase2's depth table omitting the local-gap
+        /// time scaling. Each produced a plausible column that did not reconcile
+        /// with the dn beside it, and one of them shaped hours of wrong diagnosis.
+        ///
+        /// A recomputation can drift. A stored value cannot. Diagnostics read
+        /// these; nothing recomputes them.
+        /// </summary>
+        public double[,] MemoryUsed;
+        public double[,] TauViscMPa;
+
         public double[,] SigmaThermalMPa;  // in-plane equibiaxial residual stress
         public double[,] DnDensity;        // isotropic index change
         public Polymer Material;
@@ -80,6 +97,8 @@ namespace MoldStress
                 S = fill.S, Z = freeze.Z, Material = p,
                 DnFlow = new double[ns, nz],
                 DnTotalOutOfPlane = new double[ns, nz],
+                MemoryUsed = new double[ns, nz],
+                TauViscMPa = new double[ns, nz],
                 SigmaThermalMPa = new double[ns, nz],
                 DnDensity = new double[ns, nz],
             };
@@ -280,6 +299,8 @@ namespace MoldStress
                         memory = MemoryFactor(tArrive, tFill, tFreezeAbs, lambda, tPack);
                     }
                     double tauMPa = tauViscMPa * memory;
+                    c.MemoryUsed[i, k] = memory;
+                    c.TauViscMPa[i, k] = tauViscMPa;
 
                     // Stress-optical rule in simple shear: the principal stress
                     // difference is 2*tau.

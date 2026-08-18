@@ -242,17 +242,18 @@ namespace MoldStress
                 {
                     double f = Math.Abs(freeze.Z[k]) / halfd;
                     double tAbs = freeze.FreezeTimeS[k];
-                    double xi = 0.0, mem = 0.0;
+                    // READ what the model used - never recompute it. Three
+                    // diagnostics have already drifted from Channels.Build by
+                    // recomputing this with different arguments.
+                    double mem = ch.MemoryUsed[0, k];
+                    double tau = ch.TauViscMPa[0, k];
+                    double xi = 0.0;
                     if (freeze.TimeGridS != null && freeze.TempHistoryC != null)
                     {
                         var hist = new double[freeze.TimeGridS.Length];
                         for (int q = 0; q < hist.Length; q++) hist[q] = freeze.TempHistoryC[k, q];
                         xi = Channels.ReducedTimeToFreeze(freeze.TimeGridS, hist, p, tAbs);
-                        mem = Channels.MemoryFactorWlf(0.0, proc.FillTimeS, tAbs,
-                                                       freeze.TimeGridS, hist, p, lam0,
-                                                       proc.PackTimeS);
                     }
-                    double tau = fill.DpDs[0] * Math.Abs(freeze.Z[k]) * (fill.H[0] / freeze.ThicknessMm);
                     say2(string.Format(ci,
                         "  {0,5:P0}  {1,9:F4}  {2,9:F3}  {3,8:F4}  {4,10:E2}  {5,10:E2}",
                         f, tAbs, xi, mem, tau, Math.Abs(ch.DnFlow[0, k])));
