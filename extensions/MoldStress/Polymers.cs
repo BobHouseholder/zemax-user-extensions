@@ -195,6 +195,29 @@ namespace MoldStress
                 CrossN = 0.29, CrossTauStarPa = 4.0e4,
                 WlfD1PaS = 8.0e12, WlfD2K = 451.15, WlfD3KPerPa = 0.0, WlfA1 = 27.0, WlfA2K = 51.6,
             },
+            new Polymer {
+                Name = "MS_COP_ZEONEX480R",
+                Description = "Zeon ZEONEX 480R cyclo-olefin POLYMER, optical moulding grade",
+                // MEASURED for this grade, from the vendor datasheet (corroborated
+                // across UL Prospector, MatWeb and Material Data Center):
+                Nd = 1.525, Vd = 56.0, WavelengthUm = 0.5876,
+                TgC = 138,                       // <-- 40 K below TOPAS 6017's 178
+                MeltTempC = 275, MoldTempC = 124,
+                // BORROWED from the measured TOPAS 6017 COC - same cyclo-olefin
+                // family, different grade and different polymerisation route (COP
+                // by ring-opening metathesis, COC by chain copolymerisation).
+                // These are the numbers to replace first if this grade matters.
+                KGlassBrewster = -8.5, K11Brewster = 2.43,
+                KSource = "BORROWED from TOPAS 6017 (Kim, Yoon & Kornfield 2006). A photoelastic coefficient of 5.0e-12 /Pa is quoted for 'Zeonor 480R' in a USPTO document that could NOT be retrieved to verify - not used, recorded as a lead only",
+                Provisional = true,
+                CMeltBrewster = 1000.0,
+                CMeltSource = "BORROWED from TOPAS 6017. No melt stress-optical coefficient found for 480R; the melt coefficient is a rheo-optical measurement and is not on any datasheet",
+                MeltModulusPa = 2.8e5,
+                DiffusivityMm2PerS = 0.10, CtePerK = 60e-6, ModulusMPa = 2100, PoissonRatio = 0.36,
+                DensityGPerCm3 = 1.01,
+                CrossN = 0.29, CrossTauStarPa = 4.0e4,
+                WlfD1PaS = 8.0e12, WlfD2K = 411.15, WlfD3KPerPa = 0.0, WlfA1 = 27.0, WlfA2K = 51.6,
+            },
         };
 
         /// <summary>

@@ -77,11 +77,21 @@ namespace MoldStress
             Console.WriteLine("MoldStress - reference case 2: a moulded LENS (ZEONEX 480R)");
             Console.WriteLine("  " + Program.ScopeLabel);
             Console.WriteLine("  source: Chang et al., CoreTech/NTHU, Moldex3D verification study");
-            Console.WriteLine("  ZEONEX 480R constants BORROWED from measured TOPAS 6017 COC");
+            Console.WriteLine("  480R: Tg and nd from the datasheet; stress-optic constants still BORROWED from TOPAS 6017");
             Console.WriteLine();
 
-            Polymers.Aliases["ZEONEX480R"] = "MS_COC_TOPAS6017";
-            var p = Polymers.ByName("ZEONEX480R").WithProcessTemps(275.0, 124.0);
+            // Its OWN entry now, rather than an alias onto TOPAS. What is sourced
+            // for 480R is used (Tg 138 C, nd 1.525 from the vendor datasheet);
+            // only the stress-optic and rheological constants are still borrowed,
+            // and they are marked as such in the table.
+            //
+            // The Tg is the substitution that mattered most and it was not the
+            // coefficient being hunted: TOPAS 6017 is Tg 178 C against 480R's
+            // 138 C. Against a 124 C mould that is the difference between the
+            // model thinking the part is 54 K below Tg and its really being 14 K,
+            // which sets how fast the skin freezes and therefore how much
+            // orientation survives.
+            var p = Polymers.ByName("MS_COP_ZEONEX480R").WithProcessTemps(275.0, 124.0);
             var proc = new Process { FillTimeS = 1.0, PackPressureMPa = 98.10, PackTimeS = 3.0 };
 
             double curvature = Program.Value(args, "-curvature", 75.0);
