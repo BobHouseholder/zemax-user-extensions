@@ -208,10 +208,10 @@ namespace MoldStress
                 // by ring-opening metathesis, COC by chain copolymerisation).
                 // These are the numbers to replace first if this grade matters.
                 KGlassBrewster = -8.5, K11Brewster = 2.43,
-                KSource = "BORROWED from TOPAS 6017 (Kim, Yoon & Kornfield 2006). A photoelastic coefficient of 5.0e-12 /Pa is quoted for 'Zeonor 480R' in a USPTO document that could NOT be retrieved to verify - not used, recorded as a lead only",
+                KSource = "BORROWED from TOPAS 6017 (Kim, Yoon & Kornfield 2006). A photoelastic coefficient of 5.0e-12 /Pa is quoted for 'Zeonor 480R' in a USPTO document that could NOT be retrieved to verify - not used, recorded as a lead only. NOTE this GLASSY constant is what Zeon's low-birefringence marketing refers to ('ultra-low photoelastic constant'), and it drives the THERMAL channel, not the melt orientation that sets the in-plane peak",
                 Provisional = true,
                 CMeltBrewster = 1000.0,
-                CMeltSource = "BORROWED from TOPAS 6017. No melt stress-optical coefficient found for 480R; the melt coefficient is a rheo-optical measurement and is not on any datasheet",
+                CMeltSource = "BORROWED from TOPAS 6017, AND THE BORROWING IS NOW JUSTIFIED rather than merely flagged. Inoue et al., Dynamic Birefringence of Amorphous Polyolefins II, Polymer Journal (1995): C_R for five amorphous polyolefins is ~1.7e-9 /Pa (1700 Br), all positive, all close together, and explicitly 'relatively insensitive to the details of molecular structure for this kind of polyolefins'. TOPAS's measured 1000 Br sits within a factor of 2 of that family value, so no plausible 480R melt coefficient is an eighth of it - see the refuted falsifier in VALIDATION-SOURCES.md",
                 MeltModulusPa = 2.8e5,
                 DiffusivityMm2PerS = 0.10, CtePerK = 60e-6, ModulusMPa = 2100, PoissonRatio = 0.36,
                 DensityGPerCm3 = 1.01,

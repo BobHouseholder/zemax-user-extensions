@@ -125,3 +125,47 @@ current reference case. Reproducing it needs the model to integrate its own
 profile over successive outer layers and report the cumulative fraction — which
 neither the Eulerian nor the Lagrangian path currently does, and which is a
 better-posed target than the two-point ratio either is being judged on.
+
+
+---
+
+## REFUTED FALSIFIER — the 480R melt coefficient, 2026-08-18
+
+Case 2's in-plane peak over-predicts by ~8x once its inputs are sourced. The only
+borrowed *scale* in the chain is `C_melt`, taken from TOPAS 6017 for a grade sold
+as low-birefringence, so this was registered with a number and a direction:
+
+> If `C_melt(480R)` is about an eighth of `C_melt(TOPAS 6017)` — roughly 125 Br —
+> case 2's peak clause passes and both shape clauses stay passing. If a measured
+> 480R melt coefficient lands anywhere near 1000 Br, the over-prediction is a
+> model error and this attribution is dead.
+
+**It is dead.** Inoue et al., *Dynamic Birefringence of Amorphous Polyolefins II:
+Measurements on Polymers Containing Five-Membered Ring in Main Chain*,
+[Polymer Journal (1995)](https://www.nature.com/articles/pj1995122):
+
+- `C_R` in the rubbery plateau for five amorphous polyolefins is **~1.7 × 10⁻⁹
+  Pa⁻¹ = 1700 Br**, all positive and all close together;
+- explicitly **"relatively insensitive to the details of molecular structure for
+  this kind of polyolefins"**;
+- and ROMP-made cyclic olefin polymers — which is exactly what Zeonex/Zeonor are
+  — show the **larger** `C_R` values of the set, attributed to the optical
+  anisotropy of the cyclic units and a less flexible main chain.
+
+So the plausible 480R melt coefficient is **~1700 Br, larger than the 1000 Br the
+model borrows**, not an eighth of it. The substitution cannot explain the
+over-prediction and, if anything, understates it.
+
+**Two things follow.**
+
+**The ~8x on case 2 is a MODEL error.** Every material and process input on that
+case is now either sourced or shown to be a safe borrowing, and each correction
+made the gap larger rather than smaller. There is no input left to blame.
+
+**And the borrowing turns out to be the safest link in the chain, not the
+weakest.** `C_R` being structure-insensitive across polyolefins is the opposite
+of what "low-birefringence grade" suggested. Zeon's low-birefringence claim
+refers to the **photoelastic** constant — 5.0 × 10⁻¹² Pa⁻¹, ultra-low — which
+governs the *thermal* channel, not the melt orientation that sets the in-plane
+peak. Reading a melt property off an optical-grade marketing claim was the error;
+the two coefficients are three orders apart and answer different questions.
