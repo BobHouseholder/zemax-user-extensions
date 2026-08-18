@@ -75,6 +75,12 @@ namespace MoldStress
                 foreach (var e in els)
                 {
                     var p = Polymers.ByName(e.Material);
+                    string aliasOf = Polymers.AliasTarget(e.Material);
+                    if (aliasOf != null)
+                        say(string.Format(CultureInfo.InvariantCulture,
+                            "      NOTE: {0} is not in the MoldStress table; its stress-optic and " +
+                            "rheological constants are BORROWED from {1}. Substitution, not an " +
+                            "identification - results are indicative for {0}.", e.Material, aliasOf));
                     var fill = FillField.Build(e, p, proc, 101);
                     // Physics at the converged grid; the file gets a small
                     // wall-clustered subset of those same nodes. The two used to

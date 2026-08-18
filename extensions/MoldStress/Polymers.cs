@@ -197,8 +197,34 @@ namespace MoldStress
             },
         };
 
+        /// <summary>
+        /// Alias map from a REAL catalogue material name to one of this table's
+        /// entries, populated from `-materials NAME=POLYMER`.
+        ///
+        /// Why this exists: every entry here is named MS_*, and no real lens file
+        /// uses those names. Without aliasing the tool can only run on systems
+        /// built from its own catalogue, which is to say on nothing a user
+        /// actually has. `-materials E48R` alone was worse than useless - it made
+        /// FindElements match the surface and then ByName threw.
+        ///
+        /// An alias is a BORROWING of constants, not an identification, and every
+        /// caller that resolves one is expected to say so in its output.
+        /// </summary>
+        public static readonly Dictionary<string, string> Aliases =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Resolve through the alias map; returns null if unknown.</summary>
+        public static string AliasTarget(string name)
+        {
+            string t;
+            return Aliases.TryGetValue((name ?? "").Trim(), out t) ? t : null;
+        }
+
         public static Polymer ByName(string name)
         {
+            string alias = AliasTarget(name);
+            if (alias != null) name = alias;
+
             var p = All.FirstOrDefault(x =>
                 string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase));
             if (p == null)

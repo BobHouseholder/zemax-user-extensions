@@ -73,7 +73,20 @@ namespace MoldStress
             var known = new HashSet<string>(Polymers.All.Select(p => p.Name),
                                             StringComparer.OrdinalIgnoreCase);
             if (extraMaterials != null)
-                foreach (var m in extraMaterials) known.Add(m);
+                foreach (var m in extraMaterials)
+                {
+                    // "NAME=POLYMER" registers an alias; bare "NAME" is only
+                    // useful if the table already has an entry of that name.
+                    int eq = m.IndexOf('=');
+                    if (eq > 0)
+                    {
+                        string real = m.Substring(0, eq).Trim();
+                        string target = m.Substring(eq + 1).Trim();
+                        Polymers.Aliases[real] = target;
+                        known.Add(real);
+                    }
+                    else known.Add(m.Trim());
+                }
 
             var lde = sys.LDE;
             var found = new List<MouldedElement>();
