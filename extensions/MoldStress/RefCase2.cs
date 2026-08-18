@@ -74,6 +74,7 @@ namespace MoldStress
         public static int Run(string[] args)
         {
             var ci = CultureInfo.InvariantCulture;
+            Action<string> say2 = t => Console.WriteLine(t);
             Console.WriteLine("MoldStress - reference case 2: a moulded LENS (ZEONEX 480R)");
             Console.WriteLine("  " + Program.ScopeLabel);
             Console.WriteLine("  source: Chang et al., CoreTech/NTHU, Moldex3D verification study");
@@ -134,9 +135,22 @@ namespace MoldStress
                 FrontRadiusMm = curvature, BackRadiusMm = 0.0,   // plano-convex
             };
             lens.EdgeThicknessMm = lens.ThicknessAt(lens.SemiDiameterMm);
+            // EdgeRadial, NOT FilmEdge. This case was set up with FilmEdge, which
+            // models "a straight front of CONSTANT width crossing the part" - right
+            // for reference case 1, a 100 mm square plate gated across a whole
+            // 100 mm edge, and wrong for a 32 mm DISC gated on its rim, where the
+            // front fans out to the full diameter at mid-chord and closes again.
+            //
+            // It matters because dp/ds = 12*eta*Q/(W*h^3). Holding W at the gate's
+            // own 12.6 mm across the whole part instead of letting it open to
+            // 32 mm over-states dp/ds, and with it tau, everywhere past the gate.
+            // The like-for-like comparison that exposed this: at the gate the two
+            // cases carry W = 100.0 mm and W = 12.6 mm, and the model claims the
+            // lens has 3.4x the wall shear stress of the plate while the
+            // measurements say the lens has 3.2x LESS birefringence.
             lens.Gate = new GateSpec
             {
-                Kind = GateKind.FilmEdge, AzimuthDeg = 0,
+                Kind = GateKind.EdgeRadial, AzimuthDeg = 0,
                 WidthMm = 2.0 * Math.PI * lens.SemiDiameterMm / 8.0,
                 ThicknessMm = 0.8, IsDefault = false,
             };
@@ -156,6 +170,14 @@ namespace MoldStress
             Console.WriteLine();
 
             var fill = FillField.Build(lens, p, proc, 101);
+            // FILL-FIELD SUMMARY - see RefCase.cs; the two cases must be
+            // comparable on these numbers or the 8x cannot be located.
+            say2(string.Format(ci,
+                "  fill field: eta {0:E2} Pa.s, Q {1:E2} mm3/s, W(gate) {2:F1} mm, " +
+                "h(gate) {3:F3} mm, dp/ds(gate) {4:E2} MPa/mm, tau_wall {5:E2} MPa",
+                fill.EtaPaS, fill.FlowRateMm3PerS, fill.Width[0], fill.H[0],
+                fill.DpDs[0], fill.DpDs[0] * 0.5 * fill.H[0]));
+
             var freeze = FreezeHistory.Build(lens.CentreThicknessMm, p, proc, nz, 10 * nz);
             var ch = Channels.Build(lens, p, proc, fill, freeze);
             double half = 0.5 * lens.CentreThicknessMm;

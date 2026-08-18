@@ -175,6 +175,23 @@ namespace MoldStress
             say(string.Format(ci, "  process: fill {0:F1} s, pack {1:F0} MPa for {2:F0} s, " +
                 "melt {3:F0} C, mould {4:F0} C",
                 proc.FillTimeS, proc.PackPressureMPa, proc.PackTimeS, p.MeltTempC, p.MoldTempC));
+            var fill0 = FillField.Build(new MouldedElement {
+                FrontSurface = 1, BackSurface = 2, Material = p.Name,
+                CentreThicknessMm = 1.5, SemiDiameterMm = 50.0,
+                FrontRadiusMm = 0, BackRadiusMm = 0,
+                Gate = new GateSpec { Kind = GateKind.FilmEdge, AzimuthDeg = 0,
+                                      WidthMm = 100.0, ThicknessMm = 0.9, IsDefault = false },
+            }, p, proc, 101);
+            // FILL-FIELD SUMMARY - so the two reference cases can be compared
+            // like for like. One passes the in-plane clause and one fails it by
+            // 8x, and the difference has to be visible in these numbers.
+            say(string.Format(ci,
+                "  fill field: eta {0:E2} Pa.s, Q {1:E2} mm3/s, W(gate) {2:F1} mm, " +
+                "h(gate) {3:F3} mm, dp/ds(gate) {4:E2} MPa/mm, tau_wall {5:E2} MPa",
+                fill0.EtaPaS, fill0.FlowRateMm3PerS, fill0.Width[0], fill0.H[0],
+                fill0.DpDs[0], fill0.DpDs[0] * 0.5 * fill0.H[0]));
+            say("");
+
             say("");
 
             double[] gateProfile = null, farProfile = null;
