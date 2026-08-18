@@ -167,6 +167,33 @@ namespace MoldStress
                 // edge for the same reason and by the same expression as the
                 // shear channel. This is an extension of an argument already in
                 // the model rather than a new constant.
+                // LOCAL GAP SCALING. FreezeHistory is solved ONCE, on the
+                // element's CENTRE thickness, and its depth grid was then paired
+                // at every station with that station's own dp/ds. On a plate those
+                // agree. On a curved element they do not: a plano-convex lens with
+                // a 2.0 mm centre has a 0.273 mm gated rim, so tau = dp/ds * |z|
+                // was evaluated out to 7.3x the local half-gap, on a dp/ds already
+                // inflated by the Hele-Shaw 1/h^3 there. Measured 2026-08-18 on
+                // reference case 2: in-plane peak 370x the published value.
+                //
+                // The depth grid is therefore read as a NORMALISED depth and
+                // mapped onto the local gap, and the freeze clock is scaled with
+                // it: 1D conduction gives t_freeze proportional to h^2, so the
+                // thin rim solidifies in ~2% of the centre's time rather than the
+                // same time. Both halves are needed - scaling z alone would leave
+                // the rim molten for as long as the centre.
+                double hLoc = fill.H[Math.Min(i, fill.H.Length - 1)];
+                double hRatio = freeze.ThicknessMm > 1e-9
+                    ? Math.Max(hLoc / freeze.ThicknessMm, 1e-6) : 1.0;
+                double tScale = hRatio * hRatio;
+                double[] gridLocal = freeze.TimeGridS;
+                if (freeze.TimeGridS != null && Math.Abs(tScale - 1.0) > 1e-12)
+                {
+                    gridLocal = new double[freeze.TimeGridS.Length];
+                    for (int q = 0; q < gridLocal.Length; q++)
+                        gridLocal[q] = freeze.TimeGridS[q] * tScale;
+                }
+
                 double mSource = 1.0;
                 if (proc.FountainDecaysAlongFlow)
                 {
@@ -180,7 +207,7 @@ namespace MoldStress
                         var hS = new double[freeze.TimeGridS.Length];
                         for (int q = 0; q < hS.Length; q++) hS[q] = freeze.TempHistoryC[kMid, q];
                         mSource = MemoryFactorWlf(tArriveS, tFill, tFreezeSrc,
-                                                  freeze.TimeGridS, hS, p, lamS, tPack,
+                                                  gridLocal, hS, p, lamS, tPack,
                                                   meltFracAtTime, proc.ChannelNarrowing,
                                                   tGateSeal);
                     }
@@ -230,8 +257,9 @@ namespace MoldStress
                     // That is the gate-to-edge decay the registered reference case
                     // requires and that an instantaneous rule cannot express.
                     double tArrive = tFill * fill.S[i] / Math.Max(fill.PathLengthMm, 1e-9);
-                    double tFreezeAbs = tArrive + freeze.FreezeTimeS[k];
-                    double tauViscMPa = fill.DpDs[i] * Math.Abs(freeze.Z[k]);
+                    double zLocal = freeze.Z[k] * hRatio;          // depth in THIS gap
+                    double tFreezeAbs = tArrive + freeze.FreezeTimeS[k] * tScale;
+                    double tauViscMPa = fill.DpDs[i] * Math.Abs(zLocal);
                     double lambda = Math.Max(proc.LambdaScale * (p.MeltModulusPa > 0
                         ? fill.EtaPaS / p.MeltModulusPa : 1e-6), 1e-9);
                     double memory;
@@ -240,7 +268,7 @@ namespace MoldStress
                         var hist = new double[freeze.TimeGridS.Length];
                         for (int q = 0; q < hist.Length; q++) hist[q] = freeze.TempHistoryC[k, q];
                         memory = MemoryFactorWlf(tArrive, tFill, tFreezeAbs,
-                                                 freeze.TimeGridS, hist, p, lambda, tPack,
+                                                 gridLocal, hist, p, lambda, tPack,
                                                  meltFracAtTime, proc.ChannelNarrowing,
                                                  tGateSeal, proc.ShearThinnedLambdaDuringFill,
                                                  fill.EtaPaS > 0
@@ -279,8 +307,8 @@ namespace MoldStress
                     {
                         var histF = new double[freeze.TimeGridS.Length];
                         for (int q = 0; q < histF.Length; q++) histF[q] = freeze.TempHistoryC[k, q];
-                        double xiFreeze = ReducedTimeToFreeze(freeze.TimeGridS, histF, p,
-                                                              freeze.FreezeTimeS[k]);
+                        double xiFreeze = ReducedTimeToFreeze(gridLocal, histF, p,
+                                                              freeze.FreezeTimeS[k] * tScale);
 
                         // MAGNITUDE FROM KINEMATICS, not from an assumed strain.
                         //
