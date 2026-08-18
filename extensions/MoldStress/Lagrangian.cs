@@ -94,6 +94,14 @@ namespace MoldStress
             public double TDeposit;
             public double TEnter;       // when this element entered the gate
             public double Weight;       // volumetric weight, proportional to u(y0)
+
+            // Lookup state, not physics. Node is the freeze-grid index nearest
+            // this element's height; it changes only when the element is
+            // deposited. TCur is a cursor into the time grid, valid because an
+            // element's local clock only ever moves forward.
+            public int Node;
+            public int TCur;
+            public bool Frozen;
             public double SFinal;       // where along the flow it came to rest, mm
         }
 
@@ -325,6 +333,23 @@ namespace MoldStress
                 return Math.Min(d, 0.95 * H);
             };
 
+            // The SAME scan the temperature lookup used to do on every particle
+            // on every step. It is exact rather than a closed-form index because
+            // the original takes the first minimum on a tie and a rounded index
+            // need not; keeping the scan keeps the answer bit-identical, and
+            // calling it once per particle instead of twelve million times is
+            // where the cost went.
+            Func<double, int> nearestNode = yAbs =>
+            {
+                int k = 0; double best = double.MaxValue;
+                for (int m = 0; m < freeze.Z.Length; m++)
+                {
+                    double d = Math.Abs(Math.Abs(freeze.Z[m]) - yAbs);
+                    if (d < best) { best = d; k = m; }
+                }
+                return k;
+            };
+
             int nY = Math.Max(8, (int)Math.Sqrt(nParticles * 2));
             int nT = Math.Max(8, nParticles / nY);
             var parts = new List<Particle>(nY * nT);
@@ -339,48 +364,59 @@ namespace MoldStress
                     {
                         Y0 = y0, S = 0.0, Sigma = 0.0, ZFinal = y0,
                         TEnter = te, Weight = UNorm(y0 / H, n),
+                        Node = nearestNode(y0), TCur = 1,
                     });
                 }
             }
             double totalWeight = parts.Sum(q => q.Weight);
 
-            // Temperature at a height, interpolated from the freeze solve's own
-            // history. Reusing it means the two models cannot disagree about
-            // cooling - only about paths.
-            Func<double, double, double> tempAt = (yAbs, t) =>
-            {
-                if (freeze.TimeGridS == null || freeze.TempHistoryC == null)
-                    return p.MeltTempC;
-                int k = 0; double best = double.MaxValue;
-                for (int m = 0; m < freeze.Z.Length; m++)
-                {
-                    double d = Math.Abs(Math.Abs(freeze.Z[m]) - yAbs);
-                    if (d < best) { best = d; k = m; }
-                }
-                var grid = freeze.TimeGridS;
-                if (t <= grid[0]) return freeze.TempHistoryC[k, 0];
-                for (int j = 1; j < grid.Length; j++)
-                    if (grid[j] >= t)
-                    {
-                        double span = grid[j] - grid[j - 1];
-                        double f = span > 0 ? (t - grid[j - 1]) / span : 0.0;
-                        return freeze.TempHistoryC[k, j - 1] +
-                               f * (freeze.TempHistoryC[k, j] - freeze.TempHistoryC[k, j - 1]);
-                    }
-                return freeze.TempHistoryC[k, grid.Length - 1];
-            };
+            // WHAT USED TO BE HERE, and why it is gone.
+            //
+            // A tempAt(height, time) lambda did TWO linear scans on every call -
+            // one over the depth grid to find the nearest node, one over the time
+            // grid to find the bracketing sample - and it was called once per
+            // particle per step. At 4000 particles and 3000 steps that is 12
+            // million calls, each walking up to a few hundred depth nodes and up
+            // to ten times that many time samples. That, not the physics, was
+            // essentially the entire cost of the solve.
+            //
+            // Neither scan was necessary. An element's depth node is FIXED until
+            // the front deposits it, so it is computed once at seeding and once
+            // again on deposition. Its local clock only moves forward, so the
+            // time grid needs a cursor rather than a search - per particle, since
+            // tLocal is measured from that element's own entry time and is not
+            // shared across the population. Both are exact: the same node, the
+            // same bracket, the same interpolation in the same order.
+            //
+            // A freezeAt(height) lambda with the same O(nz) scan was also defined
+            // here and never called once. Removed rather than converted.
+            double[] tGrid = freeze.TimeGridS;
+            double[,] tHist = freeze.TempHistoryC;
+            bool haveHistory = tGrid != null && tHist != null;
+            int tGridN = haveHistory ? tGrid.Length : 0;
 
-            // Freeze time at a height, from the same solve.
-            Func<double, double> freezeAt = yAbs =>
+            // AN ELEMENT BELOW Tg IS INERT AND WAS STILL BEING VISITED EVERY STEP.
+            // The loop below skips it - but only AFTER looking its temperature up,
+            // so the skin, which freezes in the first fraction of a second, kept
+            // paying full price for the remaining thousands of steps.
+            //
+            // Retiring it permanently is exact only if temperature never rises
+            // again, and that is a property of the cooling solve rather than
+            // something to assume: a frozen element cannot be deposited (the skip
+            // happens before the deposition branch), so its node is fixed and its
+            // temperature series is one row of this array. So CHECK the array. It
+            // costs one pass over a few hundred thousand doubles, once per solve,
+            // against thousands of steps of savings - and if a history ever does
+            // reheat, the slow path is still correct.
+            bool coolingIsMonotone = haveHistory;
+            if (haveHistory)
             {
-                int k = 0; double best = double.MaxValue;
-                for (int m = 0; m < freeze.Z.Length; m++)
-                {
-                    double d = Math.Abs(Math.Abs(freeze.Z[m]) - yAbs);
-                    if (d < best) { best = d; k = m; }
-                }
-                return freeze.FreezeTimeS[k];
-            };
+                int rows = tHist.GetLength(0), cols = tHist.GetLength(1);
+                for (int r = 0; r < rows && coolingIsMonotone; r++)
+                    for (int cc = 1; cc < cols; cc++)
+                        if (tHist[r, cc] > tHist[r, cc - 1] + 1e-9)
+                        { coolingIsMonotone = false; break; }
+            }
 
             // Deposited volume per unit width already laid down, tracked so later
             // arrivals sit INSIDE earlier ones. This is the whole point of the
@@ -398,6 +434,7 @@ namespace MoldStress
 
                 foreach (var q in parts)
                 {
+                    if (q.Frozen) continue;              // below Tg, never returns
                     if (t < q.TEnter) continue;          // not injected yet
                     double yAbs = q.Deposited ? Math.Abs(q.ZFinal) : q.Y0;
                     // COOLING CLOCK RUNS FROM ENTRY, not from t=0.
@@ -411,10 +448,30 @@ namespace MoldStress
                     // freeze clock by arrival (tArrive + FreezeTimeS); this model
                     // did not, so the two disagreed about when anything solidified.
                     double tLocal = t - q.TEnter;
-                    double T = tempAt(yAbs, tLocal);
+                    double T;
+                    if (!haveHistory) T = p.MeltTempC;
+                    else if (tLocal <= tGrid[0]) T = tHist[q.Node, 0];
+                    else
+                    {
+                        int j = q.TCur < 1 ? 1 : q.TCur;
+                        while (j < tGridN && tGrid[j] < tLocal) j++;
+                        q.TCur = j;
+                        if (j >= tGridN) T = tHist[q.Node, tGridN - 1];
+                        else
+                        {
+                            double span = tGrid[j] - tGrid[j - 1];
+                            double f = span > 0 ? (tLocal - tGrid[j - 1]) / span : 0.0;
+                            T = tHist[q.Node, j - 1] +
+                                f * (tHist[q.Node, j] - tHist[q.Node, j - 1]);
+                        }
+                    }
 
                     // Below Tg the element is solid: no loading, no relaxation.
-                    if (T <= p.TgC) continue;
+                    if (T <= p.TgC)
+                    {
+                        if (coolingIsMonotone) q.Frozen = true;
+                        continue;
+                    }
 
                     // LambdaScale applies here too. The Eulerian channel honours it
                     // and this model did not, so the two disagreed about the
@@ -515,6 +572,7 @@ namespace MoldStress
                             // VOLUME rather than by particle count.
                             depositedHeight += H * q.Weight / totalWeight;
                             q.ZFinal = Math.Max(H - depositedHeight, 0.0);
+                            q.Node = nearestNode(Math.Abs(q.ZFinal));
                         }
                     }
                     else

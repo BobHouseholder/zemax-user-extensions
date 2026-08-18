@@ -428,10 +428,21 @@ collapses to a single solve, so the plate case costs exactly what it did.
 On the default, **case 1 meets the registered criterion** and case 2 has only its
 in-plane peak outstanding.
 
-**It costs time, and that is the honest price of the default.** The shape is a
-particle solve per gap node, so builds that took under a second take tens of
-seconds: `-selftest` runs in about 2m05 and a reference case in 35-85 seconds,
-against near-instant before.
+**It costs time, though much less than it did.** `-selftest` runs in about 1m20
+and case 2 in about 19 s, against 2m47 and 36 s when the shape first became the
+default. Two things did that. The temperature lookup inside the particle solve
+was doing two linear scans - one over the depth grid, one over the time grid - on
+every particle on every step, 12 million times; an element's depth node is fixed
+until the front deposits it and its clock only moves forward, so both became O(1)
+with the answer bit-identical. And an element below Tg is inert but was still
+being visited and looked up every remaining step, which the skin pays for
+thousands of times over; it is now retired permanently, guarded by a runtime
+check that the cooling history really is monotone.
+
+**On case 1 the shape is no longer the expensive part.** That case takes 47 s with
+the shape OFF and 60 s with it on, so the remaining minute is the Eulerian channel
+at nz=161, not the particle model. Further work on the solve has little left to
+give there.
 
 Shapes are cached between builds, keyed on the CONTENTS of the fill field, freeze
 history and the four process fields the solve reads. It is worth less than it
