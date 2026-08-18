@@ -121,6 +121,7 @@ namespace MoldStress
             // times are still NOT given by the paper (it states a 25 s cooling
             // time only) and remain the declared defaults.
             var proc = new Process { FillTimeS = 1.0, PackPressureMPa = 71.3, PackTimeS = 3.0 };
+            if (Program.Has(args, "-relax-below-tg")) proc.RelaxBelowTg = true;
             if (Program.Has(args, "-fountain"))
                 proc.FountainStrain = Program.Value(args, "-fountain", 1.0);
             // -frontmode carried|extensional. This used to scan args for the BARE

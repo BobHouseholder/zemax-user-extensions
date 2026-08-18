@@ -134,6 +134,16 @@ namespace MoldStress
         /// </summary>
         public bool ComplementaryShearGate = false;
 
+        /// <summary>
+        /// Let orientation keep relaxing after a layer crosses Tg, on the same
+        /// WLF clock, instead of locking it at the freeze instant. Registered as
+        /// a falsifier 2026-08-18: case 2's retention must fall by ~13x while
+        /// case 1's moves by less than 20%, because 28 K below Tg buys far more
+        /// vitrification than 14 K does. If case 1 degrades comparably the
+        /// mechanism is wrong.
+        /// </summary>
+        public bool RelaxBelowTg = false;
+
 
         /// <summary>
         /// Scale the front deposition by the shear window available to the melt

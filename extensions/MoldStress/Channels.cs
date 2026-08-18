@@ -272,7 +272,8 @@ namespace MoldStress
                                                  meltFracAtTime, proc.ChannelNarrowing,
                                                  tGateSeal, proc.ShearThinnedLambdaDuringFill,
                                                  fill.EtaPaS > 0
-                                                     ? tauViscMPa * 1e6 / fill.EtaPaS : 0.0);
+                                                     ? tauViscMPa * 1e6 / fill.EtaPaS : 0.0,
+                                                 proc.RelaxBelowTg);
                     }
                     else
                     {
@@ -531,12 +532,46 @@ namespace MoldStress
                                              bool narrowing = false,
                                              double tGateSeal = double.PositiveInfinity,
                                              bool shearThinnedDuringFill = false,
-                                             double localShearRate = 0.0)
+                                             double localShearRate = 0.0,
+                                             bool relaxBelowTg = false)
         {
             if (tF <= tA || grid == null || grid.Length < 2) return 0.0;
             double tEndLocal = Math.Min(tF - tA, Math.Max(tFill - tA, 0.0));
             if (tEndLocal <= 0) return 0.0;
             double tFLocal = tF - tA;
+
+            // RELAXATION BELOW Tg - the registered test, 2026-08-18.
+            //
+            // The integral stops at tFLocal, and the freeze time is DEFINED as the
+            // instant T <= Tg, so orientation is locked the moment a layer crosses
+            // Tg and never relaxes again. That is a hard cutoff on a transition
+            // that is not sharp: just below Tg the material is in the softening
+            // zone and still relaxes, only slowly.
+            //
+            // It predicts the measured pattern. Case 1 moulds 28 K below Tg and
+            // its retention is right to 16%; case 2 moulds 14 K below Tg, so far
+            // more of the part sits just under Tg where relaxation is still
+            // active, and its retention is 13x too high.
+            //
+            // WLF stays valid there for both materials - the Vogel temperature
+            // D2 - A2 is about 86 C for 480R and 105 C for TOPAS, and both moulds
+            // run above it - so the test is simply to carry the SAME integral on
+            // past the freeze time to the end of the recorded history, letting
+            // lambda(T) keep growing. No new constant.
+            //
+            // RESULT 2026-08-18: REFUTED, and the flag is INERT. Both cases came
+            // back identical to four significant figures - 1.16x and 12.87x
+            // unchanged - because the relaxation clock has already stopped long
+            // BEFORE Tg. lambda = eta0(T)/G is 2.86e7 s at Tg for both materials,
+            // a third of a year, and reaches 1 s some 90 K ABOVE Tg in each
+            // (268 C for TOPAS, 228 C for 480R). Extending the integral past Tg
+            // therefore adds no reduced time at all.
+            //
+            // So the hard Tg cutoff was never doing the work, and the 13x
+            // over-retention on case 2 is NOT explained by it. Kept as a switch
+            // because the argument for it is sound and someone will propose it
+            // again; it costs nothing and now carries its own refutation.
+            if (relaxBelowTg) tFLocal = Math.Max(tFLocal, grid[grid.Length - 1]);
 
             // Reduced time along the curve, and the shear-weighted integral.
             // Reduced time on the grid, plus its INTERPOLATED value at the freeze

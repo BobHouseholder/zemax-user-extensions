@@ -176,7 +176,8 @@ namespace MoldStress
         private static readonly string[] BoolFlags = {
             "-complementary", "-deposition-decay", "-deposition-support",
             "-depthdiag", "-directindex", "-gates", "-h", "-help", "-quiet",
-            "-lagrangian", "-refcase", "-refcase2", "-ribbon", "-run", "-selftest",
+            "-lagrangian", "-refcase", "-refcase2", "-relax-below-tg", "-ribbon",
+            "-run", "-selftest",
             "-thinned-lambda",
             "-writecatalog",
         };

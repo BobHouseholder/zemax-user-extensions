@@ -169,6 +169,7 @@ namespace MoldStress
                 proc.FillTimeS, screwDiaMm, injSpeedMmPerS, screwRate, lensVolMm3));
             Console.WriteLine();
 
+            if (Program.Has(args, "-relax-below-tg")) proc.RelaxBelowTg = true;
             var fill = FillField.Build(lens, p, proc, 101);
             // FILL-FIELD SUMMARY - see RefCase.cs; the two cases must be
             // comparable on these numbers or the 8x cannot be located.
