@@ -209,7 +209,24 @@ namespace MoldStress
                 proc.FillTimeS, screwDiaMm, injSpeedMmPerS, screwRate, lensVolMm3));
             Console.WriteLine();
 
+            // EVERY model switch, not just the ones this case happened to need.
+            //
+            // Only -relax-below-tg was wired here, so -fountain, -complementary,
+            // -deposition-support and -thinned-lambda were SILENTLY IGNORED by
+            // this mode while the argument validator accepted them as globally
+            // valid names. A comparison run with -fountain 3 printed numbers
+            // identical to the baseline, which made the test vacuous rather than
+            // informative. That is the does-nothing-reports-success pattern one
+            // level below where the unknown-argument guard was added: the guard
+            // asks whether a flag EXISTS, not whether the mode reads it.
             if (Program.Has(args, "-relax-below-tg")) proc.RelaxBelowTg = true;
+            if (Program.Has(args, "-fountain"))
+                proc.FountainStrain = Program.Value(args, "-fountain", 1.0);
+            if (Program.Has(args, "-thinned-lambda")) proc.ShearThinnedLambdaDuringFill = true;
+            if (Program.Has(args, "-deposition-support")) proc.FountainDepositionSupport = true;
+            if (Program.Has(args, "-deposition-decay")) proc.FountainDecaysAlongFlow = true;
+            if (Program.Has(args, "-complementary"))
+            { proc.ComplementaryShearGate = true; proc.FountainDepositionSupport = true; }
             var fill = FillField.Build(lens, p, proc, 101);
             // FILL-FIELD SUMMARY - see RefCase.cs; the two cases must be
             // comparable on these numbers or the 8x cannot be located.

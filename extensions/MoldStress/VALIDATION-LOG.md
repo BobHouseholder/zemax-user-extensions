@@ -1,0 +1,560 @@
+# MoldStress validation log
+
+The full investigation record, moved out of the repository README on 2026-08-18.
+
+It was 571 lines of the README's 883 - a chronological journal in which each new
+finding was appended below the last, so the file carried a `RETRACTED:` section
+directly above the claim it retracted, two in-plane result tables that disagreed
+(1.16x and 0.95x), and rows that had gone stale against the binary (depth peak
+position listed as "89%, passes" where `-refcase` reports 53% and FAIL).
+
+None of that is deleted here, because the refuted attempts are the most useful
+part: eight configurations of extra terms have been measured and rejected, and
+without the record they get proposed again. But a running journal is not a
+README, and a reader who wanted to know what the tool does had to read the
+history of what it used to do wrong to find out.
+
+**The README now carries current status only, derived by running the cases.
+This file carries how that status was arrived at.** Entries below are in the
+order they were written and are NOT individually corrected - later entries
+supersede earlier ones, and the retraction notices are left where they fell.
+
+---
+
+## Validation, and what currently fails
+
+Against a published injection-moulded TOPAS 6017S-04 plate (100 × 100 × 1.5 mm,
+film gate on one edge, polarimetry at 594 nm), on material constants measured by
+Kim, Yoon & Kornfield, *Key Eng. Mater.* **326–328** (2006) 183. Run it with
+`-refcase`, which exits non-zero unless every clause holds.
+
+> **A GRID BUG INVALIDATED EVERY NUMBER BELOW UNTIL 2026-08-17, AND IT IS FIXED.**
+> `FreezeHistory` sampled the cooling curve with `step % 50` into 240 slots, so the
+> recorded window was `240 x 50 x dt` — and with `dt = 0.2*dz^2/alpha` and
+> `dz ~ 1/n`, **that window shrank as 1/n^2**: ~0.08 s at nz=81 and ~0.005 s at
+> nz=321, against a centre that does not freeze until ~3 s. The memory integral
+> integrates along that grid, so at fine grids it saw almost none of the cooling
+> and the shear channel collapsed. Fixed by single-pass dynamic decimation. The
+> comment above that line had described the correct adaptive algorithm; the code
+> implemented a different one.
+>
+> **The "criterion is MET" reading obtained at nz=321 before the fix was an
+> artifact of this bug.** On the fixed history the depth ratio is 0.82 and
+> `-refcase` exits 2. The failing flow null is what flagged it.
+
+**Convergence, re-taken 2026-08-17 after the fix.** Default configuration:
+
+| nz | in-plane | depth | flow null | verdict |
+|---|---|---|---|---|
+| 41 | 1.16x | 0.82 | PASS | NOT met |
+| 81 | 1.16x | 0.82 | PASS | NOT met |
+| 161 | 1.16x | 0.82 | PASS | NOT met |
+| 321 | 1.17x | 0.82 | PASS | NOT met |
+
+Flat to three figures across an 8x grid range, where before the fix it drifted
+1.17 -> 1.07 -> 0.99 -> 0.95 and 0.89 -> 1.16 -> 1.36 -> 1.43. **nz=41 now gives
+the converged answer**, so the expensive `-nz 321` default and the `nz=481`
+ceiling are both moot. Shear-only converges too: 0.61x/0.62x/0.62x at nz
+41/81/161, against 0.52x/0.26x/0.09x before.
+
+**The in-plane criterion passes at 1.16x; the depth criterion fails at 0.82.**
+
+| Clause | Result | Bar |
+|---|---|---|
+Measured 2026-08-17 at `-nz 321`, on the paper's own process conditions
+(280 °C melt, 150 °C mould, 71.3 MPa) — see the correction note below.
+
+| Clause | Result | Bar |
+|---|---|---|
+| in-plane peak | **0.95×** the published 1.2 × 10⁻⁴ | within a factor of 2 — **passes** |
+| in-plane shape | maximum at the gate, falling only to **97.4%** at the far edge | must decay from the gate — **passes, but see below** |
+| gate null | maximum moves from x = 0 to x = 100 mm when the gate moves | must track the gate — **passes** |
+| depth ratio | **0.99** surface/deep against a published **2.78** | [1.39, 5.56] — **fails** |
+| depth peak position | maximum at **89%** of the half-wall | beyond 75% — **passes** |
+| depth null | **1.35 vs 0.81** after being rebuilt — see below | must invert — **passes** |
+
+**Two rows moved on 2026-08-17, in opposite directions, and neither move was
+the point of the change.** Depth peak position went 68% → 89% and now passes.
+In-plane shape went 70.6% → 97.4% at the far edge, i.e. the predicted field is
+now nearly FLAT across the plate where the reference falls roughly linearly to
+zero. It still passes, and that is a criticism of the clause rather than a
+defence of the model: "maximum on the gate side" is satisfied by a 2.6% tilt.
+A shape clause that a nearly-flat field passes is not measuring shape.
+
+**The depth null now works — it was the null that was broken, not the channel.**
+Corrected 2026-08-17, third attempt. Earlier that day this README claimed the
+depth channel was "not driven by the freeze history at all", on the evidence of
+a null that would not move and a 1% response to a 30 °C mould change. **That
+claim was wrong, and a positive control refuted it:** scaling every freeze time
+by 100 moves the ratio 0.810 → 0.812, but scaling by 0.01 moves it to 0.908.
+The channel responds to freeze times being SHORTENED and is insensitive to their
+being LENGTHENED — and that insensitivity is correct physics, because once a
+layer has vitrified reduced time stops accumulating and a later nominal freeze
+time adds nothing to the integral.
+
+The old null inverted `t → tMax − t`, which **lengthens** the freeze time at both
+sampling depths (0.002 → 6.9 s at the wall, 0.85 → 6.05 s at 47%). It perturbed
+exclusively in the direction the model is provably deaf to. It was a
+rearrangement pointing the wrong way — the third version of this null that could
+not fail, after an `Array.Reverse` on a mid-plane-symmetric profile.
+
+The null now mirrors the depth axis of the **temperature history** as well as the
+freeze times (|z| → h/2 − |z|), giving the wall the core's thermal history. That
+inverts the driver the memory integral actually reads, rather than a derived
+label. It discriminates: **1.35 vs 0.81.**
+
+A hypothesis checked and killed on the way: the memory integral's clamp was the
+obvious suspect, since a clamped quantity is deaf to its inputs. It is
+instrumented now and **does not bind — 0 of 39,700 evaluations saturated,
+largest raw value 0.2.**
+
+**Where the depth deficit actually is.** The skin signal comes entirely from
+fountain deposition, and it saturates:
+
+| fountain strain | depth ratio |
+|---|---|
+| 0 (shear only) | **0.02** |
+| 1 (shipped default) | 0.81 |
+| 3 | 1.03 |
+
+The shear channel contributes essentially **nothing** at the wall. That is
+self-consistent rather than a bug: shear stress is largest at the wall, but a
+layer that vitrifies on contact never deforms, so σ relaxes toward τ and never
+gets there. The physical answer is the one Mavridis, Hrymak & Vlachopoulos
+(*J. Rheol.* **32**(6) 639, 1988) give — skin material was not at the wall when
+it was deformed. It was oriented in the hot core and carried to the wall by
+fountain flow, then quenched. The model has that mechanism but treats it as a
+locally computed strain that then relaxes, which is why tripling it buys only
+27%.
+
+**That change was implemented and it is measurably worse.** Available as
+`-frontmode carried`, not the default. Measured at nz=81:
+
+| | in-plane peak | depth ratio | depth null |
+|---|---|---|---|
+| extensional (default) | **1.07×** passes | 0.81 fails | passes |
+| melt orientation carried | **4.57×** fails | 1.09 fails | **fails** |
+
+The diagnosis of the *cap* stands: the extensional form cannot exceed the
+plateau modulus (`eEff → 1` as Wi → ∞, so σ ≤ G = 2.8 × 10⁵ Pa), while the
+melt's own wall shear stress here is ~5 × 10⁵ Pa, so the cap was binding on the
+wrong quantity. **The implementation is what failed.** `2·τ_wall = dp/ds·(h/2)`
+has no z-dependence, so it lifts every depth by the same amount and leaves
+`exp(−ξ)` as the only thing separating skin from core. That inflated the
+thickness average fourfold, moved the ratio by 0.28, and flattened the profile
+enough to kill the null again.
+
+What it exposes is the real missing piece: **not every depth is front-deposited.**
+Material near the mid-plane is the core stream and is never swept to the wall,
+so the deposition term needs a weight that falls off inward.
+
+### The deposition weight, and what it revealed
+
+That weight is in the literature and is parameter-free. **Blake's
+maximum-residence envelope**, in M. C. Altan, *A Review of Fiber-Reinforced
+Injection Molding: Flow Kinematics and Particle Orientation*, J. Thermoplastic
+Composite Materials **3** (Oct 1990) 275, §2.4.4; pathlines measured by Coyle,
+Blake & Macosko, *AIChE J.* **33**(7) 1168 (1987). Sorting particles by whether
+they ever reached the front gives a dividing height of `1/√3` and an envelope
+`x1m = (3/2)(1 − x3m²)`, i.e. a support boundary
+
+    z*(s) = sqrt(1 − (2/3)·s/L)      in units of the half gap
+
+Material inside `z*` never passed through the front and receives no deposition.
+Implemented as `-deposition-support`. **It is not the default, and the reason is
+the interesting part.** Measured at nz=81:
+
+| | in-plane peak | depth @ gate (criterion) | depth @ s/L 0.1–0.5 |
+|---|---|---|---|
+| without envelope | **1.07×** passes | 0.81 fails | 0.81 |
+| with envelope | **0.28×** fails | 0.02 fails | **2.52** vs published 2.78 |
+
+**At every interior station the depth ratio is 2.52 against a published 2.78** —
+9% low, inside the band, with no fitted parameter. The depth *shape* problem is
+essentially solved by a kinematic result taken off the shelf.
+
+Two things break, and both are diagnostic rather than incidental:
+
+1. **The in-plane peak collapses, 1.07× → 0.28×**, because the core value falls
+   1.39 × 10⁻⁴ → 4.48 × 10⁻⁵ once the core stops receiving deposition. That is
+   the finding: **the in-plane agreement at 1.07× was propped up by depositing
+   fountain orientation into the core, where the literature says none is
+   deposited.** Removing it exposes that the shear channel under-predicts the
+   core by about 3×. That is a better-located problem than "the skin is 10× low",
+   and it is in the channel that has always been the model's weakest.
+2. **The registered criterion samples at s = 0, and `z*(0) = 1`** — the gate is
+   the one station where the envelope admits no deposited material at all. The
+   boundary crosses the criterion's own surface sampling point (0.975 of the
+   half-wall) at s/L = 0.075, so only the first ~7% of the flow length is
+   affected. The reference paper measured its depth profiles at positions A, B
+   and C and publishes coordinates for none of them, so **the criterion's station
+   has NOT been moved to suit** — the ratio is reported across stations beside it
+   instead. This is the fifth time a number on this model has turned on a
+   sampling definition before it turned on physics.
+
+### The in-plane peak is now the maximum of the profile
+
+Corrected 2026-08-17. The clause reads *"predicted peak within a factor of 2 of
+1.2 × 10⁻⁴"*, and the code took `avg[0]` — the same thing only if the maximum
+sits at the gate. That held for every model this case had run until Blake's
+envelope arrived, and `z*(0) = 1` admits no deposited material at the gate edge
+exactly, so `avg[0]` collapsed to the shear-only value and the clause fell
+1.07× → 0.28×. **That was the criterion reading the one station where the
+kinematics is singular, not the model losing its peak.**
+
+Taking the actual maximum is the literal reading and does not weaken anything:
+clause (b) still separately requires that maximum to lie on the gate side and to
+decay toward the far edge. The gate-edge value is printed beside it. The change
+is **inert in the default configuration** — the maximum is at s = 0 there, so
+1.07× is unchanged.
+
+Under the envelope the peak recovers to **0.59×, inside the factor of 2**. But it
+now fails a different clause, and this one is physical rather than a sampling
+artefact:
+
+| envelope | in-plane peak | peak location | far-edge value |
+|---|---|---|---|
+| off | 1.07× passes | s = 0 mm | 76.1% — decays, **passes** |
+| on | 0.59× passes | **s = 92 mm** | **129.3% — rises, FAILS** |
+
+**Blake's envelope makes the fountain-deposited layer thicken along the flow, so
+predicted birefringence RISES with distance from the gate. The reference says it
+falls roughly linearly to zero.** This is exactly the gate-versus-far-field
+tension flagged before the envelope was implemented, when it looked like it might
+be confined to the first 7% of flow length. It is not: it inverts the whole
+along-flow profile.
+
+So the envelope trades a depth-shape success for an along-flow-shape failure, and
+it stays opt-in. What it has genuinely established is that the depth ratio and
+the along-flow decay are coupled through one term, and no single scaling of that
+term satisfies both.
+
+### An along-flow decay for the deposition — implemented, measured, not adopted
+
+`-deposition-decay` scales the front deposition by the shear window available to
+the melt **feeding** the front at that station (the memory bracket at the
+mid-plane, the core stream the front draws from). The argument is not a new one:
+it is the same expression that already gives the shear channel its gate-to-edge
+decay — at the far edge the melt arrives as filling ends, the window is
+identically zero, and there is no orientation to deposit.
+
+It does produce decay, and it is still wrong. Measured at nz=81 with the
+envelope on:
+
+| | in-plane peak | peak location | far edge | depth @ s/L 0.1–0.5 |
+|---|---|---|---|---|
+| envelope only | 0.59× | s = 92 mm | 129% — rises | **4.08** |
+| envelope + decay | **0.31×** | s = 87 mm | 0% — falls | 1.56 |
+
+The far-edge rise is fixed, but the profile is now a **hump**: it climbs from the
+gate to a maximum at 87% of the flow length and then collapses to zero. The
+reference falls roughly linearly *from the gate*. And both magnitudes get worse —
+in-plane 0.59× → 0.31×, depth 4.08 → 1.56.
+
+The mechanism is visible in the two terms. Blake's support **grows** with
+distance (z* falls from 1 to 0.577) while this window factor **falls** slowly and
+then crashes at the very end. Their product peaks near s/L = 0.87. No scaling of
+either fixes that — a monotone decay from the gate needs the magnitude to fall
+faster than the support grows, everywhere, and this factor does not.
+
+**It also exposed a weak clause.** *"Maximum on the gate side"* is implemented as
+an endpoint comparison, `profile[0] > profile[last]`, so a profile peaking at 87%
+of the length **passes** it. It passed here while the shape was plainly wrong.
+The peak location is now printed beside the verdict so the gap is visible; the
+registered clause itself is left alone rather than quietly tightened.
+
+### No magnitude term can rescue the envelope — this is a proof, not a measurement
+
+The deposited layer's thickness fraction is `f(s) = 1 − z*(s) = 1 − √(1 − ⅔·s/L)`,
+and **`f(0) = 0` exactly**. The thickness-averaged deposition at the gate is
+therefore zero for *any* magnitude term `M(s)`, because `M` multiplies a layer of
+zero thickness.
+
+That forecloses the whole search. The in-plane clause needs the maximum on the
+gate side; with deposition contributing nothing there, the gate value is pinned
+at the shear-only value, **0.26× of published**. Any `M` large enough to reach the
+factor-of-2 bar (0.5×) necessarily puts the maximum somewhere `f > 0` — away from
+the gate — failing the shape clause. **The two clauses are mutually exclusive
+under a hard envelope support, independently of `M`.**
+
+Confirmed numerically, with a control separating the deposition term from overall
+grid drift:
+
+| grid | shear-only at gate | envelope at gate | deposition at gate |
+|---|---|---|---|
+| nz=41 | 6.233e-5 | 6.781e-5 | **5.48e-6** |
+| nz=81 | 3.071e-5 | 3.348e-5 | **2.77e-6** |
+| nz=161 | 1.037e-5 | 1.176e-5 | **1.39e-6** |
+
+The deposition at the gate halves with every grid doubling — converging to zero as
+the analysis requires. Its nonzero value on coarse grids is a **one-node
+discretisation artifact**: `z*(0) = 1` makes the support a measure-zero set that
+the grid nonetheless resolves with a single node.
+
+**What must change is the support, not the magnitude.** And there is a reason to
+doubt `z*(0) = 1` physically: Blake's envelope classifies material by whether it
+was *transported* to the wall from upstream. It says nothing about the material
+that **constituted the initial front** at the gate, which was itself
+fountain-processed and laid onto the wall there. `z*(0) = 1` is a statement about
+transport history, not evidence that gate-wall material never saw a front.
+
+**A separate defect the control exposed, and it is not about the envelope:** the
+shear-only gate value is itself strongly grid-dependent — 6.233e-5 → 3.071e-5 →
+1.037e-5, still falling steeply at nz=161. **The in-plane number is not converged
+with the fountain off.** The convergence sweep behind the shipped `-nz 321`
+default was run with the fountain ON, so it never covered this configuration.
+Any future work on the shear channel at the gate needs its own sweep first.
+
+### RETRACTED: the null failure under `-thinned-lambda` was NOT an instrument problem
+
+**The section below is wrong and is kept only so the error is visible.** It
+concluded, from the probes, that the null was "aimed where the model cannot
+respond". Measuring the memory profile itself refutes that:
+
+| depth | mem_default | mem_thinned |
+|---|---|---|
+| 95% | 0.0024 | **0.9708** |
+| 85% | 0.0442 | **1.0000** |
+| 75% | 0.1382 | **1.0000** |
+| 50% | 0.4509 | **0.9973** |
+| 25% | 0.6699 | **0.9591** |
+| 5% | 0.7092 | **0.9193** |
+
+Under the thinned lambda the retained fraction is **0.92 to 1.00 across the whole
+depth**, against 0.002 to 0.71 for the default — a factor of 300 collapsed to
+nothing. **The memory bracket is saturated everywhere**, so the model has no
+freeze-ORDER dependence left to detect, and the null correctly reports FAIL.
+
+**Why the probe evidence misled me.** The x0.01 freeze-time scaling moves the
+answer 79-92%, which I read as "the channel is responsive, so the null's
+direction must be the problem". It moves the answer because it drags layers OUT
+of saturation — a magnitude effect. It says nothing about whether ordering
+matters, and ordering is what the clause names. **A probe that de-saturates is
+not evidence that the saturated quantity has structure.**
+
+**What this means for `-thinned-lambda`, and it is worse than a failing control.**
+Memory near 1 everywhere means every layer retains essentially all of its shear
+orientation — the model has stopped representing relaxation at all, including for
+a core that stays molten for 4 s after filling ends. Its depth ratio of 1.91 is
+obtained by switching off the physics the depth profile is supposed to come from.
+That is a right answer for the wrong reason, and it is exactly what the null
+exists to catch. **The null needed no rebuilding; the fifth version would have
+been built to silence a correct alarm.**
+
+### The null failure under `-thinned-lambda` is an instrument problem, not evidence
+
+Checked 2026-08-17, because "the control fails" would otherwise read as a verdict
+on the physics. The probes are the positive control on the null and they separate
+the two possible causes:
+
+| config | null (mirror T history) | probe x0.01 | probe x100 | max memory |
+|---|---|---|---|---|
+| default | 2.384 vs 0.583 — **+309%** PASS | 1.303 vs 0.820 (+59%) | 0.820 (0%) | 0.7 |
+| `-thinned-lambda` | 1.602 vs 1.757 — **-9%** FAIL | 0.406 vs 1.92 (**-79%**) | 2.024 (+5%) | **1.0** |
+| `+ -complementary` | 1.896 vs 1.714 — **+11%** FAIL | 0.147 vs 1.91 (**-92%**) | 2.036 (+7%) | 1.0 |
+
+Under the thinned lambda the channel moves **79-92%** for a freeze-time
+perturbation while the null's own perturbation moves it **9%**. The subject is
+not deaf; the null is aimed where the model cannot respond. Same class as the
+`t -> tMax - t` version, reached by a different route.
+
+**The mechanism, and it is visible in the last column.** The retained fraction
+reaches **1.0** under the thinned lambda against 0.7 under the default — the
+physical ceiling of the memory bracket. Mirroring the temperature history makes
+some layers hotter and some colder, and the ones it would push *up* are already
+at full retention, so a large part of the profile cannot move in the direction
+the perturbation pushes. The asymmetry is the same one the default shows
+(responds to shortening, deaf to lengthening); the thinned lambda simply moves
+more of the depth range into the saturated part of it.
+
+**The clamp is again NOT the cause** — 0 of 95,600 evaluations saturated in every
+configuration. That hypothesis has now been tested and refuted twice by counting
+rather than assumed either way.
+
+**What follows for the thinned-lambda result.** Its failing null is not a reason
+to reject it — but its passing depth ratio is not validated either, because the
+control that would guard it cannot discriminate in that regime. A fifth version
+of this null needs a perturbation that stays in the responsive direction; the
+x0.01 freeze-time scaling demonstrably does, though it tests sensitivity to the
+freeze-history *magnitude* rather than to its *ordering*, which is what the
+registered clause names.
+
+### The thermal channel is not the deficit — checked before changing it
+
+The Lagrangian model leaves the core relaxed to near-zero flow orientation, so
+the published core plateau of 1.8 × 10⁻⁴ has to come from somewhere. The thermal
+channel supplies about 7 × 10⁻⁶ there, which looks like a 26× deficit and an
+obvious thing to go and fix.
+
+**It is not a deficit.** The channel is driven by the freeze-off gradient — each
+layer's temperature at the moment the centre solidifies, with the mean and linear
+parts removed by force and moment balance. That gradient spans `Tg − T_mould`,
+and this part is moulded at **150 °C against a Tg of 178 °C**, i.e. **28 K**.
+Scaling the standard free-quench magnitude `Eα ΔT / 3(1−ν)`:
+
+| mould | ΔT | σ | dn_thermal | vs published core |
+|---|---|---|---|---|
+| **150 °C** (this part) | **28 K** | 2.6 MPa | **2.2e-5** | 12% |
+| 120 °C | 58 K | 5.4 MPa | 4.6e-5 | 26% |
+| 80 °C | 98 K | 9.2 MPa | 7.8e-5 | 43% |
+| 20 °C | 158 K | 14.8 MPa | 1.26e-4 | 70% |
+
+The model's ~2–4 × 10⁻⁵ is the right order **for this mould**. The 1.26 × 10⁻⁴
+figure that makes the deficit look damning assumes a cold mould and cooling to
+ambient — a different process. A 150 °C mould is a deliberately hot one, chosen
+precisely because it produces low thermal residual stress in an optical part, and
+the model reproduces that.
+
+**So the target was wrong.** If the thermal channel is right and the core plateau
+is 1.8 × 10⁻⁴, the core birefringence is **residual flow orientation that both
+models relax away** — the Eulerian one by construction, the Lagrangian one by
+relaxing σ toward a decaying packing stress over the 3 s the core stays molten.
+That is where the remaining deficit lives, and it is the same quantity the
+shear-thinned λ reached by saturating it.
+
+No code changed. The 26× figure is withdrawn as a comparison against the wrong
+process rather than a defect in the channel.
+
+### Why the profile peaks at 50%, and why no further term will fix it
+
+Measured cause, on the fixed freeze history at the corrected conditions:
+`mem_wlf` **rises inward** — 0.000 at the wall, 0.138 at 75%, 0.451 at 50%, 0.710
+at the mid-plane — while `tau_visc` falls linearly from the wall. Their product
+peaks mid-depth. The reference peaks at the skin.
+
+**That is not a missing term. It is the shear channel's Lagrangian assumption.**
+It computes, for each depth, the stress a fluid element would build up *having sat
+at that depth since t = 0*, sheared at the local rate until it freezes. Under that
+assumption the wall layer must retain nothing — it freezes at 0.094 s, before it
+can build anything — and the core must retain the most, because it stays molten
+longest. The profile it produces is the correct answer to the wrong history.
+
+In fountain flow the skin never sat at the wall. It was deformed in the hot core,
+carried to the wall by the advancing front, and quenched on arrival — so it
+retains what it was already carrying. The two channels disagree about the same
+material, which is why removing the double-count changed the magnitude without
+changing the shape.
+
+**Eight configurations measured against this, none adopted** (nz=161; in-plane bar
+is a factor of 2, depth band [1.39, 5.56], depth read at the criterion's station):
+
+| configuration | in-plane | peak at | far edge | depth |
+|---|---|---|---|---|
+| default | **1.16×** | 0 mm | 46.5% | 0.82 |
+| carried melt orientation | 3.48× | 0 mm | 82.1% | 1.47 |
+| + Blake envelope | 1.93× | 92 mm | **268%** | 0.31 |
+| + complementary gate | 1.87× | 99 mm | **268%** | 0.31 |
+| + thinned λ | 2.46× | 15 mm | 76.8% | 1.91 |
+| thinned λ alone | 2.87× | 0 mm | 18.9% | 1.92 |
+| thinned λ + complementary | 2.35× | 4 mm | 14.8% | 1.91 |
+| Blake envelope alone | 0.70× | 51 mm | 54.8% | 0.31 |
+
+Two structural results close off whole families rather than single attempts.
+**Every envelope configuration reads 0.31 at the criterion's station**, because
+`z*(0) = 1` admits no deposited material at the gate — the `f(0) = 0` argument,
+which is analytic. And **the only lever that moves the depth ratio is the
+shear-thinned λ**, which works by saturating the memory bracket to 0.92–1.00
+everywhere: it does not correct the depth dependence, it removes it.
+
+**What would actually fix it is not a term but a history.** The shear channel
+needs each element's own path — where it was, how hard it was sheared, when it
+arrived — rather than a standing assumption that it never moved. That is a
+Lagrangian particle model, and it is a different program from the one here.
+
+### The depth criterion now uses both channels
+
+Corrected 2026-08-17. The depth clause compared `DnFlow` alone against a profile
+the source measured in the **xz and yz planes** — out of plane, on slabs cut from
+the plate and viewed edge-on — where the thermal residual stress contributes in
+full. Isayev (*J. Polym. Sci. B*, 2006) has the thermal part dominating the core
+outright. Comparing one channel against a two-channel measurement is a
+measurement-definition error of the same class as the withdrawn 5.56.
+
+**The in-plane clause is deliberately unchanged.** Thermal stress is equibiaxial
+in plane (σxx = σyy, σzz = 0), so it contributes exactly **zero** to the in-plane
+difference that clause measures. Adding it there would be adding a term that
+vanishes in the geometry it is measured in. In-plane stays 1.07×.
+
+| | depth @ gate | depth @ s/L 0.1–0.5 | published |
+|---|---|---|---|
+| flow only, no envelope | 0.81 | 0.81 | 2.78 (yz) / 4.67 (xz) |
+| **flow+thermal**, no envelope | **1.16** | 1.16 | |
+| flow only + envelope | 0.02 | 2.52 | |
+| **flow+thermal + envelope** | 1.08 | **4.08** | |
+
+With both corrections applied, the interior-station ratio is **4.08 — between the
+two planes the source actually measured** (2.78 yz, 4.67 xz), and 13% below the
+cross-plane value. That is the closest this model has come, on a corrected
+reference and a literature deposition weight, with no fitted parameter.
+
+**It cost the null, and the null has been rebuilt — fourth version.** Correcting
+the clause dropped the freeze-order null to 1.19 vs 1.16, just under the bar.
+Nothing about the perturbation got worse: the thermal channel is nearly flat
+through the thickness, so adding it to numerator and denominator alike drags any
+ratio toward 1 and compresses whatever the null was resolving. **A single null on
+a summed quantity is always diluted by whichever channel is flatter, and a bigger
+kick does not fix that.** So the control is decomposed the same way the
+measurement is:
+
+| control | what it perturbs | requirement | result |
+|---|---|---|---|
+| **(i) flow** | mirror the temperature history | flow-only ratio must move >50% | 1.349 vs 0.812 — **passes** (2.090 vs 0.018 with envelope) |
+| **(ii) thermal** | CTE = 0 | total must collapse **exactly** onto flow-only, **and** differ materially when on | rel err 0.0, contribution 43% — **passes** |
+
+Clause (ii) has two halves that fail in opposite directions, deliberately. The
+collapse identity alone would hold **trivially if the thermal term were never
+added at all**, so a check built only on it would pass when the feature is
+absent. The second half requires the channel to move the reported ratio.
+
+And the identity check carries its own positive control: the same comparison is
+fed a pair it must reject (thermal-ON total against flow-only) and required to
+report a difference. It reads 3.5 × 10⁻¹, so the tolerance is not swallowing
+everything.
+
+The `s/L = 1.0` column reads infinity: at the far edge the deep sample sits
+inside `z*` and the shear channel is identically zero there, so the denominator
+is exactly 0. Reported rather than suppressed — it is a real degeneracy of
+sampling a ratio at a station where the denominator vanishes.
+
+**What the failure means.** The predicted profile is now core-weighted where the
+real part is skin-peaked. That is not a missing magnitude — it is the balance
+between the two channels through the thickness. Shear correctly gives a
+fast-freezing skin almost nothing, and fountain deposition supplies what the skin
+has, so the depth shape is set by how those two trade off, which is the open
+question. The in-plane peak, by contrast, is 0.95× of the published value on
+measured constants with **no fitted parameter between the two channels.**
+
+**Numbers here are the default: `-refcase` now runs at nz=321.**  They are still drifting.
+
+> **The sweep below was taken at the OLD process conditions (290 °C / 120 °C /
+> 60 MPa) and its VALUES are superseded** by the 2026-08-17 correction — at
+> 150 °C the pair is 0.95× / 0.99 at nz=321 and 0.81 depth at nz=81. Convergence
+> expires when the model changes. The GRID at which it converged plausibly
+> carries over, and that is all the sweep is still quoted for.
+
+Neither
+registered number is converged at the shipped default of 81: peak 1.01× / depth
+0.74 at nz=81, 0.90× / 0.91 at 161, 0.85× / 0.98 at 321. The trend is monotone
+and decelerating, and extrapolates to roughly 0.83× and 1.0. **nz=641 does not
+complete** — the freeze solver is explicit, so cost grows as the cube of the node
+count and the step cap is reached before the core freezes. So convergence here is
+demonstrated by trend, not by brute force, and `-refcase` warns if you drop below it. `-run` now runs the physics at nz=321 too and exports a small **wall-clustered** subset of those same nodes, so a converged model no longer forces an unmanageable file. Depths are placed quadratically in distance from the wall — dense at the skin, where all the structure is, sparse in the core — and taken as actual physics nodes, so nothing is interpolated. `-nzexport` is an upper bound rather than a count: near the wall several requested depths collapse onto the same node and are de-duplicated, so 41 requested yields 19 distinct.
+
+**The deficit is located and it is not a shape problem.** At the surface the
+model gives ~1.0 × 10⁻⁴ against a published 10 × 10⁻⁴ — a factor of ten low —
+while at the published 0.4 mm depth it gives ~1.1 × 10⁻⁴ against 1.8 × 10⁻⁴,
+which is within a factor of two. The core is roughly right and the skin is short
+by an order of magnitude. Sampling depth is not the explanation: sweeping the
+surface sampling point from 19 µm to 0.1 µm moves the value by under 1%.
+
+**Three candidate explanations for the depth deficit have been eliminated by
+measurement rather than argument:** the melt stress-optical coefficient (the
+depth ratio is invariant under any scaling of it), the fountain term's magnitude
+(the physically correct version is *smaller* than the arbitrary one it replaced,
+and the profile needs more skin weighting, not less), and grid resolution. What
+remains is the shear channel's behaviour in the skin.
+
+Options: `-writecatalog [-out <agf>]`, `-gates`, `-run`, `-refcase`, `-selftest`,
+plus `-file <zmx>` (headless batch mode), `-gateconfig <file>`, `-outdir <dir>`,
+`-filltime`, `-packpressure`, `-packtime`, `-melttemp`, `-moldtemp`,
+`-materials A,B`, `-directindex`.
