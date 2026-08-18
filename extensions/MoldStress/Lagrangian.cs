@@ -75,6 +75,8 @@ namespace MoldStress
         public double[] DnFlow;         // 2 * C_melt * sigma
         public bool[] WasDeposited;     // true if the front laid it down
         public double[] ArrivalHeight;  // the y0 it started at, mm
+        public double[] SFinal;         // resting station along the flow, mm
+        public double PathLengthMm;
 
         public double DepositedFraction;   // of the half-gap, at the reporting station
         public double MassBalanceError;    // control: |seeded - placed| / seeded
@@ -89,6 +91,7 @@ namespace MoldStress
             public double TDeposit;
             public double TEnter;       // when this element entered the gate
             public double Weight;       // volumetric weight, proportional to u(y0)
+            public double SFinal;       // where along the flow it came to rest, mm
         }
 
         /// <summary>
@@ -291,6 +294,7 @@ namespace MoldStress
 
                             q.Deposited = true;
                             q.TDeposit = t;
+                            q.SFinal = q.S;
                             // Fill inward from the wall, in arrival order, by
                             // VOLUME rather than by particle count.
                             depositedHeight += H * q.Weight / totalWeight;
@@ -305,9 +309,10 @@ namespace MoldStress
                 }
             }
 
-            // Anything never intercepted freezes where it sat.
+            // Anything never intercepted freezes where it sat, at the station it
+            // had reached when its own depth solidified.
             foreach (var q in parts)
-                if (!q.Deposited) q.ZFinal = q.Y0;
+                if (!q.Deposited) { q.ZFinal = q.Y0; q.SFinal = Math.Min(q.S, L); }
 
             var ordered = parts.OrderBy(q => q.ZFinal).ToList();
             var lag = new Lagrangian
@@ -316,6 +321,8 @@ namespace MoldStress
                 SigmaMPa = ordered.Select(q => q.Sigma).ToArray(),
                 WasDeposited = ordered.Select(q => q.Deposited).ToArray(),
                 ArrivalHeight = ordered.Select(q => q.Y0).ToArray(),
+                SFinal = ordered.Select(q => q.SFinal).ToArray(),
+                PathLengthMm = L,
                 DepositedFraction = parts.Count(q => q.Deposited) / (double)parts.Count,
             };
             lag.DnFlow = lag.SigmaMPa
@@ -327,6 +334,31 @@ namespace MoldStress
             double placed = lag.Z.Count(z => z >= -1e-9 && z <= H + 1e-9);
             lag.MassBalanceError = Math.Abs(placed - parts.Count) / (double)parts.Count;
             return lag;
+        }
+
+        /// <summary>
+        /// Thickness-averaged |dn| against distance from the gate - the quantity
+        /// a polarimeter reading through the plate integrates, and the one the
+        /// registered in-plane clause compares against.
+        ///
+        /// Binned by an element's RESTING station, which is what the Lagrangian
+        /// model adds: an element deposited at 20 mm contributes there, not where
+        /// it entered. The sample count per bin is returned so a thin bin cannot
+        /// pass silently.
+        /// </summary>
+        public double[] InPlaneProfile(int nBins, out int[] counts)
+        {
+            var sum = new double[nBins];
+            counts = new int[nBins];
+            for (int i = 0; i < SFinal.Length; i++)
+            {
+                int b = (int)(SFinal[i] / Math.Max(PathLengthMm, 1e-9) * nBins);
+                if (b < 0) b = 0; if (b >= nBins) b = nBins - 1;
+                sum[b] += DnFlow[i]; counts[b]++;
+            }
+            var prof = new double[nBins];
+            for (int b = 0; b < nBins; b++) prof[b] = counts[b] > 0 ? sum[b] / counts[b] : 0.0;
+            return prof;
         }
 
         /// <summary>
@@ -447,6 +479,67 @@ namespace MoldStress
                 RefCase.PublishedDepthRatio / RefCase.FactorBar,
                 RefCase.PublishedDepthRatio * RefCase.FactorBar));
 
+            // ---- in-plane clauses, ported from RefCase ----------------------
+            const int NB = 20;
+            int[] cnt; var prof = lag.InPlaneProfile(NB, out cnt);
+            int argMax = 0;
+            for (int b = 1; b < NB; b++) if (prof[b] > prof[argMax]) argMax = b;
+            double peak = prof[argMax];
+            double peakRatio = peak / RefCase.PublishedPeakDn;
+            double farPct = peak > 0 ? 100.0 * prof[NB - 1] / peak : 0.0;
+
+            Console.WriteLine();
+            Console.WriteLine("  in-plane, thickness-averaged |dn| by station");
+            Console.WriteLine("    s/L    dn_flow      n");
+            for (int b = 0; b < NB; b += Math.Max(1, NB / 8))
+                Console.WriteLine(string.Format(ci, "    {0,4:F2}   {1:E3}   {2,5}",
+                    (b + 0.5) / NB, prof[b], cnt[b]));
+            Console.WriteLine(string.Format(ci,
+                "  (a) predicted peak {0:E3} against published {1:E3} - ratio {2:F2}x  =>  {3}",
+                peak, RefCase.PublishedPeakDn, peakRatio,
+                (peakRatio >= 1.0 / RefCase.FactorBar && peakRatio <= RefCase.FactorBar)
+                    ? "PASS" : "FAIL"));
+            Console.WriteLine(string.Format(ci,
+                "  (b) maximum at s/L {0:F2}, falling to {1:F1} % of it at the far edge  =>  {2}",
+                (argMax + 0.5) / NB, farPct,
+                (argMax <= NB / 4 && farPct < 100.0) ? "PASS" : "FAIL"));
+
+            // GATE NULL. The flow model is one-dimensional along the path, so
+            // mirroring the gate maps station s to L-s and the profile in PART
+            // coordinates reverses. On a SYMMETRIC plate that is a relabelling
+            // and cannot fail on its own - stated rather than dressed up. What it
+            // does still catch is a profile with no structure at all: a flat
+            // field has no maximum to move, and the discrimination check below
+            // requires the two ends to differ by more than 5%.
+            double xGate0 = (argMax + 0.5) / NB;              // part coord, gate at 0
+            double xGate180 = 1.0 - xGate0;                   // gate at the far edge
+            bool moves = Math.Abs(xGate0 - xGate180) > 1e-9;
+            bool hasStructure = peak > 0 && Math.Abs(prof[0] - prof[NB - 1]) / peak > 0.05;
+            Console.WriteLine(string.Format(ci,
+                "  (b) NULL: maximum at x/L {0:F2} with the gate at 0 deg, {1:F2} with it " +
+                "at 180 deg  =>  {2}", xGate0, xGate180, (moves && hasStructure) ? "PASS" : "FAIL"));
+            Console.WriteLine(string.Format(ci,
+                "      and the field has structure to move: ends differ by {0:P0} of the " +
+                "peak  =>  {1}",
+                peak > 0 ? Math.Abs(prof[0] - prof[NB - 1]) / peak : 0.0,
+                hasStructure ? "PASS" : "FAIL"));
+            Console.WriteLine("      NOTE: on a symmetric plate the position flip is a " +
+                              "relabelling; the structure check is the half that can fail.");
+
+            // CONTROL ON THE STATION DISTRIBUTION. A plate fills uniformly: every
+            // station holds the same volume per unit length, so the resting-station
+            // histogram must be flat to within sampling noise. This is the check
+            // the depth-only view could not make, because binning by z alone hides
+            // where along the flow the material ended up.
+            double meanN = cnt.Average();
+            double worst = cnt.Select(c => Math.Abs(c - meanN) / Math.Max(meanN, 1e-9)).Max();
+            bool uniformFill = worst < 0.5;
+            Console.WriteLine();
+            Console.WriteLine(string.Format(ci,
+                "  control: resting stations must be UNIFORM (a plate fills evenly). " +
+                "worst bin deviates {0:P0} from the mean of {1:F0}  =>  {2}",
+                worst, meanN, uniformFill ? "PASS" : "FAIL"));
+
             bool massOk = lag.MassBalanceError < 1e-9;
             Console.WriteLine();
             Console.WriteLine("  control: every seeded particle comes to rest inside the " +
@@ -455,7 +548,7 @@ namespace MoldStress
                               "everything  =>  " +
                               ((lag.DepositedFraction > 0.01 && lag.DepositedFraction < 0.99)
                                ? "PASS" : "FAIL"));
-            return massOk ? 0 : 1;
+            return (massOk && uniformFill) ? 0 : 1;
         }
     }
 }
