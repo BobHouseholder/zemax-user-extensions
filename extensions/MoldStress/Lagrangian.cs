@@ -132,20 +132,45 @@ namespace MoldStress
             // at height y is proportional to the speed there - seeding uniformly
             // in y without that weight would silently over-represent the slow
             // near-wall material.
+            // MELT ENTERS THE MOLTEN CHANNEL, NOT THE FROZEN SKIN.
+            //
+            // The first version seeded every height at the gate, including
+            // near-wall heights - and those freeze within 0.094 s, so they came to
+            // rest essentially AT the gate. That put 822 elements in the first
+            // station bin against ~80 elsewhere, a 1244% departure from the
+            // uniform fill a plate must have, and it inverted the along-flow
+            // profile by dragging the near-gate average down with barely-oriented
+            // material.
+            //
+            // It is also physically impossible: melt cannot flow into solid. At
+            // entry time t_e the channel is only open to |y| < H - delta(t_e),
+            // where delta is the frozen layer already grown. Downstream near-wall
+            // cells are filled by the FRONT, which is the mechanism this model
+            // exists to represent - they are not filled by material that entered
+            // near the wall and stopped.
+            Func<double, double> frozenSkin = te =>
+            {
+                double d = 0.0;
+                for (int m = 0; m < freeze.Z.Length; m++)
+                    if (freeze.FreezeTimeS[m] <= te)
+                        d = Math.Max(d, H - Math.Abs(freeze.Z[m]));
+                return Math.Min(d, 0.95 * H);
+            };
+
             int nY = Math.Max(8, (int)Math.Sqrt(nParticles * 2));
             int nT = Math.Max(8, nParticles / nY);
             var parts = new List<Particle>(nY * nT);
-            for (int iy = 0; iy < nY; iy++)
+            for (int it = 0; it < nT; it++)
             {
-                double y0 = H * (iy + 0.5) / nY;
-                double w = UNorm(y0 / H, n);
-                for (int it = 0; it < nT; it++)
+                double te = tFill * (it + 0.5) / nT;
+                double yOpen = H - frozenSkin(te);           // channel still open
+                for (int iy = 0; iy < nY; iy++)
                 {
-                    double te = tFill * (it + 0.5) / nT;
+                    double y0 = yOpen * (iy + 0.5) / nY;
                     parts.Add(new Particle
                     {
                         Y0 = y0, S = 0.0, Sigma = 0.0, ZFinal = y0,
-                        TEnter = te, Weight = w,
+                        TEnter = te, Weight = UNorm(y0 / H, n),
                     });
                 }
             }
@@ -207,7 +232,18 @@ namespace MoldStress
                 {
                     if (t < q.TEnter) continue;          // not injected yet
                     double yAbs = q.Deposited ? Math.Abs(q.ZFinal) : q.Y0;
-                    double T = tempAt(yAbs, t);
+                    // COOLING CLOCK RUNS FROM ENTRY, not from t=0.
+                    //
+                    // This read tempAt(yAbs, t) on absolute time, so every element
+                    // at a given height crossed Tg at the same absolute instant
+                    // regardless of when it entered or where it had reached.
+                    // Near-wall elements therefore all stopped within 0.094 s of
+                    // t=0 - near the gate - which is the mass-conservation failure,
+                    // not the seeding. The Eulerian channel already offsets its
+                    // freeze clock by arrival (tArrive + FreezeTimeS); this model
+                    // did not, so the two disagreed about when anything solidified.
+                    double tLocal = t - q.TEnter;
+                    double T = tempAt(yAbs, tLocal);
 
                     // Below Tg the element is solid: no loading, no relaxation.
                     if (T <= p.TgC) continue;
@@ -270,10 +306,22 @@ namespace MoldStress
 
                     if (!q.Deposited)
                     {
-                        // Still in the channel: advect, and relax toward the local
-                        // channel shear stress.
-                        double u = vFront * UNorm(q.Y0 / H, n);
-                        q.S += u * dt;
+                        // Still in the channel: advect WHILE THERE IS FLOW, and
+                        // relax toward the local channel shear stress.
+                        //
+                        // Advection had no fill-time guard, so elements kept
+                        // travelling after the cavity was full, ran to the end of
+                        // the path and were clamped at L. That is where the
+                        // mass-conservation failure ended up after the first two
+                        // fixes moved it off the gate: a single terminal bin
+                        // holding thousands of elements while the interior bins
+                        // were even. The histogram print stepped by two and
+                        // skipped it, which is why the interior looked healthy.
+                        if (t <= tFill)
+                        {
+                            double u = vFront * UNorm(q.Y0 / H, n);
+                            q.S += u * dt;
+                        }
 
                         int node = (int)Math.Round((q.S / L) * (fill.S.Length - 1));
                         node = Math.Max(0, Math.Min(fill.S.Length - 1, node));
@@ -491,7 +539,7 @@ namespace MoldStress
             Console.WriteLine();
             Console.WriteLine("  in-plane, thickness-averaged |dn| by station");
             Console.WriteLine("    s/L    dn_flow      n");
-            for (int b = 0; b < NB; b += Math.Max(1, NB / 8))
+            for (int b = 0; b < NB; b++)
                 Console.WriteLine(string.Format(ci, "    {0,4:F2}   {1:E3}   {2,5}",
                     (b + 0.5) / NB, prof[b], cnt[b]));
             Console.WriteLine(string.Format(ci,
@@ -548,7 +596,24 @@ namespace MoldStress
                               "everything  =>  " +
                               ((lag.DepositedFraction > 0.01 && lag.DepositedFraction < 0.99)
                                ? "PASS" : "FAIL"));
-            return (massOk && uniformFill) ? 0 : 1;
+            // The exit code must reflect the CLAUSES, not just the model's
+            // internal housekeeping. It returned 0 while three clauses printed
+            // FAIL, because it only looked at the mass controls - the same
+            // does-nothing-reports-success shape this project keeps meeting.
+            bool peakOk = peakRatio >= 1.0 / RefCase.FactorBar && peakRatio <= RefCase.FactorBar;
+            bool shapeOk = argMax <= NB / 4 && farPct < 100.0;
+            bool depthOk = ratio >= RefCase.PublishedDepthRatio / RefCase.FactorBar
+                        && ratio <= RefCase.PublishedDepthRatio * RefCase.FactorBar;
+            bool allOk = massOk && uniformFill && peakOk && shapeOk
+                      && moves && hasStructure && depthOk;
+            Console.WriteLine();
+            Console.WriteLine("  VERDICT: " + (allOk
+                ? "every ported clause is met"
+                : "NOT met - depth " + (depthOk ? "PASS" : "FAIL") +
+                  ", in-plane peak " + (peakOk ? "PASS" : "FAIL") +
+                  ", in-plane shape " + (shapeOk ? "PASS" : "FAIL") +
+                  ", gate null " + ((moves && hasStructure) ? "PASS" : "FAIL")));
+            return allOk ? 0 : 2;
         }
     }
 }
