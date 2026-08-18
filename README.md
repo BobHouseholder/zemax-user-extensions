@@ -643,6 +643,42 @@ x0.01 freeze-time scaling demonstrably does, though it tests sensitivity to the
 freeze-history *magnitude* rather than to its *ordering*, which is what the
 registered clause names.
 
+### The thermal channel is not the deficit — checked before changing it
+
+The Lagrangian model leaves the core relaxed to near-zero flow orientation, so
+the published core plateau of 1.8 × 10⁻⁴ has to come from somewhere. The thermal
+channel supplies about 7 × 10⁻⁶ there, which looks like a 26× deficit and an
+obvious thing to go and fix.
+
+**It is not a deficit.** The channel is driven by the freeze-off gradient — each
+layer's temperature at the moment the centre solidifies, with the mean and linear
+parts removed by force and moment balance. That gradient spans `Tg − T_mould`,
+and this part is moulded at **150 °C against a Tg of 178 °C**, i.e. **28 K**.
+Scaling the standard free-quench magnitude `Eα ΔT / 3(1−ν)`:
+
+| mould | ΔT | σ | dn_thermal | vs published core |
+|---|---|---|---|---|
+| **150 °C** (this part) | **28 K** | 2.6 MPa | **2.2e-5** | 12% |
+| 120 °C | 58 K | 5.4 MPa | 4.6e-5 | 26% |
+| 80 °C | 98 K | 9.2 MPa | 7.8e-5 | 43% |
+| 20 °C | 158 K | 14.8 MPa | 1.26e-4 | 70% |
+
+The model's ~2–4 × 10⁻⁵ is the right order **for this mould**. The 1.26 × 10⁻⁴
+figure that makes the deficit look damning assumes a cold mould and cooling to
+ambient — a different process. A 150 °C mould is a deliberately hot one, chosen
+precisely because it produces low thermal residual stress in an optical part, and
+the model reproduces that.
+
+**So the target was wrong.** If the thermal channel is right and the core plateau
+is 1.8 × 10⁻⁴, the core birefringence is **residual flow orientation that both
+models relax away** — the Eulerian one by construction, the Lagrangian one by
+relaxing σ toward a decaying packing stress over the 3 s the core stays molten.
+That is where the remaining deficit lives, and it is the same quantity the
+shear-thinned λ reached by saturating it.
+
+No code changed. The 26× figure is withdrawn as a comparison against the wrong
+process rather than a defect in the channel.
+
 ### Why the profile peaks at 50%, and why no further term will fix it
 
 Measured cause, on the fixed freeze history at the corrected conditions:
