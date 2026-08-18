@@ -242,7 +242,9 @@ namespace MoldStress
                         memory = MemoryFactorWlf(tArrive, tFill, tFreezeAbs,
                                                  freeze.TimeGridS, hist, p, lambda, tPack,
                                                  meltFracAtTime, proc.ChannelNarrowing,
-                                                 tGateSeal);
+                                                 tGateSeal, proc.ShearThinnedLambdaDuringFill,
+                                                 fill.EtaPaS > 0
+                                                     ? tauViscMPa * 1e6 / fill.EtaPaS : 0.0);
                     }
                     else
                     {
@@ -469,7 +471,9 @@ namespace MoldStress
                                              Polymer p, double lambdaMelt, double tPack,
                                              double[] meltFrac = null,
                                              bool narrowing = false,
-                                             double tGateSeal = double.PositiveInfinity)
+                                             double tGateSeal = double.PositiveInfinity,
+                                             bool shearThinnedDuringFill = false,
+                                             double localShearRate = 0.0)
         {
             if (tF <= tA || grid == null || grid.Length < 2) return 0.0;
             double tEndLocal = Math.Min(tF - tA, Math.Max(tFill - tA, 0.0));
@@ -490,7 +494,37 @@ namespace MoldStress
             {
                 double dtj = grid[j] - grid[j - 1];
                 double tMid = 0.5 * (tempC[j] + tempC[j - 1]);
-                lamAt[j] = Math.Max(FillField.CrossWlf(p, 0.0, tMid, 0.0) / p.MeltModulusPa, 1e-12);
+                // RELAXATION TIME WHILE THE MELT IS FLOWING, 2026-08-17.
+                //
+                // This line evaluates CrossWlf at shear rate ZERO, i.e. lambda =
+                // eta0(T)/G = 0.47 s at 280 C. That is the correct relaxation time
+                // for melt at REST. While the cavity is filling the melt is under
+                // high shear and is thinned by a factor of ~138 here, so its
+                // effective relaxation time is far shorter and orientation decays
+                // far faster than this line allows.
+                //
+                // The consequence is the depth profile's shape: layers that freeze
+                // LATE (the core) keep fill-era orientation they should have lost,
+                // and the predicted profile peaks at mid-depth instead of at the
+                // skin. lambdaMelt - the shear-thinned value - was already being
+                // passed in and was DEAD, never referenced in this body.
+                // NOTE the name: tMid here is a TEMPERATURE, the mean of two
+                // samples of the cooling curve. The integration loop below uses
+                // tMidW for a TIME. The first version of this branch compared
+                // tMid against tEndLocal - a temperature against a time - so it
+                // was never true and the option was silently inert. Caught by the
+                // arms printing identical numbers.
+                double tTimeMid = 0.5 * (grid[j] + grid[j - 1]);
+                // lambda(T, gammaDot) = eta(T, gammaDot)/G. Evaluating Cross at
+                // gammaDot = 0 gives the melt-at-REST relaxation time and applies
+                // it to material that is being sheared. Passing the LOCAL shear
+                // rate keeps the temperature dependence - a near-wall layer that
+                // has already cooled still gets its long lambda - where the first
+                // version clamped every layer to one melt-temperature value.
+                double gd = (shearThinnedDuringFill && tTimeMid <= tEndLocal)
+                    ? localShearRate : 0.0;
+                double lamHere = FillField.CrossWlf(p, gd, tMid, 0.0) / p.MeltModulusPa;
+                lamAt[j] = Math.Max(lamHere, 1e-12);
                 if (dtj > 0) xi += dtj / lamAt[j];
                 xiAt[j] = xi;
             }

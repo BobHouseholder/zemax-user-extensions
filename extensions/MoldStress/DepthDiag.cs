@@ -33,8 +33,15 @@ namespace MoldStress
             var log = new StringBuilder();
             Action<string> say = s => { Console.WriteLine(s); log.AppendLine(s); };
 
-            var p = Polymers.ByName("MS_COC_TOPAS6017");
-            var baseProc = new Process { FillTimeS = 1.0, PackPressureMPa = 60.0, PackTimeS = 3.0 };
+            // SAME CONDITIONS AS THE CRITERION, corrected 2026-08-17. This built
+            // its own Process at 60 MPa and took the polymer's default 290/120,
+            // while RefCase runs the paper's 280/150 at 71.3 MPa - so the
+            // diagnostic was describing a different case from the one whose
+            // failure it exists to explain. Third instance today of a check
+            // evaluating something other than what it names; see
+            // verify-the-artifact Q7.
+            var p = Polymers.ByName("MS_COC_TOPAS6017").WithProcessTemps(280.0, 150.0);
+            var baseProc = new Process { FillTimeS = 1.0, PackPressureMPa = 71.3, PackTimeS = 3.0 };
 
             var plate = new MouldedElement
             {
@@ -55,10 +62,24 @@ namespace MoldStress
 
             say("MoldStress - depth-profile hypothesis test");
             say("  " + Program.ScopeLabel);
+            // BOTH lambdas, 2026-08-17. This printed only eta/G using the
+            // SHEAR-THINNED viscosity from the fill field - 3.37e-3 s - and called
+            // it "lambda". The memory integral does not use that value: it
+            // evaluates CrossWlf at shear rate ZERO and gets eta0(T)/G = 0.47 s at
+            // 280 C, 138x larger. The class docstring above builds its whole
+            // hypothesis on "lambda is far SHORTER than the fill time"; at the
+            // lambda actually used it is COMPARABLE to the 1.0 s fill, so that
+            // premise is false. Fourth instance today of a check reporting a
+            // quantity the model does not use - see verify-the-artifact Q7.
+            double lambdaZeroShear = FillField.CrossWlf(p, 0.0, p.MeltTempC, 0.0) / p.MeltModulusPa;
             say(string.Format(ci,
-                "  eta {0:E3} Pa.s, G {1:E2} Pa  =>  lambda {2:E3} s against a fill time of {3:F2} s",
-                fill.EtaPaS, p.MeltModulusPa, lambda0, baseProc.FillTimeS));
-            say(string.Format(ci, "  lambda / fill time = {0:E2}", lambda0 / baseProc.FillTimeS));
+                "  eta {0:E3} Pa.s (shear-thinned), G {1:E2} Pa  =>  lambda {2:E3} s",
+                fill.EtaPaS, p.MeltModulusPa, lambda0));
+            say(string.Format(ci,
+                "  lambda ACTUALLY USED by the memory integral = eta0(T)/G = {0:E3} s " +
+                "at {1:F0} C, against a fill time of {2:F2} s  (ratio {3:F2})",
+                lambdaZeroShear, p.MeltTempC, baseProc.FillTimeS,
+                lambdaZeroShear / baseProc.FillTimeS));
             say("");
 
             // --- prediction 1: is the bracket a step? --------------------------
@@ -75,7 +96,15 @@ namespace MoldStress
             // A diagnostic that names a quantity must evaluate the quantity the
             // model uses. Both are printed now, so a future divergence shows up
             // as a disagreement rather than as a plausible single number.
-            say("  depth   t_freeze    mem_wlf   mem_closed     tau_visc      dn_flow    dn_therm      total");
+            // REDUCED TIME TO FREEZE, added 2026-08-17. mem_wlf rises inward and
+            // reads 0.45 at mid-depth - a layer freezing 2.3 s after filling ends
+            // retaining 45% of the fill-time shear stress, against a packing
+            // weight of 0.1. That is only physical if the reduced-time clock
+            // nearly STOPS as the layer cools, leaving the relaxation kernel
+            // reaching back into the fill window. xi_freeze decides it: if it is
+            // large (many relaxation times) the fill-era orientation is gone and
+            // 0.45 is a bug; if it is order 1, the clock did stop and 0.45 is real.
+            say("  depth   t_freeze    xi_frz    mem_wlf   mem_closed     tau_visc      dn_flow    dn_therm      total");
             var ch0 = Channels.Build(plate, p, baseProc, fill, freeze);
             int nz = freeze.NodeCount;
             for (int k = nz - 1; k >= nz / 2; k -= 2)
@@ -107,11 +136,19 @@ namespace MoldStress
                 // so C_melt does not apply to it.
                 double dnTherm = Math.Abs(p.KGlassBrewster) * 1e-6
                                  * Math.Abs(ch0.SigmaThermalMPa[0, k]);
+                double xiFrz = 0.0;
+                if (freeze.TimeGridS != null && freeze.TempHistoryC != null)
+                {
+                    var hf = new double[freeze.TimeGridS.Length];
+                    for (int q = 0; q < hf.Length; q++) hf[q] = freeze.TempHistoryC[k, q];
+                    xiFrz = Channels.ReducedTimeToFreeze(freeze.TimeGridS, hf, p,
+                                                         freeze.FreezeTimeS[k]);
+                }
                 say(string.Format(ci,
-                    "  {0,5:P0}  {1,9:F4}  {2,9:F5}  {3,10:F5}  {4,11:E3}  {5,9:E3}  {6,9:E3}  {7,9:E3}",
+                    "  {0,5:P0}  {1,9:F4}  {8,9:F3}  {2,9:F5}  {3,10:F5}  {4,11:E3}  {5,9:E3}  {6,9:E3}  {7,9:E3}",
                     f, freeze.FreezeTimeS[k], memWlf, memClosed, tau,
                     Math.Abs(ch0.DnFlow[0, k]), dnTherm,
-                    Math.Abs(ch0.DnFlow[0, k]) + dnTherm));
+                    Math.Abs(ch0.DnFlow[0, k]) + dnTherm, xiFrz));
             }
             // Where does the freeze time cross the fill time? That is the depth
             // the hypothesis says the cliff must sit at.

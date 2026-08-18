@@ -133,6 +133,8 @@ namespace MoldStress
                 proc.FountainDepositionSupport = true;
             if (Program.Has(args, "-deposition-decay"))
                 proc.FountainDecaysAlongFlow = true;
+            if (Program.Has(args, "-thinned-lambda"))
+                proc.ShearThinnedLambdaDuringFill = true;
 
             // Grid, exposed so both registered numbers can be re-taken at
             // convergence. The convergence established earlier was measured on

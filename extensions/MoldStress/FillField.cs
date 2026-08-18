@@ -140,6 +140,18 @@ namespace MoldStress
         /// identically zero and there is no orientation to deposit. An extension
         /// of an argument already in the model, not a new constant.
         /// </summary>
+        /// <summary>
+        /// Use the SHEAR-THINNED relaxation time while the cavity is filling.
+        ///
+        /// MemoryFactorWlf evaluates CrossWlf at shear rate zero, giving
+        /// lambda = eta0(T)/G = 0.47 s at 280 C for this grade. That is right for
+        /// melt at rest and wrong while the melt is flowing: under fill shear the
+        /// viscosity is ~138x lower here, so orientation relaxes far faster than
+        /// the zero-shear value allows. The shear-thinned lambda was ALREADY being
+        /// passed into that function and was dead code, never referenced.
+        /// </summary>
+        public bool ShearThinnedLambdaDuringFill = false;
+
         public bool FountainDecaysAlongFlow = false;
 
 
