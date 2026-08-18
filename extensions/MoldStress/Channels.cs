@@ -554,6 +554,16 @@ namespace MoldStress
                 double gd = (shearThinnedDuringFill && tTimeMid <= tEndLocal)
                     ? localShearRate : 0.0;
                 double lamHere = FillField.CrossWlf(p, gd, tMid, 0.0) / p.MeltModulusPa;
+
+                // A VITRIFICATION CUTOFF HERE IS PROVABLY INERT - do not add one.
+                // Cross-WLF has no glass transition in it, so the obvious worry is
+                // that it shear-thins material already below Tg and lets a layer
+                // keep accumulating reduced time after it has solidified. It
+                // cannot: the integration below breaks at tFLocal, and tFreeze is
+                // DEFINED in FreezeHistory as the instant T <= Tg, so the window
+                // ends exactly at vitrification and never contains sub-Tg
+                // material. Implemented and measured 2026-08-17 - identical
+                // numbers in every arm - then removed rather than shipped inert.
                 lamAt[j] = Math.Max(lamHere, 1e-12);
                 if (dtj > 0) xi += dtj / lamAt[j];
                 xiAt[j] = xi;

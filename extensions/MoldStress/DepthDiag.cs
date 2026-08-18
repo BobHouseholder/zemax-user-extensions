@@ -133,6 +133,7 @@ namespace MoldStress
                                                       baseProc.ShearThinnedLambdaDuringFill,
                                                       fill.EtaPaS > 0
                                                           ? tau * 1e6 / fill.EtaPaS : 0.0);
+
                 }
                 // THE THERMAL CHANNEL, printed 2026-08-17 because the depth
                 // criterion does not look at it. Isayev (J. Polym. Sci. B, 2006)

@@ -134,6 +134,7 @@ namespace MoldStress
         /// </summary>
         public bool ComplementaryShearGate = false;
 
+
         /// <summary>
         /// Scale the front deposition by the shear window available to the melt
         /// FEEDING the front at that station, so the deposited magnitude decays
