@@ -123,12 +123,22 @@ namespace MoldStress
             var proc = new Process { FillTimeS = 1.0, PackPressureMPa = 71.3, PackTimeS = 3.0 };
             if (Program.Has(args, "-fountain"))
                 proc.FountainStrain = Program.Value(args, "-fountain", 1.0);
-            // -frontmode carried selects the melt-orientation deposition model,
-            // which is NOT the default because it measures worse. See
-            // Process.FrontCarriesMeltOrientation for the numbers.
-            foreach (string a in args)
-                if (string.Equals(a, "carried", StringComparison.OrdinalIgnoreCase))
+            // -frontmode carried|extensional. This used to scan args for the BARE
+            // WORD "carried" and never read -frontmode at all, so `carried` alone
+            // worked, `-frontmode` was an unrecognised token, and a misspelled
+            // value silently selected the default.
+            string frontMode = Program.Value(args, "-frontmode");
+            if (frontMode != null)
+            {
+                if (string.Equals(frontMode, "carried", StringComparison.OrdinalIgnoreCase))
                     proc.FrontCarriesMeltOrientation = true;
+                else if (!string.Equals(frontMode, "extensional", StringComparison.OrdinalIgnoreCase))
+                {
+                    Console.Error.WriteLine("MoldStress: -frontmode takes 'carried' or " +
+                                            "'extensional', got '" + frontMode + "'");
+                    return Program.UsageError;
+                }
+            }
             if (Program.Has(args, "-deposition-support"))
                 proc.FountainDepositionSupport = true;
             if (Program.Has(args, "-deposition-decay"))

@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Globalization;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
@@ -41,6 +43,9 @@ namespace MoldStress
                 if (args.Length == 0)
                     return Runner.Run(new[] { "-ribbon" });
 
+                int badArg = RejectUnknownArgs(args);
+                if (badArg != 0) return badArg;
+
                 if (Has(args, "-writecatalog")) return WriteCatalog(args);
                 if (Has(args, "-selftest")) return SelfTest.Run(args);
                 if (Has(args, "-gates")) return Gates(args);
@@ -57,7 +62,7 @@ namespace MoldStress
                                         string.Join(" ", args));
                 Console.Error.WriteLine();
                 Usage();
-                return 2;
+                return UsageError;
             }
             catch (Exception ex)
             {
@@ -144,6 +149,96 @@ namespace MoldStress
             {
                 if (!string.IsNullOrEmpty(file)) { try { app.CloseApplication(); } catch { } }
             }
+        }
+
+        /// <summary>
+        /// Exit code for a bad command line, kept DISTINCT from 2.
+        ///
+        /// 2 already means "the registered criterion is not met", which is a
+        /// legitimate result. Reusing it for argument errors makes those two
+        /// indistinguishable to a caller, so a scripted run that silently
+        /// mistyped a flag reads as an honest failing measurement. 64 is the
+        /// conventional EX_USAGE.
+        /// </summary>
+        internal const int UsageError = 64;
+
+        /// <summary>Flags that consume the following token as their value.</summary>
+        private static readonly string[] ValueFlags = {
+            "-file", "-filltime", "-fountain", "-frontmode", "-gateconfig",
+            "-materials", "-melttemp", "-moldtemp", "-nz", "-nzexport",
+            "-out", "-outdir", "-packpressure", "-packtime",
+        };
+
+        /// <summary>Flags that stand alone.</summary>
+        private static readonly string[] BoolFlags = {
+            "-complementary", "-deposition-decay", "-deposition-support",
+            "-depthdiag", "-directindex", "-gates", "-h", "-help", "-quiet",
+            "-refcase", "-ribbon", "-run", "-selftest", "-thinned-lambda",
+            "-writecatalog",
+        };
+
+        /// <summary>
+        /// Refuse an argument this tool does not read, instead of absorbing it.
+        ///
+        /// Main already refuses a command line with NO recognised mode. It did
+        /// not refuse an unrecognised flag ALONGSIDE a good mode, so
+        /// `-refcase -vitrify` ran the plain reference case and reported success -
+        /// the operator believes they measured one configuration and measured
+        /// another. That is the same does-nothing-reports-success pattern the
+        /// mode check was added for, one level down, and it bit on 2026-08-17
+        /// when a removed flag kept being passed and kept printing the default's
+        /// numbers.
+        ///
+        /// A misspelling is the common case and the dangerous one: `-thinned-lamda`
+        /// is not a no-op, it is a silent substitution of the default.
+        /// </summary>
+        internal static int RejectUnknownArgs(string[] a)
+        {
+            var vf = new HashSet<string>(ValueFlags, StringComparer.OrdinalIgnoreCase);
+            var bf = new HashSet<string>(BoolFlags, StringComparer.OrdinalIgnoreCase);
+            var unknown = new List<string>();
+
+            for (int i = 0; i < a.Length; i++)
+            {
+                string t = a[i];
+                if (t.Length == 0) continue;
+                bool looksLikeFlag = t[0] == '-' && !IsNumeric(t);
+
+                if (looksLikeFlag)
+                {
+                    if (vf.Contains(t))
+                    {
+                        // Consume the value, but only if one is actually there -
+                        // a value flag at the end of the line must not swallow
+                        // the bounds check.
+                        if (i + 1 < a.Length &&
+                            !(a[i + 1].StartsWith("-") && !IsNumeric(a[i + 1]))) i++;
+                    }
+                    else if (!bf.Contains(t)) unknown.Add(t);
+                }
+                else if (!string.Equals(t, "help", StringComparison.OrdinalIgnoreCase))
+                {
+                    unknown.Add(t);
+                }
+            }
+
+            if (unknown.Count == 0) return 0;
+            Console.Error.WriteLine("MoldStress: unrecognised argument" +
+                                    (unknown.Count > 1 ? "s: " : ": ") +
+                                    string.Join(" ", unknown.ToArray()));
+            Console.Error.WriteLine("  Refusing rather than running a different " +
+                                    "configuration than you asked for.");
+            Console.Error.WriteLine();
+            Console.Error.WriteLine("  flags taking a value: " + string.Join(" ", ValueFlags));
+            Console.Error.WriteLine("  flags standing alone: " + string.Join(" ", BoolFlags));
+            return UsageError;
+        }
+
+        private static bool IsNumeric(string t)
+        {
+            double d;
+            return double.TryParse(t, System.Globalization.NumberStyles.Float,
+                                   CultureInfo.InvariantCulture, out d);
         }
 
         internal static bool Has(string[] a, string flag)
