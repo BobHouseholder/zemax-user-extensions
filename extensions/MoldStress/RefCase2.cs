@@ -92,11 +92,40 @@ namespace MoldStress
             // which sets how fast the skin freezes and therefore how much
             // orientation survives.
             var p = Polymers.ByName("MS_COP_ZEONEX480R").WithProcessTemps(275.0, 124.0);
-            var proc = new Process { FillTimeS = 1.0, PackPressureMPa = 98.10, PackTimeS = 3.0 };
-
             double curvature = Program.Value(args, "-curvature", 75.0);
             int nz = (int)Program.Value(args, "-nz", 161.0);
             if (nz % 2 == 0) nz++;
+
+            // FILL TIME DERIVED FROM THE MACHINE CONDITIONS, not assumed.
+            //
+            // The paper states no fill time, and this case carried an assumed
+            // 1.0 s - an input nobody had sourced, feeding a clause that failed by
+            // 6x. Table 1 does give what determines it: screw diameter 22 mm and
+            // injection speed 22 mm/s, so the screw displaces pi/4*D^2*v =
+            // 8363 mm^3/s, and the lens is 912 mm^3 (a 32 mm dia, 2 mm centre
+            // plano-convex less its spherical cap). That is 0.109 s, NINE TIMES
+            // shorter than the assumption, and Q = V/t_fill feeds dp/ds directly.
+            //
+            // Which way that moves the answer is NOT predicted here. The naive
+            // reading is that a 9x higher Q means a 9x higher dp/ds and a worse
+            // overshoot, but the fill time also sets how long an element is
+            // loaded and how hard it is sheared, which changes the thinning and
+            // the memory. Three directional predictions in this project have been
+            // wrong for exactly that reason - see new-goal step 1b. Measured, not
+            // argued.
+            double screwDiaMm = 22.0, injSpeedMmPerS = 22.0;
+            double screwRate = Math.PI / 4.0 * screwDiaMm * screwDiaMm * injSpeedMmPerS;
+            double sagMm = curvature - Math.Sqrt(Math.Max(curvature * curvature - 16.0 * 16.0, 0.0));
+            double lensVolMm3 = Math.PI * 16.0 * 16.0 * 2.0
+                              - Math.PI * sagMm * sagMm * (3.0 * curvature - sagMm) / 3.0;
+            double fillDerived = Math.Max(lensVolMm3 / Math.Max(screwRate, 1e-9), 1e-4);
+            double fillUsed = Program.Value(args, "-filltime", fillDerived);
+
+            var proc = new Process
+            {
+                FillTimeS = fillUsed, PackPressureMPa = 98.10, PackTimeS = 3.0,
+            };
+
 
             var lens = new MouldedElement
             {
@@ -120,6 +149,10 @@ namespace MoldStress
             Console.WriteLine(string.Format(ci,
                 "  process: melt {0:F0} C, mould {1:F0} C, hold {2:F1} MPa, grid nz {3}",
                 p.MeltTempC, p.MoldTempC, proc.PackPressureMPa, nz));
+            Console.WriteLine(string.Format(ci,
+                "  fill time {0:F4} s DERIVED from a {1:F0} mm screw at {2:F0} mm/s " +
+                "({3:F0} mm3/s) filling {4:F0} mm3 - the paper states no fill time",
+                proc.FillTimeS, screwDiaMm, injSpeedMmPerS, screwRate, lensVolMm3));
             Console.WriteLine();
 
             var fill = FillField.Build(lens, p, proc, 101);
