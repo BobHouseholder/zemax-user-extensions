@@ -205,6 +205,46 @@ namespace MoldStress
             return depthMm * depthMm / (4.0 * p.DiffusivityMm2PerS * beta * beta);
         }
 
+        /// <summary>
+        /// This history rescaled to a different wall thickness, by the same
+        /// similarity the Eulerian channel already applies station by station:
+        /// depths scale with the gap and times scale with its SQUARE, because
+        /// conduction time goes as h^2/alpha. Temperatures are left alone - under
+        /// that scaling the temperature at a given FRACTIONAL depth is unchanged,
+        /// which is the assumption the Eulerian channel is already making when it
+        /// pairs freeze.Z[k]*hRatio with freeze.FreezeTimeS[k]*hRatio^2.
+        ///
+        /// Stated so it can be attacked: this is a similarity argument, not a
+        /// re-solve. It is exact for a semi-infinite wall quenched from uniform
+        /// melt and approximate once the two faces interact, so the core is where
+        /// it will be worst. Re-solving conduction per station would remove the
+        /// approximation at the cost of a solve per station.
+        /// </summary>
+        public FreezeHistory ScaledToGap(double ratio)
+        {
+            if (ratio <= 0.0) ratio = 1e-6;
+            if (Math.Abs(ratio - 1.0) < 1e-12) return this;
+            double t2 = ratio * ratio;
+            var f = new FreezeHistory
+            {
+                ThicknessMm = ThicknessMm * ratio,
+                CentreFreezeTimeS = CentreFreezeTimeS * t2,
+                Beta = Beta,
+                TrefC = TrefC,
+                TempHistoryC = TempHistoryC,
+                Z = new double[Z.Length],
+                FreezeTimeS = new double[FreezeTimeS.Length],
+            };
+            for (int i = 0; i < Z.Length; i++) f.Z[i] = Z[i] * ratio;
+            for (int i = 0; i < FreezeTimeS.Length; i++) f.FreezeTimeS[i] = FreezeTimeS[i] * t2;
+            if (TimeGridS != null)
+            {
+                f.TimeGridS = new double[TimeGridS.Length];
+                for (int i = 0; i < TimeGridS.Length; i++) f.TimeGridS[i] = TimeGridS[i] * t2;
+            }
+            return f;
+        }
+
         public int NodeCount { get { return Z.Length; } }
 
         // --- erf and its inverse ------------------------------------------------

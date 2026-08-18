@@ -123,6 +123,10 @@ namespace MoldStress
             var proc = new Process { FillTimeS = 1.0, PackPressureMPa = 71.3, PackTimeS = 3.0 };
             if (Program.Has(args, "-relax-below-tg")) proc.RelaxBelowTg = true;
             if (Program.Has(args, "-lagrangian-depth")) proc.LagrangianDepthHistory = true;
+            if (Program.Has(args, "-shape-nodes"))
+                proc.DepthShapeGapNodes = (int)Program.Value(args, "-shape-nodes", 6);
+            if (Program.Has(args, "-shape-particles"))
+                proc.DepthShapeParticles = (int)Program.Value(args, "-shape-particles", 4000);
             if (Program.Has(args, "-fountain"))
                 proc.FountainStrain = Program.Value(args, "-fountain", 1.0);
             // -frontmode carried|extensional. This used to scan args for the BARE
@@ -230,8 +234,10 @@ namespace MoldStress
                 // shape is a measurement or noise.
                 if (ch.DepthShapeApplied != null)
                 {
-                    Console.WriteLine("  depth shape: {0}, min band count {1}",
-                        ch.DepthShapeSource, ch.DepthShapeMinCount);
+                    Console.WriteLine(
+                        "  depth shape: {0}, {1} gap node(s) over h/h0 {2:F3}-{3:F3}, min band count {4}",
+                        ch.DepthShapeSource, ch.DepthShapeNodes,
+                        ch.DepthShapeGapMin, ch.DepthShapeGapMax, ch.DepthShapeMinCount);
                     Console.Write("    phi(z/h):");
                     for (int f = 10; f >= 0; f -= 2)
                     {

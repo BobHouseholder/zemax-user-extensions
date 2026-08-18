@@ -74,8 +74,11 @@ namespace MoldStress
         /// it came from. Null when the Eulerian per-depth history is used, which
         /// is the default. Mean over the wall is 1 by construction.
         /// </summary>
-        public double[] DepthShapeApplied;
+        public double[] DepthShapeApplied;      // at the reporting station, i = 0
+        public double[,] DepthShapePerStation;  // [station, depth]
         public int DepthShapeMinCount;
+        public int DepthShapeNodes = 0;         // gap ratios the shape was solved at
+        public double DepthShapeGapMin = 1.0, DepthShapeGapMax = 1.0;
         public string DepthShapeSource = "eulerian";
 
         public double[,] SigmaThermalMPa;  // in-plane equibiaxial residual stress
@@ -505,21 +508,92 @@ namespace MoldStress
             // because the limitation is invisible in the output.
             if (proc.LagrangianDepthHistory)
             {
-                var lag = Lagrangian.Build(e, p, proc, fill, freeze, 4000);
-                double halfW = Math.Max(0.5 * freeze.ThicknessMm, 1e-9);
-                int minCount;
-                double[] phi = lag.DepthShape(freeze.Z, halfW, out minCount);
-                c.DepthShapeApplied = phi;
-                c.DepthShapeMinCount = minCount;
-                c.DepthShapeSource = "lagrangian";
-
+                // PER-STATION, ON THE LOCAL GAP.
+                //
+                // The first version of this port solved ONE shape for the part and
+                // applied it everywhere, which made the normalised depth profile
+                // identical at every station by construction. Right for a plate,
+                // wrong for a lens: case 2's gap varies 2.5x along the flow, its
+                // layer-removal clause is evaluated at the 0.8 mm gate region, and
+                // a shape computed on the 2.0 mm centre thickness put 43.0% of the
+                // retardance in the first 0.1 mm against a measured 27.9%.
+                //
+                // A particle model per station would be ns Lagrangian runs. The
+                // shape depends on the station only through the local gap, so it
+                // is solved at a few gap ratios spanning the part and interpolated
+                // - and a uniform gap collapses to a single solve, so the plate
+                // case costs exactly what it did before.
+                double gMin = double.MaxValue, gMax = 0.0;
+                var gRatio = new double[ns];
                 for (int i = 0; i < ns; i++)
                 {
+                    double hLoc = fill.H[Math.Min(i, fill.H.Length - 1)];
+                    gRatio[i] = freeze.ThicknessMm > 1e-9
+                        ? Math.Max(hLoc / freeze.ThicknessMm, 1e-6) : 1.0;
+                    if (gRatio[i] < gMin) gMin = gRatio[i];
+                    if (gRatio[i] > gMax) gMax = gRatio[i];
+                }
+
+                int nNode = (gMax - gMin) / Math.Max(gMax, 1e-9) < 0.01
+                    ? 1 : Math.Max(2, proc.DepthShapeGapNodes);
+                var nodeR = new double[nNode];
+                var nodePhi = new double[nNode][];
+                int minCount = int.MaxValue;
+                for (int m = 0; m < nNode; m++)
+                {
+                    nodeR[m] = nNode == 1 ? gMax
+                             : gMin + (gMax - gMin) * m / (double)(nNode - 1);
+                    var fz = freeze.ScaledToGap(nodeR[m]);
+                    var lg = Lagrangian.Build(e, p, proc, fill, fz,
+                                              Math.Max(200, proc.DepthShapeParticles));
+                    int mc;
+                    nodePhi[m] = lg.DepthShape(fz.Z, Math.Max(0.5 * fz.ThicknessMm, 1e-9), out mc);
+                    if (mc < minCount) minCount = mc;
+                }
+
+                c.DepthShapeSource = nNode == 1 ? "lagrangian (uniform gap)"
+                                                : "lagrangian (per-station gap)";
+                c.DepthShapeMinCount = minCount;
+                c.DepthShapeNodes = nNode;
+                c.DepthShapeGapMin = gMin;
+                c.DepthShapeGapMax = gMax;
+                c.DepthShapePerStation = new double[ns, nz];
+
+                var phiI = new double[nz];
+                for (int i = 0; i < ns; i++)
+                {
+                    if (nNode == 1) Array.Copy(nodePhi[0], phiI, nz);
+                    else
+                    {
+                        double u = (gRatio[i] - gMin) / Math.Max(gMax - gMin, 1e-30) * (nNode - 1);
+                        int m0 = (int)Math.Floor(u);
+                        if (m0 < 0) m0 = 0;
+                        if (m0 > nNode - 2) m0 = nNode - 2;
+                        double w = u - m0;
+                        if (w < 0.0) w = 0.0;
+                        if (w > 1.0) w = 1.0;
+                        for (int k = 0; k < nz; k++)
+                            phiI[k] = (1.0 - w) * nodePhi[m0][k] + w * nodePhi[m0 + 1][k];
+                    }
+
+                    // Interpolating two mean-1 shapes gives a mean-1 shape, but
+                    // renormalise anyway: the invariant below protects every
+                    // thickness-average clause, and it must not rest on an
+                    // algebraic identity surviving floating point.
+                    double mu = 0.0;
+                    for (int k = 0; k < nz; k++) mu += phiI[k];
+                    mu /= nz;
+                    if (mu > 1e-30) for (int k = 0; k < nz; k++) phiI[k] /= mu;
+
                     double before = 0.0;
                     for (int k = 0; k < nz; k++) before += Math.Abs(c.DnFlow[i, k]);
                     before /= nz;
 
-                    for (int k = 0; k < nz; k++) c.DnFlow[i, k] = before * phi[k];
+                    for (int k = 0; k < nz; k++)
+                    {
+                        c.DnFlow[i, k] = before * phiI[k];
+                        c.DepthShapePerStation[i, k] = phiI[k];
+                    }
 
                     double after = 0.0;
                     for (int k = 0; k < nz; k++) after += Math.Abs(c.DnFlow[i, k]);
@@ -530,14 +604,14 @@ namespace MoldStress
                             + "{1:E6} -> {2:E6}. The shape must be mean-1; it is not.",
                             i, before, after));
 
-                    // The out-of-plane sum is built from DnFlow, so it has to be
-                    // rebuilt after DnFlow moves. Leaving it stale would have made
-                    // the depth clause read the OLD shape while the in-plane clause
-                    // read the new one.
                     for (int k = 0; k < nz; k++)
                         c.DnTotalOutOfPlane[i, k] =
                             c.DnFlow[i, k] + p.KGlassBrewster * 1e-6 * c.SigmaThermalMPa[i, k];
                 }
+
+                c.DepthShapeApplied = new double[nz];
+                for (int k = 0; k < nz; k++)
+                    c.DepthShapeApplied[k] = c.DepthShapePerStation[0, k];
             }
 
             // Where the flow birefringence peaks through the thickness - the

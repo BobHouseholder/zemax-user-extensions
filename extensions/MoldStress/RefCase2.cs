@@ -221,6 +221,10 @@ namespace MoldStress
             // asks whether a flag EXISTS, not whether the mode reads it.
             if (Program.Has(args, "-relax-below-tg")) proc.RelaxBelowTg = true;
             if (Program.Has(args, "-lagrangian-depth")) proc.LagrangianDepthHistory = true;
+            if (Program.Has(args, "-shape-nodes"))
+                proc.DepthShapeGapNodes = (int)Program.Value(args, "-shape-nodes", 6);
+            if (Program.Has(args, "-shape-particles"))
+                proc.DepthShapeParticles = (int)Program.Value(args, "-shape-particles", 4000);
             if (Program.Has(args, "-fountain"))
                 proc.FountainStrain = Program.Value(args, "-fountain", 1.0);
             if (Program.Has(args, "-thinned-lambda")) proc.ShearThinnedLambdaDuringFill = true;
@@ -239,6 +243,32 @@ namespace MoldStress
 
             var freeze = FreezeHistory.Build(lens.CentreThicknessMm, p, proc, nz, 10 * nz);
             var ch = Channels.Build(lens, p, proc, fill, freeze);
+
+            // The shape is now per-station, so print it at THREE stations rather
+            // than one. The layer-removal clause samples s = 0, which is the
+            // minimum gap and therefore the first interpolation node exactly -
+            // so that clause is insensitive to the node count by construction
+            // and cannot be used to test the interpolation. These rows can.
+            if (ch.DepthShapePerStation != null)
+            {
+                Console.WriteLine(
+                    "  depth shape: {0}, {1} gap node(s) over h/h0 {2:F3}-{3:F3}, min band count {4}",
+                    ch.DepthShapeSource, ch.DepthShapeNodes,
+                    ch.DepthShapeGapMin, ch.DepthShapeGapMax, ch.DepthShapeMinCount);
+                int nsT = ch.S.Length, nzT = freeze.NodeCount;
+                foreach (int ii in new[] { 0, nsT / 5, (2 * nsT) / 5, nsT / 2 })
+                {
+                    Console.Write("    s = {0,5:F1} mm  h/h0 {1:F3}  phi:",
+                        ch.S[ii], fill.H[Math.Min(ii, fill.H.Length - 1)] / freeze.ThicknessMm);
+                    for (int ff = 10; ff >= 0; ff -= 2)
+                    {
+                        int kk = (int)Math.Round((nzT - 1) * (0.5 + 0.05 * ff));
+                        kk = Math.Max(0, Math.Min(nzT - 1, kk));
+                        Console.Write("  {0}%={1:F3}", ff * 10, ch.DepthShapePerStation[ii, kk]);
+                    }
+                    Console.WriteLine();
+                }
+            }
             double half = 0.5 * lens.CentreThicknessMm;
 
             // DEPTH DIAGNOSTIC at the gate station, so this case can be compared

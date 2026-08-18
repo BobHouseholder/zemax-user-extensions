@@ -387,34 +387,51 @@ build-up needs reduced time, retention is destroyed by it - so the product must
 peak somewhere between wall and core. At the wall a layer freezes before it can
 build anything; at the core it builds fully and then relaxes.
 
-**A port of the Lagrangian depth history is now available as
-`-lagrangian-depth`, off by default.** It takes the depth SHAPE from
-`Lagrangian.cs` and applies it to the Eulerian per-station magnitude, normalised
-to mean 1 over the wall - so each station's thickness average is multiplied by 1
-and cannot move. Every clause that reads a thickness average is invariant by
-construction, which is asserted at runtime rather than hoped for; only the depth
-clauses can respond. It fixes case 1 and breaks case 2:
+**A port of the Lagrangian depth history is available as `-lagrangian-depth`,
+off by default.** It takes the depth SHAPE from `Lagrangian.cs` and applies it to
+the Eulerian per-station magnitude, normalised to mean 1 over the wall - so each
+station's thickness average is multiplied by 1 and cannot move. Every clause that
+reads a thickness average is invariant by construction, asserted at runtime
+rather than hoped for; only the depth clauses can respond. In-plane numbers come
+back bit-identical either way on both cases.
+
+The shape is solved **per station on the local gap**. It depends on the station
+only through the gap, so it is solved at a few gap ratios spanning the part and
+interpolated between them, using the same similarity the Eulerian channel already
+applies - depths scale with the gap, times with its square. A uniform gap
+collapses to a single solve, so the plate case costs exactly what it did.
 
 | | case 1 depth ratio | case 1 peak position | case 2 layer removal |
 |---|---|---|---|
 | Eulerian (default) | 0.82 **FAIL** | 53% **FAIL** | 3 of 4 **PASS** |
-| `-lagrangian-depth` | **3.45 PASS** (published 2.78) | **93% PASS** | 2 of 4 **FAIL** |
+| `-lagrangian-depth`, one shape per part | 3.45 PASS | 93% PASS | 2 of 4 **FAIL** |
+| `-lagrangian-depth`, per-station | **3.44 PASS** | **94% PASS** | **3 of 4 PASS** |
 
-In-plane numbers are bit-identical either way on both cases, as the invariant
-requires. Case 1 converges: phi at the wall 2.268 / 2.303 / 2.318 / 2.326 across
-nz 41 / 81 / 161 / 321, depth ratio flat at 3.43-3.46, minimum band count 180.
+With it on, **case 1 reports the registered criterion as MET** and case 2 has only
+its in-plane peak outstanding.
 
-**Why case 2 breaks, which is a limitation of the port and not of the particle
-model.** The shape is computed once for the part and applied at every station, so
-`DnFlow[i,k] = A_i * phi[k]` and the normalised depth profile is IDENTICAL at
-every station by construction. Case 1 is a plate and that is exactly right. Case
-2 is a lens whose gap varies 2.5x along the flow, and its layer-removal clause is
-evaluated at the 0.8 mm gate region while the shape was computed on the 2.0 mm
-centre thickness - so the model over-weights the skin there, 43.0% in the first
-0.1 mm against a measured 27.9%, where the Eulerian channel under-weighted it.
-`Lagrangian.Build` still takes a single half-gap from the centre thickness; it
-never received the local-gap scaling that the Eulerian channel got. A per-station
-shape is the next step and is not done.
+The middle row is why the per-station solve exists. A single part-wide shape
+makes `DnFlow[i,k] = A_i * phi[k]`, so the normalised depth profile is identical
+at every station - right for a plate, wrong for a lens whose gap varies 2.5x.
+Case 2's layer-removal clause is evaluated at the 0.8 mm gate region, and a shape
+computed on the 2.0 mm centre thickness put 43.0% of the retardance in the first
+0.1 mm against a measured 27.9%. On the local gap it reads 32.6%.
+
+**What was swept, and what the sweeps cost.** Grid: phi at the wall 2.268 to
+2.326 across nz 41/81/161/321 with the depth ratio flat at 3.43-3.46. Particles:
+the first default of 4000 was carrying about 6% - phi goes 2.466 / 2.628 / 2.637
+and 6.908 / 6.489 / 6.430 at 4000 / 16000 / 64000 - so the default is now 16000,
+where it is converged to ~1%. Gap nodes: at 4000 particles the node count looked
+to matter by 11%, and at 16000 that falls to 1-3% and goes non-monotone, so most
+of it was particle noise; 6 nodes ships. Both are settable with
+`-shape-particles` and `-shape-nodes`. A reference case takes 2-3 minutes with
+the shape on.
+
+**One clause cannot test the interpolation, and says so.** Case 2's layer removal
+samples s = 0, which is the minimum gap and therefore the first interpolation
+node exactly - so it returns identical numbers for every node count by
+construction. The per-station phi rows printed beside it are what actually
+exercise the interpolation.
 
 **The underlying Eulerian defect is still not a term that can be corrected.** It is what an Eulerian channel
 computes when it assumes every layer sat at its final depth since t=0. The

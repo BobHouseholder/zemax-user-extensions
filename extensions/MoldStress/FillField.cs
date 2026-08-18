@@ -208,6 +208,25 @@ namespace MoldStress
         /// </summary>
         public bool LagrangianDepthHistory = false;
 
+        /// <summary>
+        /// How many gap ratios the Lagrangian depth shape is solved at before
+        /// interpolating between them. Only used when the gap actually varies;
+        /// a uniform gap collapses to one solve regardless. Exposed so the
+        /// choice can be swept rather than asserted - 6 is the shipped value
+        /// because case 2's layer-removal numbers stop moving there.
+        /// </summary>
+        public int DepthShapeGapNodes = 6;
+
+        /// <summary>
+        /// Particles per Lagrangian solve behind the depth shape. Exposed
+        /// because nothing else in the model tests it: the grid sweep varies nz,
+        /// which changes the band widths but not the particle seeding, so a
+        /// shape that was converged in nz could still be carrying seeding noise
+        /// - and that noise would be interpolated between gap nodes as though it
+        /// were curvature.
+        /// </summary>
+        public int DepthShapeParticles = 16000;
+
         public bool ChannelNarrowing = false;
     }
 
