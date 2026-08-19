@@ -348,6 +348,11 @@ namespace MoldStress
             if (Program.Has(args, "-eulerian-depth")) proc.LagrangianDepthHistory = false;
             if (Program.Has(args, "-incremental-thermal")) proc.IncrementalThermal = true;
             if (Program.Has(args, "-snapshot")) proc.IncrementalThermal = false;
+            // Chang et al. name the packing flow through the NARROWING channel as
+            // the cause of a second birefringence peak near the centre of the gap
+            // - the region where this model gives almost nothing. Swept, not
+            // assumed.
+            if (Program.Has(args, "-narrowing")) proc.ChannelNarrowing = true;
             // The relaxation time is the physically open constant: lambda = eta0/G
             // is the MAXWELL time, while the terminal time for chain ORIENTATION -
             // which is what freezes in - is longer by a factor of order 3-6 for an
@@ -387,6 +392,45 @@ namespace MoldStress
             Console.WriteLine(string.Format(ci,
                 "  LAGRANGIAN raw thickness-average dn (discarded by the mean-1 port): {0:E3}",
                 Lagrangian.RawThicknessAverageDn));
+
+            // THE CEILING - what this ARCHITECTURE can produce at all, before any
+            // parameter is chosen.
+            //
+            // The flow channel is dn(z) = 2*C*tau(z)*memory(z), and memory is a
+            // retained FRACTION: it cannot exceed 1. So the thickness average is
+            // bounded above by 2*C*<tau(z)>, whatever the relaxation time, the
+            // fountain strain, the channel narrowing, the particle count or the
+            // depth construction happen to be.
+            //
+            // Printed because six candidate fixes were each measured and each
+            // bought about 15% where 500% was needed, and the ceiling explains all
+            // six at once: they were tuning inside a box smaller than the target.
+            // A clause whose ceiling is below its gate is not a test of the
+            // parameters - it is a statement about the model's structure.
+            {
+                double tauSum = 0.0;
+                for (int k = 0; k < nz; k++) tauSum += Math.Abs(ch.TauViscMPa[0, k]);
+                double tauAvg = tauSum / nz;
+                double ceiling = 2.0 * p.CMeltBrewster * 1e-6 * tauAvg;
+                Console.WriteLine(string.Format(ci,
+                    "  CEILING of this architecture: 2*C*<tau> = {0:E3} with memory==1 "
+                    + "(<tau> {1:F3} MPa, C {2:F0} Br)", ceiling, tauAvg, p.CMeltBrewster));
+                Console.WriteLine(string.Format(ci,
+                    "    against the published {0:E3}: ceiling/gate = {1:F2}  =>  {2}",
+                    PublishedInPlanePeakDn, ceiling / PublishedInPlanePeakDn,
+                    ceiling >= PublishedInPlanePeakDn
+                        ? "reachable - the gap is parameters"
+                        : "NOT REACHABLE BY ANY PARAMETER CHOICE - the gap is structural"));
+                if (ceiling < PublishedInPlanePeakDn)
+                    Console.WriteLine(string.Format(ci,
+                        "    clearing it needs C ~ {0:F0} Br (Inoue family 1700), or <tau> ~ "
+                        + "{1:F2} MPa (their own simulation peaks at 0.75-0.89), or a mechanism "
+                        + "that orients material where tau(z) is SMALL - which is the packing "
+                        + "flow through the narrowing channel the source names as a second peak "
+                        + "at the centre of the gap.",
+                        PublishedInPlanePeakDn / (2.0 * tauAvg) * 1e6,
+                        PublishedInPlanePeakDn / (2.0 * p.CMeltBrewster * 1e-6)));
+            }
             if (ch.DepthShapePerStation != null)
             {
                 Console.WriteLine(

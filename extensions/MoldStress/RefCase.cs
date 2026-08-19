@@ -129,6 +129,11 @@ namespace MoldStress
             if (Program.Has(args, "-eulerian-depth")) proc.LagrangianDepthHistory = false;
             if (Program.Has(args, "-incremental-thermal")) proc.IncrementalThermal = true;
             if (Program.Has(args, "-snapshot")) proc.IncrementalThermal = false;
+            // Chang et al. name the packing flow through the NARROWING channel as
+            // the cause of a second birefringence peak near the centre of the gap
+            // - the region where this model gives almost nothing. Swept, not
+            // assumed.
+            if (Program.Has(args, "-narrowing")) proc.ChannelNarrowing = true;
             // The relaxation time is the physically open constant: lambda = eta0/G
             // is the MAXWELL time, while the terminal time for chain ORIENTATION -
             // which is what freezes in - is longer by a factor of order 3-6 for an
