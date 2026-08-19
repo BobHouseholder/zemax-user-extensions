@@ -289,6 +289,36 @@ namespace MoldStress
         /// </summary>
         public double PackFlowFraction = 0.05;
 
+        /// <summary>
+        /// Include the FIRST NORMAL STRESS DIFFERENCE when converting frozen
+        /// orientation to birefringence.
+        ///
+        /// The stress-optic law acts on the PRINCIPAL stress difference,
+        /// dn = C*sqrt((s11-s22)^2 + 4*s12^2). This model has been using
+        /// dn = 2*C*s12, which drops the normal term - and that simplification is
+        /// only valid for a generalized Newtonian fluid, where s11-s22 vanishes.
+        /// Lai and Wang say exactly that when they make it: "(sigma11 - sigma22)
+        /// is zero because of isobaric pressure conditions for GNF model flow".
+        ///
+        /// But this model is NOT a GNF: it carries a single-mode Maxwell memory,
+        /// and a Maxwell fluid in shear has N1 = 2*s12^2/G. So the conversion
+        /// should be dn = 2*C*s12*sqrt(1 + (s12/G)^2), and the root is the term
+        /// that has been missing. Chang et al., whose measurement this is
+        /// compared against, use White-Metzner - viscoelastic, N1 non-zero.
+        ///
+        /// ON by default since 2026-08-18, after measurement on all three cases.
+        /// Case 1 is essentially unmoved (in-plane 1.16x -> 1.17x, depth 3.44 ->
+        /// 3.43, still MET) because its shear stress is a third of case 2's, so
+        /// the enhancement is small. Case 2 gains the predicted 1.4x, 0.20x ->
+        /// 0.28x. Case 3 is thermal and unaffected. Adopted because the previous
+        /// form was the GNF simplification carried by a model that is NOT a GNF -
+        /// wrong independently of which way the number moved - and it does NOT
+        /// rescue case 2, which still fails by 3.6x. The `-normal-stress` flag is kept as
+        /// an explicit opt-in; there is no opt-out because the old form has no
+        /// defence.
+        /// </summary>
+        public bool NormalStressDifference = true;
+
         public bool ChannelNarrowing = false;
     }
 

@@ -354,6 +354,7 @@ namespace MoldStress
             // assumed.
             if (Program.Has(args, "-narrowing")) proc.ChannelNarrowing = true;
             if (Program.Has(args, "-packing-orientation")) proc.PackingOrientation = true;
+            if (Program.Has(args, "-normal-stress")) proc.NormalStressDifference = true;
             // Packing time and pressure gate the packing channel entirely, so
             // they must be sweepable: a mechanism that only acts while material
             // is still molten is decided by how long the packing window overlaps
@@ -422,7 +423,23 @@ namespace MoldStress
                 double tauSum = 0.0;
                 for (int k = 0; k < nz; k++) tauSum += Math.Abs(ch.TauViscMPa[0, k]);
                 double tauAvg = tauSum / nz;
-                double ceiling = 2.0 * p.CMeltBrewster * 1e-6 * tauAvg;
+                // The ceiling must use the SAME conversion the channel uses. With
+                // the normal-stress term on, the enhancement at memory==1 is much
+                // larger than at the retained fraction, because it grows with the
+                // stress itself - so the ceiling is not simply 2*C*<tau>.
+                double ceiling = 0.0;
+                for (int k = 0; k < nz; k++)
+                {
+                    double t = Math.Abs(ch.TauViscMPa[0, k]);
+                    double f = 1.0;
+                    if (proc.NormalStressDifference && p.MeltModulusPa > 0.0)
+                    {
+                        double wi = t * 1e6 / p.MeltModulusPa;
+                        f = Math.Sqrt(1.0 + wi * wi);
+                    }
+                    ceiling += 2.0 * p.CMeltBrewster * 1e-6 * t * f;
+                }
+                ceiling /= nz;
                 Console.WriteLine(string.Format(ci,
                     "  CEILING of this architecture: 2*C*<tau> = {0:E3} with memory==1 "
                     + "(<tau> {1:F3} MPa, C {2:F0} Br)", ceiling, tauAvg, p.CMeltBrewster));

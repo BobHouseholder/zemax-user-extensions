@@ -327,7 +327,18 @@ namespace MoldStress
 
                     // Stress-optical rule in simple shear: the principal stress
                     // difference is 2*tau.
-                    double dnShear = 2.0 * p.CMeltBrewster * 1e-12 * (tauMPa * 1e6);
+                    // The stress-optic law acts on the PRINCIPAL stress
+                    // difference. 2*C*s12 is the GNF simplification, valid only
+                    // when N1 vanishes; a Maxwell fluid in shear has
+                    // N1 = 2*s12^2/G, so the principal difference is
+                    // 2*s12*sqrt(1 + (s12/G)^2). See Process.NormalStressDifference.
+                    double normalFactor = 1.0;
+                    if (proc.NormalStressDifference && p.MeltModulusPa > 0.0)
+                    {
+                        double wi = (tauMPa * 1e6) / p.MeltModulusPa;
+                        normalFactor = Math.Sqrt(1.0 + wi * wi);
+                    }
+                    double dnShear = 2.0 * p.CMeltBrewster * 1e-12 * (tauMPa * 1e6) * normalFactor;
 
                     // FOUNTAIN FLOW.
                     //

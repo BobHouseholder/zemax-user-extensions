@@ -135,6 +135,7 @@ namespace MoldStress
             // assumed.
             if (Program.Has(args, "-narrowing")) proc.ChannelNarrowing = true;
             if (Program.Has(args, "-packing-orientation")) proc.PackingOrientation = true;
+            if (Program.Has(args, "-normal-stress")) proc.NormalStressDifference = true;
             // Packing time and pressure gate the packing channel entirely, so
             // they must be sweepable: a mechanism that only acts while material
             // is still molten is decided by how long the packing window overlaps
