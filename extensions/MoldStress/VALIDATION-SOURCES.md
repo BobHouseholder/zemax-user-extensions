@@ -169,3 +169,124 @@ refers to the **photoelastic** constant — 5.0 × 10⁻¹² Pa⁻¹, ultra-low 
 governs the *thermal* channel, not the melt orientation that sets the in-plane
 peak. Reading a melt property off an optical-grade marketing claim was the error;
 the two coefficients are three orders apart and answer different questions.
+
+
+---
+
+# Second sweep, 2026-08-18
+
+The first list was assembled to find a second reference CASE. This sweep asked a
+different question - what can be checked WITHOUT another full case - because the
+tool now has two cases and one outstanding failure (case 2's in-plane peak at
+12.87x), and because case 1 passing its criterion makes independent magnitude
+anchors more valuable than another geometry.
+
+**Access, stated up front because it decides how much weight each item carries.**
+Items marked READ were fetched in full. Items marked SNIPPET are characterised
+from search results only - MDPI, ScienceDirect, the E3S PDF and the NTU thesis
+CDN all returned 403 to direct fetches. A SNIPPET item is a lead, not evidence,
+and nothing below is written into the model on one.
+
+## A. Magnitude anchors that need no new reference case
+
+These are the most immediately useful thing found, because they test the tool's
+OUTPUT against what the industry treats as normal, and they need no process data.
+
+**Optical-grade retardance is specified at 10-20 nm, and a well-optimised disc
+measures under 18 nm.** (SNIPPET.) A disc-substrate specification quoted as
+"preferably less than 20 nm, more preferably less than 15 nm, most preferably
+less than 10 nm" for a 0.6 mm substrate, and a separate statement that a
+well-optimised process holds under 18 nm over the data band of an optical disc.
+
+**Against that, MoldStress predicted a peak retardance of 241 nm** on the one
+moulded element of the stock Double Gauss - twelve to twenty-four times an
+optical-grade specification. That does NOT convict the model: the element was
+never designed to be moulded, has no gate design, and took the tool's default
+process. But it is the first external number that says the tool's output is in
+the "would be rejected" band rather than the "routine" band, and it points the
+same way as case 2's 12.87x. **A cheap and decisive test exists**: run MoldStress
+on a part whose measured retardance is published as being INSIDE spec, and see
+whether it predicts something inside spec. If it predicts 200 nm for a part
+measured at 15 nm, the over-prediction is general rather than specific to case 2,
+which would move the diagnosis off case 2's unsourced flow inputs entirely.
+
+**Melt fracture starts around 0.1 MPa wall shear stress.** (SNIPPET, and
+consistent across two independent hits.) The onset shear stress for melt fracture
+is of order 10^6 dyn/cm^2 = 0.1 MPa, measured in capillary extrusion.
+
+Case 2's fill field computes **tau_wall = 1.67 MPa**, about 17x that. Extrusion
+and injection filling are not the same regime - injection fills transiently at
+far higher rates and routinely exceeds extrusion limits - so this is not proof.
+It is, however, an independent second signal pointing at the same two unsourced
+inputs (the cavity's share of the shot, and the 12.6 mm flow width I chose), and
+it is the reason those inputs should be resolved before any more model work is
+done on case 2's magnitude.
+
+## B. A contradiction the model has inherited and must not generalise
+
+**For polycarbonate, thermal birefringence is COMPARABLE to flow-induced
+birefringence.** (SNIPPET, from the Isayev body of work.) MoldStress carries a
+**92% flow / 8% thermal** split, quoted in this file from Chang et al. citing
+Wang & Lai - **and that figure is for COC lenses specifically.**
+
+This matters because the tool ships provisional PMMA / PC / PS entries. A 92/8
+split is a statement about a material and a process window, not a property of
+injection moulding, and applying it to PC would be wrong by roughly an order of
+magnitude in the thermal channel. **Nothing in the code asserts 92/8** - the two
+channels are computed independently - but the README quotes it as corroboration,
+and that corroboration must stay scoped to COC. Flagged rather than fixed,
+because the model does not currently use the number.
+
+**Sign conventions on the photoelastic coefficient are inconsistent between
+sources** - one gives polycarbonate as -78 x 10^-12 Pa^-1, another describes PC
+as positive and PS as negative. Any future PC/PS entry needs its sign taken from
+the same source as its magnitude, with the convention stated.
+
+## C. Shape corroboration for the clause that already passes
+
+**The published qualitative pattern for a moulded lens is: very strong
+birefringence near the gate, high at the lens edge, moderate over a large area on
+the gate side, low on the side opposite the gate.** (SNIPPET.) That is the shape
+MoldStress produces and the in-plane shape clause passes on both cases - case 1
+falls to 46.5% at the far edge, case 2 to 14%. Weak evidence, because it is
+qualitative, but it is independent of both reference papers and it agrees.
+
+## D. New leads, none of them read
+
+- **Lai & Wang, *Study of process parameters on optical qualities for
+  injection-molded plastic lenses*, Applied Optics (2008).** A JOURNAL version of
+  the ANTEC work that source 5 lists, and therefore easier to obtain and cite
+  than the conference papers. This is the primary source behind the 92/8 split.
+- **Isayev's gapwise datasets for PS and PC** - free and constrained quenching of
+  PS and PMMA strips with the gapwise distribution of thermal birefringence
+  measured. This is the right shape of data for the THERMAL channel, which has
+  never been tested against a measured profile; case 1 only tests it by nulling.
+- **NTU thesis, *Birefringent Effects in Plastic Optics*.** Open-access landing
+  page on `dr.ntu.edu.sg`; its CDN rejected the fetch. A thesis is likely to
+  carry full process conditions AND gapwise profiles, which is the combination
+  every published paper so far has been missing half of.
+- **Multi-Objective Optimization of an Injection Molding Process for an Alvarez
+  Freeform Lens (Polymers 2025, 17, 2453).** Open access, MDPI blocked the fetch;
+  try the PMC mirror. Couples mould-flow to optical analysis, so it may carry
+  both a process spec and an optical consequence.
+- **Injection-COMPRESSION moulding birefringence, simulation and experiment.**
+  ICM is the process actually used for precision optics, and MoldStress models
+  pure injection. Worth knowing how far apart they are before the tool is offered
+  for lens work.
+
+## What this sweep did NOT find
+
+**No public Cross-WLF or PVT constants for ZEONEX 480R.** Datasheets give Tg, nd,
+density and flow indices but not the rheology the fill solve needs, so 480R's
+rheological constants remain borrowed and marked. The Moldex3D and Moldflow
+material databases hold them and are not public.
+
+**No published maximum-shear-stress limit for optical grades.** Mould-flow
+packages carry a recommended per-grade limit, which would turn case 2's 1.67 MPa
+from a smell into a pass/fail. It needs the database, not the literature.
+
+**And no source resolves case 2's two unsourced inputs** - the cavity count and
+the flow width. Chang et al. state the injection speed and screw diameter but not
+how the shot divides between cavity and runner, and not the gate width. Those are
+still my choices, and they are still the reason case 2's magnitude clause is not
+currently a test of the birefringence model.
