@@ -240,6 +240,15 @@ namespace MoldStress
         public static long ShapeHits, ShapeMisses;
 
         /// <summary>
+        /// The thickness-averaged dn the particle model predicts on its own,
+        /// before DepthShape normalises it away. The port keeps only the SHAPE,
+        /// so this number is computed and discarded - it is exposed here to find
+        /// out whether the magnitude the port throws away is the one the
+        /// measurement wants.
+        /// </summary>
+        public static double RawThicknessAverageDn;
+
+        /// <summary>
         /// The depth shape at one gap ratio, solved once per distinct input.
         /// The returned array is a COPY: the caller renormalises in place, and
         /// handing out the cached instance would let one build corrupt the next.
@@ -663,6 +672,8 @@ namespace MoldStress
             double mean = 0.0;
             for (int k = 0; k < nz; k++) mean += phi[k];
             mean /= Math.Max(nz, 1);
+            RawThicknessAverageDn = mean;   // BEFORE normalisation - what the
+                                            // particle model actually predicts
             if (mean <= 0.0) { for (int k = 0; k < nz; k++) phi[k] = 1.0; return phi; }
             for (int k = 0; k < nz; k++) phi[k] /= mean;
             return phi;

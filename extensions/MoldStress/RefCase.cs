@@ -129,6 +129,12 @@ namespace MoldStress
             if (Program.Has(args, "-eulerian-depth")) proc.LagrangianDepthHistory = false;
             if (Program.Has(args, "-incremental-thermal")) proc.IncrementalThermal = true;
             if (Program.Has(args, "-snapshot")) proc.IncrementalThermal = false;
+            // The relaxation time is the physically open constant: lambda = eta0/G
+            // is the MAXWELL time, while the terminal time for chain ORIENTATION -
+            // which is what freezes in - is longer by a factor of order 3-6 for an
+            // entangled melt, since eta0 ~ G*tau_d/5. Swept, not assumed.
+            if (Program.Has(args, "-lambdascale"))
+                proc.LambdaScale = Program.Value(args, "-lambdascale", 1.0);
             if (Program.Has(args, "-shape-nodes"))
                 proc.DepthShapeGapNodes = (int)Program.Value(args, "-shape-nodes", 6);
             if (Program.Has(args, "-shape-particles"))
