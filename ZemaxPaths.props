@@ -35,4 +35,84 @@
           Condition="!Exists('$(ZEMAX_ROOT)ZOSAPI.dll')">
     <Error Text="ZOSAPI.dll not found under ZEMAX_ROOT='$(ZEMAX_ROOT)'. Add your install directory to ZemaxPaths.props, or build with -p:ZEMAX_ROOT=&quot;C:\Path\To\OpticStudio\&quot;." />
   </Target>
+
+  <!--
+    Deploy. OpticStudio has no registration step for a compiled add-in: it lists
+    whatever .exe files it finds in {Zemax Data}\ZOS-API\<kind>, where <kind> is
+    Extensions (Programming > User Extensions), User Analysis (Analyze > User
+    Analysis) or Operands. So "the build succeeded" and "OpticStudio can see it"
+    are two different facts, and the second one used to be a manual copy that was
+    easy to forget after an edit - leaving the ribbon running last week's binary
+    with nothing anywhere saying so.
+
+    Ansys ships no deploy step to copy: the project template embedded in
+    Zemax.dll, which is what Programming > C# generates into
+    {Zemax Data}\ZOS-API Projects\<name>\, leaves OutputPath at bin\Release\ and
+    leaves its AfterBuild target as the commented-out Visual Studio boilerplate.
+    The copy is manual by their design. This target is the part Ansys does not
+    provide.
+
+    Locating the data folder IS Ansys's method, taken from their own templates:
+    the Python boilerplate in that same DLL opens HKCU\Software\Zemax and reads
+    the value ZemaxRoot, and the MATLAB one does the same. OpticStudio writes
+    that value and rewrites it when the data folder is changed in preferences, so
+    it is the authoritative answer to "which tree does OpticStudio actually read".
+
+    It is NOT computed as {MyDocuments}\Zemax. Where Documents is redirected to
+    OneDrive both trees exist and both are populated with the stock Ansys
+    add-ins, so a copy into the wrong one reports success and deploys nothing -
+    no error anywhere, the entry simply never appears.
+
+    Per project:  <ZemaxDeployKind>User Analysis</ZemaxDeployKind>  (default Extensions)
+    -p:ZEMAX_DATA="C:\...\Zemax"   deploy against a different data folder
+    -p:ZemaxDeploy=false           build without deploying
+  -->
+  <PropertyGroup Condition="'$(ZEMAX_DATA)' == ''">
+    <ZEMAX_DATA>$(registry:HKEY_CURRENT_USER\Software\Zemax@ZemaxRoot)</ZEMAX_DATA>
+  </PropertyGroup>
+
+  <Target Name="DeployToZemax" AfterTargets="Build" Condition="'$(ZemaxDeploy)' != 'false'">
+    <!--
+      Resolved inside the target, not in a PropertyGroup above. This file is
+      imported at the HEAD of each .csproj, so a ZemaxDeployKind set further down
+      that file does not exist yet at evaluation time and every project would
+      silently deploy as an Extension - including the User Analysis, which would
+      land in a folder OpticStudio never reads for it. Target bodies evaluate at
+      execution time, by which point the project's own properties are set.
+    -->
+    <PropertyGroup>
+      <_DeployKind>$(ZemaxDeployKind)</_DeployKind>
+      <_DeployKind Condition="'$(_DeployKind)' == ''">Extensions</_DeployKind>
+      <_DeployDir>$(ZEMAX_DATA)\ZOS-API\$(_DeployKind)\</_DeployDir>
+      <!-- Only the Extensions and ZPL macro groups have a Refresh List button
+           (Refresh_List_extensions_group in the help); User Analysis has none. -->
+      <_DeployHint Condition="'$(_DeployKind)' == 'Extensions'">new extension? press Programming &gt; Refresh List</_DeployHint>
+      <_DeployHint Condition="'$(_DeployKind)' != 'Extensions'">restart OpticStudio to pick up a new one</_DeployHint>
+    </PropertyGroup>
+
+    <Error Condition="'$(ZEMAX_DATA)' == ''"
+           Text="Zemax data folder not found: HKCU\Software\Zemax@ZemaxRoot is unset, which normally means OpticStudio has not yet been run by this user. Build with -p:ZEMAX_DATA=&quot;C:\Users\you\Documents\Zemax&quot;, or -p:ZemaxDeploy=false to build without deploying." />
+    <Error Condition="!Exists('$(_DeployDir)')"
+           Text="Deploy folder does not exist: $(_DeployDir) - check ZEMAX_DATA and ZemaxDeployKind, or build with -p:ZemaxDeploy=false." />
+
+    <ItemGroup>
+      <_DeployFile Include="$(TargetPath)" />
+      <!-- The .config carries the supportedRuntime line and the binding
+           redirects; without it the add-in fails at assembly load, not in the
+           menu, which reads like a completely different bug. -->
+      <_DeployFile Include="$(TargetDir)$(TargetFileName).config" Condition="Exists('$(TargetDir)$(TargetFileName).config')" />
+    </ItemGroup>
+
+    <!-- Retries: OpticStudio holds the .exe open for the length of a run. -->
+    <Copy SourceFiles="@(_DeployFile)" DestinationFolder="$(_DeployDir)"
+          SkipUnchangedFiles="true" Retries="3" RetryDelayMilliseconds="750" />
+
+    <!-- The installer already ships this beside the stock add-ins. Copy only to
+         fill a gap; never overwrite the installed copy. -->
+    <Copy SourceFiles="$(TargetDir)ZOSAPI_NetHelper.dll" DestinationFolder="$(_DeployDir)"
+          Condition="Exists('$(TargetDir)ZOSAPI_NetHelper.dll') And !Exists('$(_DeployDir)ZOSAPI_NetHelper.dll')" />
+
+    <Message Importance="high" Text="Deployed $(TargetFileName) -&gt; $(_DeployDir)  ($(_DeployHint))" />
+  </Target>
+
 </Project>

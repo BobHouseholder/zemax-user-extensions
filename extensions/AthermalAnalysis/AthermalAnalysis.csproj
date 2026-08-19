@@ -17,6 +17,11 @@
       explicitly; the extension's Main is simply never called here.
     -->
     <StartupObject>AthermalScan.AnalysisProgram</StartupObject>
+    <!-- Analyze > User Analysis, not Programming > User Extensions:
+         OpticStudio launches this in UserAnalysis mode and reads it from a
+         different folder. Deploying it as an Extension puts a working .exe
+         somewhere nothing ever looks. -->
+    <ZemaxDeployKind>User Analysis</ZemaxDeployKind>
   </PropertyGroup>
 
   <ItemGroup>

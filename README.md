@@ -602,7 +602,27 @@ dotnet build extensions\EquivalentGlassFinder\EquivalentGlassFinder.csproj --con
 dotnet build extensions\DistortionTarget\DistortionTarget.csproj --configuration Release
 ```
 
-Copy the built `.exe` files to `{Zemax Data}\ZOS-API\Extensions\`.
+Every project deploys itself. `ZemaxPaths.props` carries a `DeployToZemax` target
+that runs after each build and copies the `.exe` and its `.exe.config` (which holds
+the binding redirects) into the folder OpticStudio reads. The destination comes from
+`HKCU\Software\Zemax@ZemaxRoot` — the same key Ansys's own ZOS-API boilerplate reads,
+and the one OpticStudio rewrites when the data folder changes in preferences, so it
+cannot pick the wrong tree on a machine where Documents is redirected to OneDrive.
+
+Default destination is `{Zemax Data}\ZOS-API\Extensions\`. A project that is not a
+user extension says so itself — `AthermalAnalysis` sets
+`<ZemaxDeployKind>User Analysis</ZemaxDeployKind>` and lands in
+`{Zemax Data}\ZOS-API\User Analysis\` instead. Build with `-p:ZemaxDeploy=false` to
+skip deployment, or `-p:ZEMAX_DATA="C:\...\Zemax"` to target another data folder;
+a destination that does not exist fails the build rather than passing quietly.
+
+A newly added extension appears after **Programming > Refresh List**. User analyses
+have no such button — restart OpticStudio for a new one. Replacing an add-in that is
+already listed takes effect on its next run, with no refresh either way.
+
+Ansys ships no deploy step of its own: the project template behind
+**Programming > C#** leaves `OutputPath` at `bin\Release\` and its `AfterBuild`
+target empty, so the copy is manual by their design.
 
 ## Licence
 
