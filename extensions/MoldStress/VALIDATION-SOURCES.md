@@ -290,3 +290,210 @@ the flow width. Chang et al. state the injection speed and screw diameter but no
 how the shot divides between cavity and runner, and not the gate width. Those are
 still my choices, and they are still the reason case 2's magnitude clause is not
 currently a test of the birefringence model.
+
+
+---
+
+# Third sweep, 2026-08-18 - five parallel searches
+
+Run as five independent searches: gapwise profiles, an in-spec part, material
+constants, fountain-flow evidence, and the case-2 paper family. READ means the
+full text was fetched; SNIPPET means abstract or search result only.
+
+**The headline is not a new source. It is that the mechanism this model was
+rebuilt on today is better supported as KINEMATICS than as the cause of the skin
+orientation MAGNITUDE, and that a shear-only model reproduces the same profile
+shape.** That does not undo the rebuild - it changes what the rebuild's passing
+clause is evidence FOR.
+
+## 1. The fountain-deposition premise: confirmed transport, contested dominance
+
+**Confirmed, by direct visualisation.** Schmidt (1974) tracer work showed melt
+originally at the inlet centreline deformed into a V and ending at the part
+SURFACE - core-to-wall transport, observed. White (1974) repeated it in real
+polymer melts; Coyle, Blake & Macosko (1987) built an apparatus for it and found
+shear-thinning barely changes the kinematics. This half of the mechanism is solid.
+(All SNIPPET, but multiple independent confirmations.)
+
+**Contested, and by the best source found.** Flaman, PhD thesis, TU Eindhoven
+(1990), `https://pure.tue.nl/ws/files/3456221/339750.pdf` - READ IN FULL.
+
+  - **Its model contains NO fountain-flow term at all** - a 1-D lubrication
+    shear-flow Leonov model in the Isayev-Hieber (1980) lineage - and it still
+    "reproduces the shape of the measured birefringence profile satisfactorily,
+    including the location of the maxima at the wall", across variations in melt
+    temperature, flow rate and packing pressure. It fails on absolute MAGNITUDE
+    only, and the author attributes that to pressure-dependence of viscosity and
+    of the stress-optical coefficient - never to a missing elongational term.
+    **So a skin-peaked profile does not by itself discriminate between front
+    deposition and wall shear. Both produce one.**
+  - **The outermost layer is optically inaccessible.** Section 6.4.3: within
+    ~60 um of the surface "it was not possible to distinguish different values".
+    The peak that this literature calls the "skin peak" therefore sits at
+    z/H ~ 0.75-0.8 - a SUB-SURFACE shear-zone maximum - with birefringence
+    decreasing again in the last measurable step toward the true wall.
+  - A third maximum, distinct from both, is attributed to PACKING-stage flow.
+
+**Wimberger-Friedl (Philips), PC discs (SNIPPET, several papers):** the surface
+maximum "cannot be explained by stresses due to classical fountain flow"; the
+dominant contribution is transient deviatoric stress from compression of the
+vitrifying polymer plus wall adhesion. Without packing, a sub-surface maximum
+appears instead and is attributed to SHEAR during filling.
+
+**Blake's envelope and Tadmor (1974) are theory that has not been tested.**
+Blake's `z*(s)` and the 1/sqrt(3) dividing streamline are an analytical Newtonian
+free-surface result; no experimental measurement of the crossover location
+against 1/sqrt(3) was found. Tadmor is cited by every review as the originating
+HYPOTHESIS; no comparison of its predicted through-thickness profile against
+measured birefringence by Tadmor was found. Mavridis/Hrymak/Vlachopoulos (1988)
+is FEM, not experiment.
+
+### What this costs this model, stated in numbers
+
+MoldStress case 1 samples its "surface" at 97.5% of the half-wall, which on a
+1.5 mm plate is **18.8 um from the wall**. The Lagrangian depth shape puts its
+peak at 93% - **52.5 um from the wall**. Both sit INSIDE the ~60 um band Flaman
+reports as unresolvable, and the peak Flaman does measure would land at z/H~0.78,
+i.e. **165 um in**, which the current criterion ("beyond 75%") only just passes.
+
+So today's result - depth peak 53% -> 93%, criterion MET - is a pass against a
+clause whose sampling point may be inside the region its own reference cannot
+resolve. **The pass is not withdrawn** (it is a different paper, a different
+material and a different instrument from Flaman's, and case 1's own 0.2 mm slab
+question was already open) **but it is downgraded from "the model now gets the
+depth profile right" to "the model now peaks in the outer quarter, and the data
+that would discriminate 78% from 93% does not exist in the sources we have."**
+
+Two consequences worth acting on, neither done:
+  - The depth criterion would be better posed on a band average over a resolvable
+    depth range than on a point at 97.5%, which is what the 0.2 mm slab question
+    was already hinting at.
+  - Case 1's Eulerian peak at 53% (352 um in) is clearly too deep, and the
+    Lagrangian at 93% may be too shallow. Flaman's ~0.78 sits between them.
+
+## 2. The thermal channel finally has reference data
+
+**Wimberger-Friedl, PhD thesis, TU Eindhoven (1991),**
+`https://pure.tue.nl/ws/files/1962727/364279.pdf` - READ IN FULL. This is the
+primary source behind the paywalled 1993/94 J. Polym. Sci. series.
+
+It gives thermal-only gapwise profiles under BOTH boundary conditions, on PC:
+  - **free quench** (no wall constraint): sign-reversing, +5..+9e-4 at the core to
+    **-15..-20e-4 at the surface**;
+  - **constrained quench** (wall-adhered, i.e. the moulding condition): a
+    **nearly flat plateau**, +5..+8e-4, no peak at either end;
+  - **injection moulded PC, full process data**: a sharp flow peak in a thin
+    surface layer (~20e-4) over a flat thermal core plateau (~5e-4), with the
+    thermal contribution stated to be **more than twice** the thickness-averaged
+    flow contribution.
+  - PC constants from the same source: stress-optical **5.5 GPa^-1 above Tg**,
+    **0.1 GPa^-1 below**, Tg = 139 + 0.38p degC.
+  - A causal control: insulating one mould half with 0.1 mm Teflon, suppressing
+    solid-layer growth during filling, makes the surface maximum on that side
+    DISAPPEAR - which supports a filling-stage origin for it.
+
+This is the first data that can test the thermal channel against a measured
+profile instead of against a null. Numbers are read off scanned figures, so
++-10-15%.
+
+## 3. Case 2's wall shear stress now has a limit to fail against
+
+Generic moulding-industry maxima, READ in full from a training reference
+(`https://krusetraining.com/wp-content/uploads/2018/01/List-Of-Materials-Shear-Rates.pdf`):
+**PC 0.50 MPa, PMMA 0.40, PS 0.25, SAN 0.30, PC/ABS 0.40, PSU 0.50**, all at a
+40,000 s^-1 shear-rate ceiling. No COC/COP entry exists.
+
+**Case 2 computes tau_wall = 1.67 MPa - 3.3x to 6.7x every amorphous limit in
+that table. Case 1's 0.297 MPa is inside it.** The second sweep recorded this
+number as unavailable outside the mould-flow databases; that was wrong, and it is
+now the third independent signal that case 2's flow inputs are wrong rather than
+its birefringence physics.
+
+## 4. Material constants, including one that threatens a constant in use
+
+**The PC sign disagreement is a CONVENTION artifact, resolved.** The -78e-12 Pa^-1
+value comes from Cambridge DoITPoMS (READ), which writes the law as
+`n_Q - n_P = C(sigma_P - sigma_Q)` - index order reversed against stress order.
+Sources using matched order report the same physics as **+78 to +82 Br**. Every
+source agrees the chain-parallel index is the higher one. Same magnitude, sign set
+by pairing convention; state the convention beside any value adopted.
+
+Melt (rubbery) coefficients found: **PC +3 to +4e-9 Pa^-1**; **PMMA -30 Br**, tiny
+and sign-changing at 144 degC; **PS -4.65 to -4.8e-9 Pa^-1**, negative because
+phenyl-ring anisotropy dominates the backbone.
+
+**And a discrepancy that is not resolved: TOPAS 5013 is reported at -700 Br,
+NEGATIVE**, against Inoue's +1700 Br for amorphous polyolefins and the +1000 Br
+this model uses for TOPAS 6017. 5013 is a different grade (lower cyclic content,
+lower Tg), so the sign may be composition-dependent - but until that is settled,
+**no COC grade other than 6017 should be given a borrowed melt coefficient**, and
+the aliasing feature makes exactly that borrowing easy to do by accident.
+
+## 5. Two candidate cases with measured values AND full process data
+
+**US 6,183,830 B1** (READ) - 120 mm x 0.6 mm DVD substrate, centre-gated radial
+flow, which is a geometry neither current case exercises. Complete recipe:
+injection rate 250 cm3/s, injection pressure ~147 MPa, melt 340 degC, mould
+115 degC, cooling 5 s. Measured birefringence (ADR-2000) at 30 and 50 mm radii:
+**57-59 nm** for the standard examples, and **195-200 nm** for a high-Mv PC
+comparative example.
+
+That second figure matters for calibration: a REAL moulded PC disc reaches ~200 nm
+and Delta n ~3.3e-4. The second sweep's alarm that MoldStress's 241 nm on the
+Double Gauss element was "12-24x above optical-grade spec" was measured against a
+best-in-class DISC SPEC, not against what ordinary moulded parts do. **The
+magnitudes this model produces sit inside the range real parts exhibit.** That
+weakens the case for a general over-prediction and strengthens the case that
+case 2's specific comparison is what is wrong - its published 3.7e-5 is at the
+very bottom of everything found in three sweeps.
+
+**US 6,506,870 B1** (READ) - the in-spec part: 10-12 nm measured against a stated
+&lt;=20 nm DVD spec, 0.6 mm thick, melt 370/390 degC, mould 120 degC. Missing
+injection speed, packing pressure and gate design, so it anchors but cannot be
+reproduced.
+
+**Hu & Xue, Scientific Reports 15:15451 (2025)** (READ, open access) - PMMA
+aspheric lens, named grade, full DOE, real photoelastic measurement, but reports
+MPa residual stress rather than nm retardance.
+
+## 6. Case 2's paper family: two gaps, one closed and one still open
+
+**The cavity count and gate width are NOT STATED anywhere reachable.** Chang et
+al.'s Table 1 was read in full: it gives clamping force 550 kN, screw diameter
+22 mm, stroke 70 mm, max pressure 259 MPa, max flow 190 cc/s and a 27 g shot
+weight - all machine ratings. The ANTEC 2007/2008 papers that might carry the
+mould layout are paywalled SPE proceedings. A third-party synopsis weakly suggests
+a single cavity; that is not strong enough to set a boundary condition on.
+
+**That table also refuted an argument this repo was making** - see the retraction
+in `RefCase2.cs`. The 27 g is the machine's maximum shot, reproduced exactly by
+pi/4 * 22^2 * 70 = 26,609 mm3 at 1.01 g/cm3, not the shot used.
+
+**The 92/8 split traces to Wang & Lai (2007)**, two conference papers, neither
+reachable, and the material is stated as "COC" while the lens is ZEONEX 480R,
+which is a **COP**. The authors use the terms loosely. Whether the split was
+measured or simulated could not be determined. Its scope is narrower than this
+file previously recorded, and it should not be quoted for any other material.
+Separately corroborating a small thermal share for this grade: annealing the lens
+12 h at 125 degC left the fringe count essentially unchanged (~6.5 before and
+after) - a different experiment, not the source of 92/8, and not to be conflated.
+
+**A trend dataset exists on the SAME lens**: Lai & Wang, Applied Optics 47(12),
+2017-2027 (2008) - an 8-run DOE varying melt 247.5-280 degC, injection speed
+19.8-22.4 mm/s, mould 111.6-136.4 degC and holding pressure 88.29-107.91 MPa,
+with Chang's 98.10 MPa near the midpoint. That would turn case 2 from one point
+into a trend, which is the single largest available upgrade to this validation.
+Paywalled; per-run numbers not in the accessible synopsis.
+
+## 7. Still not found, after three sweeps
+
+- Cross-WLF and Tait constants for any cyclo-olefin grade. Now confirmed WHY:
+  Bienia et al. moulded Zeonex E48R and state the constants came from Moldflow's
+  library without publishing them, while a companion PC paper publishes its own
+  in full. The disclosure is possible; it simply is not done for these grades.
+- Plateau modulus and terminal relaxation times for COC/COP - only a qualitative
+  result that COC's entanglement molecular weight is 3-4x COP's.
+- A COC/COP-specific maximum shear stress.
+- Case 2's cavity count and gate width.
+- Any measurement isolating the front-elongation contribution from the wall-shear
+  contribution - which is precisely the experiment that would settle section 1.

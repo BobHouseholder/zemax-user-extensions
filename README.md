@@ -368,6 +368,20 @@ Candidate sources for further checks are in
 What changed is the depth history, not a constant - see below. `-eulerian-depth`
 restores the previous behaviour exactly, including both failures.
 
+**What that pass does and does not establish, added 2026-08-18 after a literature
+sweep.** The depth-peak clause samples the surface at 97.5% of the half-wall,
+which on this 1.5 mm plate is **18.8 um from the wall**, and the ported shape
+peaks at 93%, i.e. **52.5 um in**. Flaman (TU Eindhoven, 1990) reports that
+birefringence could not be resolved within ~60 um of the surface, and that the
+maximum the literature calls the "skin peak" therefore sits at z/H ~ 0.75-0.8 -
+about 165 um in. **Both this criterion's sampling point and the new model's peak
+lie inside a band at least one careful study says its instrument cannot resolve.**
+The pass stands (different paper, material and instrument, and this case's own
+0.2 mm slab question was already open) but it means "the model now peaks in the
+outer quarter", not "the model gets the depth profile right" - the data that
+would separate 78% from 93% is not in any source found. See
+ section 1 of the third sweep.
+
 Converged at **nz=41**, which is the default since 2026-08-18. Re-taken on the
 shipped configuration rather than carried over from the Eulerian sweep: depth
 ratio 3.43 / 3.46 / 3.45 / 3.43 and in-plane peak 1.16x / 1.16x / 1.16x / 1.17x
