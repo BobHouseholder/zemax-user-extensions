@@ -174,6 +174,52 @@ namespace MoldStress
     /// the reading is that the model has the two channels it claims and is
     /// missing the third; if (c) fails high, something is over-predicting.
     ///
+    /// ==================================================================
+    /// WHAT THE FIRST RUN FOUND, 2026-08-19 - recorded after the criterion was
+    /// committed, and the criterion was not touched
+    /// ==================================================================
+    ///
+    /// SIX OF EIGHT CLAUSES PASS. (c) total magnitude 0.67 of the measurement,
+    /// inside the one-sided band and below it, which is the direction the
+    /// missing channel predicts. (d) the flow peak lands at |z/d| 0.888 against
+    /// a published ~0.95. (e1) and (e2) both reproduce the published trend
+    /// directions. The null and its control both hold.
+    ///
+    /// (a) AND (b) FAIL, AND THAT IS THE RESULT THIS CASE WAS BUILT TO GET.
+    /// Peak |sigma_thermal| is 7.4 MPa where the measurement says the residual
+    /// stress does not exceed 1 MPa; even the well-resolved interior runs
+    /// 1-2.8 MPa. The thermal channel over-predicts residual stress in a
+    /// moulding by something between three and eight times.
+    ///
+    /// THE MECHANISM IS NAMED BY THE SOURCE AND IT IS A BOUNDARY CONDITION, not
+    /// a constant. p. 130: with wall adhesion "stresses are not equilibrated
+    /// within the polymer ... When the polymer is released, the tensile stresses
+    /// will be relieved so that no residual stresses remain in the sample", and
+    /// p. 136: "with wall adhesion one can expect very low thermally induced but
+    /// significant pressure induced residual stresses". This model imposes FREE
+    /// PLATE force and moment balance at every increment, while the part is
+    /// still in the cavity and still adhered. That is the wrong boundary
+    /// condition for the in-mould stage of a moulding.
+    ///
+    /// THIS REOPENS A REFUTED BRANCH. A constrained-then-released construction
+    /// was implemented and refuted earlier in this arc because it returned
+    /// identically zero - see the note in Channels.ThermalProfileIncremental and
+    /// memory/rejected.md. It was refuted against the POST-vitrification
+    /// increment, where every layer cools from the same Tg to the same mould
+    /// temperature and zero is genuinely wrong. It was never tried on the
+    /// DURING-solidification stage, which is where this case's 7.4 MPa is built,
+    /// and against a measurement of "not exceeding 1 MPa" an answer near zero is
+    /// far closer than the free-plate one. The reopening condition is met.
+    ///
+    /// A CLAUSE DEFECT, RECORDED AND NOT FIXED. (a) samples the gapwise PEAK,
+    /// and the peak is grid-noisy: 3.07, 10.42, 7.44 MPa at nz = 41, 81, 161.
+    /// The interior is stable and the near-surface cells are not. A future
+    /// criterion should score an interior statistic instead - the unscored
+    /// diagnostic below prints one - but the registered clause stays as
+    /// registered, because changing a clause after seeing it fail is moving the
+    /// bar, and the verdict does not depend on it: the interior alone already
+    /// sits at the top of the registered band.
+    ///
     /// THE GATE THICKNESS IS NOT STATED. Fig. 2 shows a fan gate and gives no
     /// land. 1.0 mm is chosen here, exposed as -gatethick, and it is nearly inert
     /// in this case because there is no packing stage for a gate seal to end.
@@ -296,7 +342,7 @@ namespace MoldStress
                 int k = kMid + (int)Math.Round((nz - 1 - kMid) * f / 10.0);
                 if (k > nz - 1) k = nz - 1;
                 double dnTh = p.KGlassBrewster * 1e-6 * ch.SigmaThermalMPa[iSta, k];
-                say(string.Format(ci, "    {0:F2}    {1: E3}   {2: E3}   {3: E3}   {4: F4}",
+                say(string.Format(ci, "    {0:F2}   {1,11:E3}   {2,11:E3}   {3,11:E3}   {4,10:F3}",
                     Math.Abs(freeze.Z[k]) / half, ch.DnFlow[iSta, k], dnTh,
                     ch.DnTotalOutOfPlane[iSta, k], ch.SigmaThermalMPa[iSta, k]));
             }
@@ -315,7 +361,7 @@ namespace MoldStress
             // it for a reason rather than by luck.
             {
                 double ceilFlow = 0.0, tauSum = 0.0;
-                for (int k = 0; k < nz; k++)
+                for (int k = 1; k < nz - 1; k++)
                 {
                     double t = Math.Abs(ch.TauViscMPa[iSta, k]);
                     tauSum += t;
@@ -327,8 +373,8 @@ namespace MoldStress
                     }
                     ceilFlow += 2.0 * Math.Abs(p.CMeltBrewster) * 1e-6 * t * fac;
                 }
-                ceilFlow /= nz;
-                double tauAvg = tauSum / nz;
+                ceilFlow /= (nz - 2);
+                double tauAvg = tauSum / (nz - 2);
                 say(string.Format(ci,
                     "  CEILING of the flow channel: 2*|C|*<tau> = {0:E3} at memory==1 "
                     + "(<tau> {1:F4} MPa, C {2:F0} Br)", ceilFlow, tauAvg, p.CMeltBrewster));
@@ -344,18 +390,67 @@ namespace MoldStress
             say("");
 
             // ---- (a) thermal stress bound -------------------------------------
+            // THE OUTERMOST NODE IS EXCLUDED FROM EVERY GAPWISE SCAN BELOW, and
+            // this is a convention that PREDATES this case rather than a
+            // concession invented to pass it: reference case 3 samples kSurf =
+            // nz - 2 with the written reason "the outermost node is the boundary
+            // itself, where the profile is evaluated on a one-sided stencil".
+            //
+            // It is also a measurement, not an appeal to precedent. On the first
+            // run of this case the boundary node read -66 MPa against an interior
+            // maximum of 2.8, so the grid was refined to ask which it was:
+            //
+            //     nz          41       81      161
+            //     boundary  -25.4    -53.1    -66.0   MPa
+            //     interior    2.4      2.7      2.8   MPa   (z/d <= 0.90)
+            //
+            // A physical stress converges under refinement. This one grows
+            // without bound and roughly with the node spacing, which is the
+            // signature of a one-sided difference taken across the last cell.
+            // The interior converges. So the boundary node is an artefact of the
+            // discretisation and reporting it as the model's answer would have
+            // published a number that has no limit.
             double sigMax = 0.0, dnThMax = 0.0;
-            for (int k = 0; k < nz; k++)
+            for (int k = 1; k < nz - 1; k++)
             {
                 sigMax = Math.Max(sigMax, Math.Abs(ch.SigmaThermalMPa[iSta, k]));
                 dnThMax = Math.Max(dnThMax,
                     Math.Abs(p.KGlassBrewster * 1e-6 * ch.SigmaThermalMPa[iSta, k]));
             }
+            // GRID-ROBUST COMPANION, PRINTED AND NOT SCORED. The peak above is
+            // taken over every interior node, and the last few cells are where
+            // the one-sided stencil is worst - the value moves 3.07 / 10.42 /
+            // 7.44 MPa at nz 41 / 81 / 161 while the region inside |z/d| = 0.9
+            // is stable to a few percent. So the peak is a poorly conditioned
+            // statistic and the interior maximum is the honest one.
+            //
+            // It is NOT substituted for the registered clause. The clause was
+            // committed before the run and swapping its statistic after seeing it
+            // fail would be moving the bar - and it would change nothing, since
+            // the interior maximum is itself at the top of the registered band.
+            double sigInterior = 0.0;
+            for (int k = 1; k < nz - 1; k++)
+            {
+                if (Math.Abs(freeze.Z[k]) / half > 0.90) continue;
+                sigInterior = Math.Max(sigInterior, Math.Abs(ch.SigmaThermalMPa[iSta, k]));
+            }
+
+            say("  near-surface detail (where the stencil is one-sided):");
+            for (int k = nz - 1; k >= nz - 9 && k >= 0; k--)
+                say(string.Format(ci, "    z/d {0:F4}   sigma_th {1,10:F3} MPa{2}",
+                    Math.Abs(freeze.Z[k]) / half, ch.SigmaThermalMPa[iSta, k],
+                    k == nz - 1 ? "   <- boundary node, excluded from every scan" : ""));
+            say("");
+
             double sigBound = PublishedThermalStressMaxMPa * StressBoundFactor;
             bool aOk = sigMax <= sigBound;
             say(string.Format(ci,
                 "  (a) peak |sigma_thermal| {0:F3} MPa, published <= {1:F1}, bound {2:F1}  =>  {3}",
                 sigMax, PublishedThermalStressMaxMPa, sigBound, aOk ? "PASS" : "FAIL"));
+            say(string.Format(ci,
+                "      grid-robust companion (not scored): interior max over |z/d| <= 0.90 "
+                + "is {0:F3} MPa, i.e. {1:F1}x the published bound",
+                sigInterior, sigInterior / PublishedThermalStressMaxMPa));
 
             // ---- (b) thermal birefringence bound ------------------------------
             double dnThBound = PublishedThermalDnMax * StressBoundFactor;
@@ -366,13 +461,15 @@ namespace MoldStress
 
             // ---- (c) total magnitude, one-sided -------------------------------
             double totalSum = 0.0, flowSum = 0.0, thermSum = 0.0;
-            for (int k = 0; k < nz; k++)
+            for (int k = 1; k < nz - 1; k++)
             {
                 totalSum += Math.Abs(ch.DnTotalOutOfPlane[iSta, k]);
                 flowSum += Math.Abs(ch.DnFlow[iSta, k]);
                 thermSum += Math.Abs(p.KGlassBrewster * 1e-6 * ch.SigmaThermalMPa[iSta, k]);
             }
-            double totalAvg = totalSum / nz, flowAvg = flowSum / nz, thermAvg = thermSum / nz;
+            int nInterior = nz - 2;
+            double totalAvg = totalSum / nInterior, flowAvg = flowSum / nInterior,
+                   thermAvg = thermSum / nInterior;
             double loGate = TotalLoFraction * PublishedGapAverageDn;
             double hiGate = TotalHiFraction * PublishedGapAverageDn;
             bool cOk = totalAvg >= loGate && totalAvg <= hiGate;
@@ -387,7 +484,7 @@ namespace MoldStress
 
             // ---- (d) flow peak near the surface -------------------------------
             double flowPeak = 0.0, flowPeakZ = 0.0;
-            for (int k = kMid; k <= nz - 2; k++)
+            for (int k = kMid; k <= nz - 2; k++)   // nz-1 is the boundary node
             {
                 double v = Math.Abs(ch.DnFlow[iSta, k]);
                 if (v > flowPeak) { flowPeak = v; flowPeakZ = Math.Abs(freeze.Z[k]) / half; }
@@ -434,7 +531,7 @@ namespace MoldStress
             var chNull = Channels.Build(plate, pNull, proc, fill,
                 FreezeHistory.Build(plate.CentreThicknessMm, pNull, proc, nz, 10 * nz));
             double nullMax = 0.0;
-            for (int k = 0; k < nz; k++)
+            for (int k = 1; k < nz - 1; k++)
                 nullMax = Math.Max(nullMax, Math.Abs(chNull.SigmaThermalMPa[iSta, k]));
             bool fOk = nullMax <= 1e-12;
             bool gOk = sigMax > 1e-9;
@@ -530,19 +627,19 @@ namespace MoldStress
             double half = 0.5 * ThicknessMm;
 
             double best = 0.0, bestZ = 0.0, sig = 0.0, tot = 0.0;
-            for (int k = kMid; k <= nz - 2; k++)
+            for (int k = kMid; k <= nz - 2; k++)   // nz-1 is the boundary node
             {
                 double v = Math.Abs(ch.DnFlow[i, k]);
                 if (v > best) { best = v; bestZ = Math.Abs(freeze.Z[k]) / half; }
             }
-            for (int k = 0; k < nz; k++)
+            for (int k = 1; k < nz - 1; k++)
             {
                 sig = Math.Max(sig, Math.Abs(ch.SigmaThermalMPa[i, k]));
                 tot += Math.Abs(ch.DnTotalOutOfPlane[i, k]);
             }
             flowPeakZOverD = bestZ;
             peakSigmaMPa = sig;
-            avgTotalDn = tot / nz;
+            avgTotalDn = tot / (nz - 2);
         }
     }
 }
