@@ -380,7 +380,8 @@ The pass stands (different paper, material and instrument, and this case's own
 0.2 mm slab question was already open) but it means "the model now peaks in the
 outer quarter", not "the model gets the depth profile right" - the data that
 would separate 78% from 93% is not in any source found. See
- section 1 of the third sweep.
+[`VALIDATION-SOURCES.md`](extensions/MoldStress/VALIDATION-SOURCES.md), section 1
+of the third sweep.
 
 Converged at **nz=41**, which is the default since 2026-08-18. Re-taken on the
 shipped configuration rather than carried over from the Eulerian sweep: depth
