@@ -136,6 +136,7 @@ namespace MoldStress
         private static void CatalogChecks()
         {
             Console.WriteLine("  material data");
+            Polymers.SelfCheckEjection();
             Polymers.SelfCheckValues();
             Polymers.SelfCheckContested();
             List<string> errs = Polymers.Validate();

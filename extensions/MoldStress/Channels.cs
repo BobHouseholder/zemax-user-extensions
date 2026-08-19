@@ -1059,9 +1059,36 @@ namespace MoldStress
             // increment for a moulding, which is the form it survives in. See
             // memory/rejected.md.
             //
-            // What is still NOT modelled either way: cooling after EJECTION, from
-            // mould temperature to ambient, during which the part IS free. For a
-            // cold mould that is the larger half.
+            // COOLING AFTER EJECTION CONTRIBUTES EXACTLY ZERO, and this is a
+            // proof rather than an omission - RETRACTING an earlier claim in this
+            // file that called it "the larger half for a cold mould".
+            //
+            // After ejection the part is free, so free-plate balance would apply.
+            // But it is also entirely GLASSY: no layer vitrifies, there is no
+            // relaxation mechanism in this model below Tg, and every layer carries
+            // the same modulus. A linear-elastic body taken through a thermal
+            // cycle that starts uniform and ends uniform has exactly zero residual
+            // stress - the transient stresses are real but fully recovered when
+            // uniformity returns. Nothing needs to be solved to know the answer.
+            //
+            // THE CONDITION IS Tmould < Tg, AND THIS TOOL ALREADY ENFORCES IT.
+            // FreezeHistory.Build refuses anything else outright - "need mould <
+            // Tg < melt" - so every configuration that reaches this line ejects a
+            // fully vitrified part, and post-ejection cooling contributes zero
+            // UNCONDITIONALLY here. Not "usually", and not "in the cases we
+            // happen to run": the precondition is the guarantee.
+            //
+            // A warning for the mould-above-Tg case was written here and REMOVED
+            // as dead code, which is worth recording because it took an
+            // experiment to find out. Setting case 1's mould to 200 C against a
+            // Tg of 178 produced no warning at all - the run failed earlier, at
+            // the freeze solve, with exit 1. The branch was unreachable. What
+            // guards this proof is therefore not a warning but that precondition,
+            // and it is the precondition the self-test asserts.
+            //
+            // If that refusal is ever relaxed, this proof lapses: material still
+            // molten at ejection vitrifies while the part is FREE, and that
+            // contribution is real and unmodelled.
             //
             // FreezeHistory's cooling loop runs `while (snapshot == null)` and
             // takes its snapshot the moment the centre crosses Tg - everything the

@@ -429,6 +429,53 @@ namespace MoldStress
         /// melt coefficient nobody disputes must NOT - otherwise the field could
         /// be set on everything and the check would pass while meaning nothing.
         /// </summary>
+        /// <summary>
+        /// Post-ejection cooling is provably zero only when the part leaves the
+        /// mould fully vitrified. Checked in BOTH directions, because a guard
+        /// that never fires and a guard that always fires look identical from a
+        /// green suite.
+        /// </summary>
+        public static void SelfCheckEjection()
+        {
+            foreach (var name in new[] { "MS_COC_TOPAS6017", "MS_COP_ZEONEX480R", "MS_POLYCARB" })
+            {
+                var p = ByName(name);
+                SelfTest.Check(name + " default mould is below Tg (post-ejection provably zero)",
+                    p.MoldTempC < p.TgC,
+                    string.Format("mould {0:F0} C, Tg {1:F0} C", p.MoldTempC, p.TgC));
+            }
+
+            // THE INVARIANT THE PROOF RESTS ON: a mould at or above Tg must be
+            // REFUSED, not merely warned about. That refusal is what makes
+            // "post-ejection cooling contributes zero" unconditional rather than
+            // a property of the cases we happen to run. Exercised for real -
+            // FreezeHistory.Build is called and must throw.
+            var hot = ByName("MS_COC_TOPAS6017").WithProcessTemps(290.0, 200.0);
+            bool refused = false;
+            try
+            {
+                FreezeHistory.Build(1.5, hot,
+                    new Process { FillTimeS = 1.0, PackTimeS = 1.0 }, 21, 210);
+            }
+            catch (ArgumentException) { refused = true; }
+            SelfTest.Check("a mould at or above Tg is REFUSED, not accepted",
+                refused,
+                string.Format("mould {0:F0} C vs Tg {1:F0} C - the refusal is what makes "
+                              + "post-ejection cooling provably zero", hot.MoldTempC, hot.TgC));
+
+            // ... and the same call must SUCCEED below Tg, or the test above
+            // passes because the call throws for some unrelated reason.
+            bool accepted = true;
+            try
+            {
+                FreezeHistory.Build(1.5, ByName("MS_COC_TOPAS6017").WithProcessTemps(280.0, 150.0),
+                    new Process { FillTimeS = 1.0, PackTimeS = 1.0 }, 21, 210);
+            }
+            catch (ArgumentException) { accepted = false; }
+            SelfTest.Check("a mould below Tg is accepted (control)",
+                accepted, "mould 150 C vs Tg 178 C must build normally");
+        }
+
         public static void SelfCheckContested()
         {
             foreach (var name in new[] { "MS_COC_TOPAS6017", "MS_COP_ZEONEX480R" })
