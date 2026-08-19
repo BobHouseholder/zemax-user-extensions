@@ -84,10 +84,35 @@ namespace MoldStress
     ///
     /// AND BOTH INPUTS THAT SET IT ARE UNSOURCED:
     ///   Q  8410 mm3/s, from a screw rate that assumes the WHOLE screw output
-    ///      enters this one cavity - while the paper shots 27 g for a 0.92 g part,
-    ///      a ratio of 29 that a single-cavity sprue and runner does not explain.
+    ///      enters this one cavity. A sprue and a runner demonstrably exist - the
+    ///      paper places a gate - so some of that output goes somewhere else, and
+    ///      this Q is an UPPER BOUND rather than an estimate.
     ///   W  12.6 mm, one eighth of the circumference, CHOSEN HERE. The paper places
     ///      a gate on the Y axis and never states its width.
+    ///
+    /// RETRACTED 2026-08-18, in place. This block used to argue the same
+    /// conclusion from a different fact: "the paper shots 27 g for a 0.92 g part,
+    /// a ratio of 29 that a single-cavity sprue and runner does not explain."
+    /// THAT WAS A MISREAD. The 27 g is the MACHINE'S MAXIMUM SHOT CAPACITY, not
+    /// the shot used for this lens. It is reproduced exactly by the full screw
+    /// stroke also given in the same table - pi/4 * 22^2 * 70 mm = 26,609 mm3,
+    /// which at ZEONEX 480R's 1.01 g/cm3 is 26.9 g - and it sits among clamping
+    /// force 550 kN, maximum pressure 259 MPa and maximum flow 190 cc/s, which
+    /// are plainly machine ratings. The paper never states the shot it used.
+    ///
+    /// WHERE THE ERROR CAME FROM, because that is the reusable part: a number was
+    /// taken from a table headed with the process conditions and read as a process
+    /// setting, without asking which rows of that table describe the MACHINE and
+    /// which describe the RUN. A machine rating and a process setting look
+    /// identical once quoted - both are a number with units next to a part - and
+    /// the tell was available in the same table, since a stated screw stroke times
+    /// a stated screw diameter reproduces the "shot weight" to three figures. When
+    /// a source gives both a capacity and a geometry, multiply them out: if they
+    /// agree, the number is a rating.
+    ///
+    /// The conclusion is unchanged and now rests only on what survives - that a
+    /// runner exists and Q therefore cannot all be reaching the cavity. The 29x
+    /// ratio is withdrawn and must not be requoted.
     ///
     /// So the in-plane peak clause is NOT presently a test of the birefringence
     /// model. It is a test of two flow inputs nobody has sourced, and it should
