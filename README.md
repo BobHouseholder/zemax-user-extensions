@@ -300,6 +300,157 @@ from 0.31 to 0.82, on measured constants with no fitted parameter between them.
 freeze-history fix, 0.26×/0.90× and 0.02/0.76, was taken on the bad grid.)
 Disable with `-fountain 0` to recover the shear-only model.
 
+#### MoldStress validation, and what currently fails
+
+Three published reference cases, each with a criterion registered BEFORE it was
+first run. Numbers below are read from the binary, not carried in prose.
+
+| | what it tests | verdict |
+|---|---|---|
+| `-refcase` | moulded plate, flow + thermal | **criterion MET** |
+| `-refcase2` | moulded lens, curved, layer-removal depth data | NOT met - one clause |
+| `-refquench` | free quench, the THERMAL channel alone | **criterion MET** |
+
+How each was arrived at, and every mechanism tried and rejected, is in
+[`VALIDATION-LOG.md`](extensions/MoldStress/VALIDATION-LOG.md). Candidate sources
+and three literature sweeps are in
+[`VALIDATION-SOURCES.md`](extensions/MoldStress/VALIDATION-SOURCES.md).
+
+#### Case 1 - TOPAS 6017S-04 plate
+
+100 x 100 x 1.5 mm, film gate on one edge, 280 C / 150 C / 71.3 MPa. Constants
+from Kim, Yoon & Kornfield, *Key Eng. Mater.* **326-328** (2006) 183. Polymers
+2024 16(2) 168.
+
+| Clause | Result | Bar | |
+|---|---|---|---|
+| in-plane peak | 1.392e-4 against a published 1.2e-4 - **1.16x** | within 2x | PASS |
+| in-plane shape | maximum at the gate, 47.3% of it at the far edge | must decay | PASS |
+| gate null | peak moves x=0 -> x=100 mm when the gate moves | must track | PASS |
+| depth ratio | **3.44** against a published 2.78 | [1.39, 5.56] | PASS |
+| depth peak | maximum at 95% of the half-wall | beyond 75% | PASS |
+| depth null (flow) | mirrored freeze order drives the deep value to exactly 0 | must respond | PASS |
+| depth null (thermal) | CTE=0 collapses to flow-only, channel material (3.44 vs 2.84) | must collapse | PASS |
+
+Converged at **nz=41**: depth ratio 3.43 / 3.46 / 3.45 / 3.43 and peak 1.16x /
+1.16x / 1.16x / 1.17x at nz 41 / 81 / 161 / 321. nz=21 is NOT converged, so 41 is
+a floor rather than the smallest grid that passed.
+
+**Channel split, printed beside the clause because a ratio built from a SIGNED sum
+cannot be attributed from the ratio alone:** at the surface sampling depth flow is
+3.169e-4 and thermal +4.42e-5 (14%); at the deep point 1.116e-4 and -6.66e-6 (6%).
+That brackets the 8% thermal share published for this material class. It was 26%
+until the post-vitrification increment was restricted to free parts - see below.
+
+#### Case 2 - ZEONEX 480R plano-convex lens
+
+32 mm diameter, 2 mm centre thickness, 0.8 mm edge gate, 275 C / 124 C, 98.10 MPa.
+Chang, Yu, Chiu, Yang, Lai & Wang (CoreTech / NTHU). Chosen because it is a lens
+rather than a plate, a different material family, and its depth data comes from
+successive 0.1 mm layers turned off with the fringe order recounted - so the
+quantity removed IS the quantity measured.
+
+| Clause | Result | Bar | |
+|---|---|---|---|
+| in-plane peak | 4.763e-4 against a published 3.7e-5 - **12.87x** | within 2x | **FAIL** |
+| in-plane shape | maximum at the gate, 14% of it at the far edge | must decay | PASS |
+| layer removal | 32.4 / 44.7 / 48.9 / 50.0% against 27.9 / 30.8 / 43.9 / 46.2% | 3 of 4 within 10 pts | PASS |
+
+**The in-plane clause is not currently a test of the birefringence model.** Its
+wall shear stress is 1.67 MPa against industry maxima of 0.25-0.50 MPa for
+amorphous grades (case 1's 0.297 is inside), and the two inputs that set it - the
+cavity's share of the shot and a 12.6 mm flow width - are unsourced choices.
+Searched for and not found; see the sources file.
+
+#### Case 3 - free quench, the THERMAL channel alone
+
+Bisphenol-A polycarbonate, 2 mm sheet, 160 C -> 60 C bath. Wimberger-Friedl, PhD
+thesis, TU Eindhoven (1991) ch. 3.2, open access. Cases 1 and 2 are mouldings, so
+every number in them is flow and thermal together; this channel had only ever
+been tested by NULLING it. A quench has no flow, and the thermal construction
+reads only the freeze history - so no gate, flow rate or fill time reaches it.
+
+| Clause | Result | Bar | |
+|---|---|---|---|
+| sign reversal | core +5.38e-4, surface -1.42e-3 | must reverse | PASS |
+| direction | core tension, surface compression | as published | PASS |
+| zero crossing | z/d **0.649** (published 0.5-0.8) | [0.40, 0.90] | PASS |
+| shape ratio | \|surface\|/\|core\| **2.64** (published 1.7-4.0) | [1.0, 8.0] | PASS |
+| magnitude | \|surface\| 1.42e-3 against a published 1.75e-3 | within 3x | PASS |
+| null | CTE=0 collapses the profile to exactly 0 | must collapse | PASS |
+| control on the null | CTE restored gives 3.20e-3 | must not be dead | PASS |
+
+Published figures are read off scanned figure axes at +-10-15%, so every band is
+set wide for that. The magnitude clause was registered as deliberately weak
+BEFORE running, because the source attributes much of the quench birefringence to
+frozen-in orientation above Tg, which this channel does not model.
+
+**All seven passed first run, and the case immediately found a failure they
+cannot see.** The source reports the zero crossing moving OUTWARD as initial
+temperature rises, z/d ~0.3 to ~0.85, naming Ti the dominant control. The model
+moves it 0.645 -> 0.656 - right direction, span 51x too small. Printed as an
+unscored trend diagnostic rather than folded into the verdict, because
+registering a clause after seeing its result is moving the bar.
+
+#### The thermal channel, as of 2026-08-18
+
+**Stress accumulates INCREMENTALLY** - a layer is stress-free above Tg, becomes
+elastic when it vitrifies, and every later cooling increment re-equilibrates over
+the layers solid at that moment, so the total is force- and moment-balanced
+without imposing it. The previous construction read the temperature profile at
+one instant and removed its mean and linear parts; that is capped, since the
+profile then is near a similarity solution and its crossing cannot move. On case
+3 the incremental form took the surface from -9.5e-4 to -1.42e-3 and the ratio
+from 1.76 to 2.64. `-snapshot` restores the old one.
+
+**The post-vitrification increment is for FREE parts only.** Completing the
+cooling after every layer is solid is essential to a quench - case 3's core reads
+7.6e-7 without it - and wrong for a moulding, where the part is still adhered to
+the cavity and cannot relieve in-plane, so the denied contraction is identical
+for every layer and cancels at ejection. Including it put case 1's thermal share
+at 26% of flow against a published 8%; excluding it gives 14%.
+
+That cancellation was implemented as a constrained-then-released branch and
+MEASURED: it returns identically zero, which refuted it as a general construction
+and simultaneously justified the exclusion. Recorded in `memory/rejected.md`.
+
+**Cooling after EJECTION contributes exactly zero, and that is a proof.** The
+part is then entirely glassy - nothing vitrifies, no sub-Tg relaxation, one
+modulus - and a linear-elastic body taken through a cycle that starts and ends
+uniform has no residual stress. The condition is mould < Tg, which this tool
+already ENFORCES (`FreezeHistory` refuses anything else), so the result is
+unconditional rather than a property of the cases run. A warning for the
+mould-above-Tg case was written and removed as dead code: with case 1 set to a
+200 C mould it never printed, because the run fails earlier. The self-test
+asserts the precondition instead, in both directions.
+
+#### Open
+
+- **Case 2's in-plane peak, 12.87x.** Every material and process input is sourced
+  or shown to be a safe borrowing, and the registered falsifier is dead: Inoue et
+  al. measure ~1700 Br for amorphous polyolefins, so 480R's melt coefficient is if
+  anything LARGER than the borrowed 1000 Br. But the clause rests on two unsourced
+  flow inputs, so it does not currently test the model.
+- **Case 3's Ti trend** - the elastic stress is dominated by a Ti-independent
+  term, so the dependence must live in frozen-in ORIENTATION above Tg, which is a
+  second thermal channel rather than a correction to this one.
+- **The depth criterion may sample inside its reference's resolution.** Case 1
+  samples 18.8 um from the wall and the ported shape peaks 52.5 um in; Flaman
+  (1990) reports birefringence unresolvable within ~60 um of the surface, with the
+  measured peak at ~165 um. The pass means "peaks in the outer quarter", not "gets
+  the profile right".
+- **Fountain-flow deposition is contested as the cause of skin orientation.** The
+  transport is directly visualised, but a shear-only model reproduces the same
+  profile shape, so a skin-peaked profile does not discriminate between the two.
+- **Case 2 is not grid-converged** (first layer 34.5 / 33.4 / 32.4% at nz 41 / 81
+  / 161) and stays at 161.
+- **PMMA is the least trustworthy material row** - its stress-optical coefficient
+  changes sign near 144 C while the model carries one constant across a range that
+  straddles it.
+- **Needs Bob:** click the ribbon entry once in the OpticStudio GUI. Everything
+  here has run headless.
+
+
 ### CryoGlass
 
 Generates OpticStudio glass catalogs from the NASA GSFC **CHARMS** cryogenic
@@ -333,157 +484,6 @@ Options: `-temp T` (Kelvin; pure generation, no OpticStudio needed),
 `-fitbox K`, `-out <agf>`, `-file <zmx>` (read the lens's environment
 temperature), `-selftest`, `-quiet`. Ribbon runs read the open system's
 environment temperature and generate beside the lens file.
-
-
-## Validation, and what currently fails
-
-Three published reference cases, each with a criterion registered BEFORE it was
-first run. Numbers below are read from the binary, not carried in prose.
-
-| | what it tests | verdict |
-|---|---|---|
-| `-refcase` | moulded plate, flow + thermal | **criterion MET** |
-| `-refcase2` | moulded lens, curved, layer-removal depth data | NOT met - one clause |
-| `-refquench` | free quench, the THERMAL channel alone | **criterion MET** |
-
-How each was arrived at, and every mechanism tried and rejected, is in
-[`VALIDATION-LOG.md`](extensions/MoldStress/VALIDATION-LOG.md). Candidate sources
-and three literature sweeps are in
-[`VALIDATION-SOURCES.md`](extensions/MoldStress/VALIDATION-SOURCES.md).
-
-### Case 1 - TOPAS 6017S-04 plate
-
-100 x 100 x 1.5 mm, film gate on one edge, 280 C / 150 C / 71.3 MPa. Constants
-from Kim, Yoon & Kornfield, *Key Eng. Mater.* **326-328** (2006) 183. Polymers
-2024 16(2) 168.
-
-| Clause | Result | Bar | |
-|---|---|---|---|
-| in-plane peak | 1.392e-4 against a published 1.2e-4 - **1.16x** | within 2x | PASS |
-| in-plane shape | maximum at the gate, 47.3% of it at the far edge | must decay | PASS |
-| gate null | peak moves x=0 -> x=100 mm when the gate moves | must track | PASS |
-| depth ratio | **3.44** against a published 2.78 | [1.39, 5.56] | PASS |
-| depth peak | maximum at 95% of the half-wall | beyond 75% | PASS |
-| depth null (flow) | mirrored freeze order drives the deep value to exactly 0 | must respond | PASS |
-| depth null (thermal) | CTE=0 collapses to flow-only, channel material (3.44 vs 2.84) | must collapse | PASS |
-
-Converged at **nz=41**: depth ratio 3.43 / 3.46 / 3.45 / 3.43 and peak 1.16x /
-1.16x / 1.16x / 1.17x at nz 41 / 81 / 161 / 321. nz=21 is NOT converged, so 41 is
-a floor rather than the smallest grid that passed.
-
-**Channel split, printed beside the clause because a ratio built from a SIGNED sum
-cannot be attributed from the ratio alone:** at the surface sampling depth flow is
-3.169e-4 and thermal +4.42e-5 (14%); at the deep point 1.116e-4 and -6.66e-6 (6%).
-That brackets the 8% thermal share published for this material class. It was 26%
-until the post-vitrification increment was restricted to free parts - see below.
-
-### Case 2 - ZEONEX 480R plano-convex lens
-
-32 mm diameter, 2 mm centre thickness, 0.8 mm edge gate, 275 C / 124 C, 98.10 MPa.
-Chang, Yu, Chiu, Yang, Lai & Wang (CoreTech / NTHU). Chosen because it is a lens
-rather than a plate, a different material family, and its depth data comes from
-successive 0.1 mm layers turned off with the fringe order recounted - so the
-quantity removed IS the quantity measured.
-
-| Clause | Result | Bar | |
-|---|---|---|---|
-| in-plane peak | 4.763e-4 against a published 3.7e-5 - **12.87x** | within 2x | **FAIL** |
-| in-plane shape | maximum at the gate, 14% of it at the far edge | must decay | PASS |
-| layer removal | 32.4 / 44.7 / 48.9 / 50.0% against 27.9 / 30.8 / 43.9 / 46.2% | 3 of 4 within 10 pts | PASS |
-
-**The in-plane clause is not currently a test of the birefringence model.** Its
-wall shear stress is 1.67 MPa against industry maxima of 0.25-0.50 MPa for
-amorphous grades (case 1's 0.297 is inside), and the two inputs that set it - the
-cavity's share of the shot and a 12.6 mm flow width - are unsourced choices.
-Searched for and not found; see the sources file.
-
-### Case 3 - free quench, the THERMAL channel alone
-
-Bisphenol-A polycarbonate, 2 mm sheet, 160 C -> 60 C bath. Wimberger-Friedl, PhD
-thesis, TU Eindhoven (1991) ch. 3.2, open access. Cases 1 and 2 are mouldings, so
-every number in them is flow and thermal together; this channel had only ever
-been tested by NULLING it. A quench has no flow, and the thermal construction
-reads only the freeze history - so no gate, flow rate or fill time reaches it.
-
-| Clause | Result | Bar | |
-|---|---|---|---|
-| sign reversal | core +5.38e-4, surface -1.42e-3 | must reverse | PASS |
-| direction | core tension, surface compression | as published | PASS |
-| zero crossing | z/d **0.649** (published 0.5-0.8) | [0.40, 0.90] | PASS |
-| shape ratio | \|surface\|/\|core\| **2.64** (published 1.7-4.0) | [1.0, 8.0] | PASS |
-| magnitude | \|surface\| 1.42e-3 against a published 1.75e-3 | within 3x | PASS |
-| null | CTE=0 collapses the profile to exactly 0 | must collapse | PASS |
-| control on the null | CTE restored gives 3.20e-3 | must not be dead | PASS |
-
-Published figures are read off scanned figure axes at +-10-15%, so every band is
-set wide for that. The magnitude clause was registered as deliberately weak
-BEFORE running, because the source attributes much of the quench birefringence to
-frozen-in orientation above Tg, which this channel does not model.
-
-**All seven passed first run, and the case immediately found a failure they
-cannot see.** The source reports the zero crossing moving OUTWARD as initial
-temperature rises, z/d ~0.3 to ~0.85, naming Ti the dominant control. The model
-moves it 0.645 -> 0.656 - right direction, span 51x too small. Printed as an
-unscored trend diagnostic rather than folded into the verdict, because
-registering a clause after seeing its result is moving the bar.
-
-### The thermal channel: what changed today and what it cost
-
-**Stress accumulates INCREMENTALLY** - a layer is stress-free above Tg, becomes
-elastic when it vitrifies, and every later cooling increment re-equilibrates over
-the layers solid at that moment, so the total is force- and moment-balanced
-without imposing it. The previous construction read the temperature profile at
-one instant and removed its mean and linear parts; that is capped, since the
-profile then is near a similarity solution and its crossing cannot move. On case
-3 the incremental form took the surface from -9.5e-4 to -1.42e-3 and the ratio
-from 1.76 to 2.64. `-snapshot` restores the old one.
-
-**The post-vitrification increment is for FREE parts only.** Completing the
-cooling after every layer is solid is essential to a quench - case 3's core reads
-7.6e-7 without it - and wrong for a moulding, where the part is still adhered to
-the cavity and cannot relieve in-plane, so the denied contraction is identical
-for every layer and cancels at ejection. Including it put case 1's thermal share
-at 26% of flow against a published 8%; excluding it gives 14%.
-
-That cancellation was implemented as a constrained-then-released branch and
-MEASURED: it returns identically zero, which refuted it as a general construction
-and simultaneously justified the exclusion. Recorded in `memory/rejected.md`.
-
-**Cooling after EJECTION contributes exactly zero, and that is a proof.** The
-part is then entirely glassy - nothing vitrifies, no sub-Tg relaxation, one
-modulus - and a linear-elastic body taken through a cycle that starts and ends
-uniform has no residual stress. The condition is mould < Tg, which this tool
-already ENFORCES (`FreezeHistory` refuses anything else), so the result is
-unconditional rather than a property of the cases run. A warning for the
-mould-above-Tg case was written and removed as dead code: with case 1 set to a
-200 C mould it never printed, because the run fails earlier. The self-test
-asserts the precondition instead, in both directions.
-
-### Open
-
-- **Case 2's in-plane peak, 12.87x.** Every material and process input is sourced
-  or shown to be a safe borrowing, and the registered falsifier is dead: Inoue et
-  al. measure ~1700 Br for amorphous polyolefins, so 480R's melt coefficient is if
-  anything LARGER than the borrowed 1000 Br. But the clause rests on two unsourced
-  flow inputs, so it does not currently test the model.
-- **Case 3's Ti trend** - the elastic stress is dominated by a Ti-independent
-  term, so the dependence must live in frozen-in ORIENTATION above Tg, which is a
-  second thermal channel rather than a correction to this one.
-- **The depth criterion may sample inside its reference's resolution.** Case 1
-  samples 18.8 um from the wall and the ported shape peaks 52.5 um in; Flaman
-  (1990) reports birefringence unresolvable within ~60 um of the surface, with the
-  measured peak at ~165 um. The pass means "peaks in the outer quarter", not "gets
-  the profile right".
-- **Fountain-flow deposition is contested as the cause of skin orientation.** The
-  transport is directly visualised, but a shear-only model reproduces the same
-  profile shape, so a skin-peaked profile does not discriminate between the two.
-- **Case 2 is not grid-converged** (first layer 34.5 / 33.4 / 32.4% at nz 41 / 81
-  / 161) and stays at 161.
-- **PMMA is the least trustworthy material row** - its stress-optical coefficient
-  changes sign near 144 C while the model carries one constant across a range that
-  straddles it.
-- **Needs Bob:** click the ribbon entry once in the OpticStudio GUI. Everything
-  here has run headless.
 
 
 ## Building
