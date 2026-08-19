@@ -932,6 +932,135 @@ namespace MoldStress
         /// force and moment balance imposed. Uniform and linear profiles must
         /// therefore return exactly zero, which is the control.
         /// </summary>
+        /// <summary>
+        /// THE INCREMENTAL THERMAL PROFILE - stress accumulated layer by layer as
+        /// the solidification front sweeps inward, rather than set in one shot by
+        /// the temperature profile at a single instant.
+        ///
+        /// WHY THIS EXISTS. `ThermalProfile` below evaluates the temperature
+        /// distribution at ONE moment - when the centre reaches Tg - and removes
+        /// its mean and linear parts. That is the classical construction and it
+        /// gets the shape broadly right, but it caps what the model can express:
+        /// the normalised temperature profile at that instant is close to a
+        /// similarity solution, so its zero crossing is nearly fixed. In the
+        /// fully-diffused limit the profile is a cosine, whose mean over the
+        /// half-wall is 2/pi, and the crossing sits at 0.561 - which is what the
+        /// snapshot model returns at high initial temperature, to three figures.
+        ///
+        /// Measured 2026-08-18 against Wimberger-Friedl (TU Eindhoven 1991): the
+        /// source reports the crossing moving OUTWARD from z/d ~0.3 to ~0.85 as
+        /// the initial temperature rises, calling Ti the dominant control. The
+        /// snapshot model moved it INWARD, 0.589 -> 0.565 - wrong direction, and a
+        /// span 23x too small. No constant could have fixed that; the single-
+        /// instant assumption is what bounds it.
+        ///
+        /// THE PHYSICS THIS USES INSTEAD. A layer carries no stress while it is
+        /// above Tg. It becomes elastic when IT vitrifies, and from then on every
+        /// further increment of cooling puts it into conflict with its neighbours:
+        /// it wants to contract by alpha*dT, the plate can only accommodate a
+        /// uniform stretch plus a bend, and the difference is stress. So at each
+        /// step the increment is
+        ///
+        ///     dsigma(z) = E/(1-nu) * [ (a + b*z) - alpha*dT(z) ]   for solid z
+        ///     dsigma(z) = 0                                        for molten z
+        ///
+        /// with a and b fixed by force and moment balance OVER THE LAYERS THAT ARE
+        /// SOLID AT THAT MOMENT. Each increment therefore sums to zero over all
+        /// layers (molten ones contribute nothing), so the accumulated total is
+        /// force- and moment-balanced without imposing it at the end.
+        ///
+        /// That is Ti-dependent in SHAPE, not merely in scale: raising Ti changes
+        /// how much of the cooling happens while the front is still sweeping, and
+        /// therefore how the increments are distributed across depth.
+        /// </summary>
+        public static double[] ThermalProfileIncremental(
+            double[] z, double[] timeGridS, double[,] tempHistoryC,
+            double tgC, double alphaPerK, double eOver1MinusNu,
+            double finalTempC = double.NaN)
+        {
+            int n = z.Length;
+            var sigma = new double[n];
+            if (timeGridS == null || tempHistoryC == null || timeGridS.Length < 2) return sigma;
+            int nt = Math.Min(timeGridS.Length, tempHistoryC.GetLength(1));
+
+            var solid = new bool[n];
+            for (int j = 1; j < nt; j++)
+            {
+                // Solid means below Tg at the END of this step. A layer that
+                // crosses Tg during the step is treated as solid for the whole of
+                // it, which slightly over-credits the crossing step; with the
+                // grids in use that is far below the read accuracy of the source.
+                int nSolid = 0;
+                for (int k = 0; k < n; k++)
+                {
+                    solid[k] = tempHistoryC[k, j] <= tgC;
+                    if (solid[k]) nSolid++;
+                }
+                if (nSolid < 2) continue;   // cannot determine a bend from one node
+
+                // Force and moment balance over the solid set:
+                //   sum (a + b z - alpha dT) = 0
+                //   sum (a + b z - alpha dT) z = 0
+                double s1 = 0, sz = 0, szz = 0, sf = 0, sfz = 0;
+                for (int k = 0; k < n; k++)
+                {
+                    if (!solid[k]) continue;
+                    double f = alphaPerK * (tempHistoryC[k, j] - tempHistoryC[k, j - 1]);
+                    s1 += 1.0; sz += z[k]; szz += z[k] * z[k];
+                    sf += f; sfz += f * z[k];
+                }
+                double det = s1 * szz - sz * sz;
+                if (Math.Abs(det) < 1e-30) continue;
+                double a = (sf * szz - sfz * sz) / det;
+                double b = (s1 * sfz - sf * sz) / det;
+
+                for (int k = 0; k < n; k++)
+                {
+                    if (!solid[k]) continue;
+                    double f = alphaPerK * (tempHistoryC[k, j] - tempHistoryC[k, j - 1]);
+                    sigma[k] += eOver1MinusNu * ((a + b * z[k]) - f);
+                }
+            }
+
+            // THE RECORDED HISTORY STOPS AT CENTRE VITRIFICATION, and most of the
+            // core's stress is generated after it.
+            //
+            // FreezeHistory's cooling loop runs `while (snapshot == null)` and
+            // takes its snapshot the moment the centre crosses Tg - everything the
+            // flow channel needs, since its memory integral ends there too. But
+            // the centre vitrifies while still ~85 C above the bath, with the skin
+            // already cold, and that differential contraction is precisely what
+            // puts the core in tension. Integrating only the recorded window left
+            // the core at 7.6e-7 against a published 7e-4, and the shape-ratio
+            // clause read 627 instead of 1.7-4.0.
+            //
+            // Completing it needs no change to the shared freeze solve, because
+            // once EVERY layer is solid the solid set stops changing, a and b are
+            // linear in the temperature increments, and the accumulated stress
+            // depends only on the TOTAL remaining dT per layer - not on the path
+            // taken to it. So the rest of the cooling is exactly one increment.
+            if (!double.IsNaN(finalTempC))
+            {
+                double s1 = n, sz = 0, szz = 0, sf = 0, sfz = 0;
+                var fRest = new double[n];
+                for (int k = 0; k < n; k++)
+                {
+                    fRest[k] = alphaPerK * (finalTempC - tempHistoryC[k, nt - 1]);
+                    sz += z[k]; szz += z[k] * z[k];
+                    sf += fRest[k]; sfz += fRest[k] * z[k];
+                }
+                double det = s1 * szz - sz * sz;
+                if (Math.Abs(det) > 1e-30)
+                {
+                    double a = (sf * szz - sfz * sz) / det;
+                    double b = (s1 * sfz - sf * sz) / det;
+                    for (int k = 0; k < n; k++)
+                        sigma[k] += eOver1MinusNu * ((a + b * z[k]) - fRest[k]);
+                }
+            }
+            return sigma;
+        }
+
         public static double[] ThermalProfile(double[] tRef, double[] z, double coeff)
         {
             int n = tRef.Length;

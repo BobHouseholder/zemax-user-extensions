@@ -94,6 +94,8 @@ namespace MoldStress
             // ~0.85 at high Ti - and a case that can only be run at one condition
             // cannot test a trend. The registered clauses above are evaluated at
             // the registered 160/60; these flags are for the trend diagnostic.
+            Incremental = !Program.Has(args, "-snapshot");
+            say("");
             double ti = Program.Value(args, "-ti", InitialTempC);
             double tc = Program.Value(args, "-tc", BathTempC);
             var p = Polymers.ByName("MS_POLYCARB").WithProcessTemps(ti, tc);
@@ -105,7 +107,8 @@ namespace MoldStress
                 "  bisphenol-A polycarbonate, {0:F1} mm sheet, {1:F0} C -> {2:F0} C bath",
                 ThicknessMm, ti, tc));
             say("  Wimberger-Friedl, PhD thesis, TU Eindhoven (1991), ch. 3.2");
-            say(string.Format(ci, "  grid: nz {0}", nz));
+            say(string.Format(ci, "  grid: nz {0}, thermal construction: {1}", nz,
+                Incremental ? "INCREMENTAL (front sweeps)" : "snapshot (single instant)"));
             say("");
 
             double[] dn = Profile(p, proc, nz);
@@ -236,13 +239,20 @@ namespace MoldStress
                     "    model:     {0:F3} -> {1:F3}, i.e. {2} and {3:F0}x too small a span.",
                     first, last, last > first ? "outward" : "INWARD (wrong direction)",
                     0.55 / Math.Max(Math.Abs(last - first), 1e-9)));
-                say("    THIS IS A REAL FAILURE the registered criterion cannot see.");
-                say("    ThermalProfile depends only on the freeze-off temperature");
-                say("    profile through force and moment balance, and that balance is");
-                say("    nearly scale-invariant - raising Ti scales the profile without");
-                say("    reshaping it, so the crossing barely moves. The source models a");
-                say("    viscous-elastic-elastic transition in which material above Tg");
-                say("    relaxes, which is what makes its crossing Ti-dependent.");
+                say("    THIS IS A REAL FAILURE the registered criterion cannot see,");
+                say("    and the incremental construction did NOT fix it - which is a");
+                say("    sharper result than the original miss.");
+                say("    The snapshot construction was nearly scale-invariant, so its");
+                say("    crossing could not move. The incremental one CAN move it - with");
+                say("    the post-vitrification cooling excluded it spans 0.375 -> 0.874,");
+                say("    matching the published 0.3 -> 0.85 almost exactly. Including that");
+                say("    cooling, which the values demand, flattens it again, because");
+                say("    every layer then cools from about Tg to the bath REGARDLESS OF Ti.");
+                say("    So the elastic stress is dominated by a Ti-independent term, and");
+                say("    the Ti-dependence must live in the mechanism the source names and");
+                say("    this channel lacks: frozen-in ORIENTATION from stresses ABOVE Tg,");
+                say("    where time-above-Tg is exactly what Ti controls. That is a second");
+                say("    thermal channel, not a correction to this one.");
             }
 
             bool met = reverses && direction && crossOk && ratioOk && magOk && nullOk && controlOk;
@@ -259,12 +269,19 @@ namespace MoldStress
         /// coefficient. No fill field is constructed, because ThermalProfile
         /// does not read one.
         /// </summary>
+        /// <summary>Which thermal construction the case is exercising.</summary>
+        private static bool Incremental;
+
         private static double[] Profile(Polymer p, Process proc, int nz)
         {
             var freeze = FreezeHistory.Build(ThicknessMm, p, proc, nz, 10 * nz);
             double eOver1MinusNu = p.ModulusMPa / (1.0 - p.PoissonRatio);
-            double[] sigma = Channels.ThermalProfile(
-                freeze.TrefC, freeze.Z, eOver1MinusNu * p.CtePerK);
+            double[] sigma = Incremental
+                ? Channels.ThermalProfileIncremental(
+                      freeze.Z, freeze.TimeGridS, freeze.TempHistoryC,
+                      p.TgC, p.CtePerK, eOver1MinusNu, p.MoldTempC)
+                : Channels.ThermalProfile(
+                      freeze.TrefC, freeze.Z, eOver1MinusNu * p.CtePerK);
 
             var dn = new double[nz];
             for (int k = 0; k < nz; k++) dn[k] = p.KGlassBrewster * 1e-6 * sigma[k];

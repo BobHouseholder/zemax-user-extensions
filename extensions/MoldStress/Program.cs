@@ -190,7 +190,7 @@ namespace MoldStress
         /// <summary>Flags that stand alone.</summary>
         private static readonly string[] BoolFlags = {
             "-complementary", "-deposition-decay", "-deposition-support",
-            "-depthdiag", "-directindex", "-eulerian-depth",
+            "-depthdiag", "-directindex", "-eulerian-depth", "-snapshot",
             "-gates", "-h", "-help", "-quiet",
             "-lagrangian", "-lagrangian-depth", "-refquench",
             "-refcase", "-refcase2", "-relax-below-tg", "-ribbon",

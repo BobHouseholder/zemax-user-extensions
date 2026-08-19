@@ -412,20 +412,52 @@ reach it.
 | null | CTE=0 collapses the profile to exactly 0 | must collapse | PASS |
 | control on the null | CTE restored gives 9.8e-4 | must not be dead | PASS |
 
-**All seven clauses passed on the first run, and the case immediately found a
-failure they cannot see.** The source reports the zero crossing moving OUTWARD as
+**The thermal channel now accumulates stress INCREMENTALLY** - each layer becomes
+elastic when it vitrifies, and every later cooling increment re-equilibrates over
+the layers solid at that moment, so the total is force- and moment-balanced
+without imposing it. The previous construction evaluated the temperature profile
+at one instant (when the centre hits Tg) and removed its mean and linear parts.
+`-snapshot` still runs the old one.
+
+| | snapshot | incremental | published |
+|---|---|---|---|
+| core | 5.4e-4 | 5.4e-4 | +5..+9e-4 |
+| surface | -9.5e-4 | **-1.42e-3** | -1.5..-2.0e-3 |
+| ratio | 1.76 (bottom edge) | **2.64** (centre) | 1.7-4.0 |
+| crossing | 0.572 | 0.649 | 0.5-0.8 |
+
+**A defect found on the way, and it was in a shared component.** FreezeHistory's
+cooling loop runs `while (snapshot == null)` and stops the moment the centre
+crosses Tg - all the flow channel ever needed. But the centre vitrifies ~85 C
+above the bath with the skin already cold, and that differential contraction is
+what puts the core in tension. Integrating only the recorded window left the core
+at 7.6e-7 against a published 7e-4 and the ratio at 627. Completing it needs no
+change to the shared solve: once every layer is solid the solid set stops
+changing and the accumulated stress depends only on the TOTAL remaining dT, not
+the path, so the rest of the cooling is exactly one increment.
+
+**The Ti trend is still NOT reproduced, and failing to fix it is the sharper
+result.** The source reports the zero crossing moving OUTWARD as
 the initial temperature rises, z/d ~0.3 to ~0.85, naming Ti the dominant control.
 The model moves it INWARD, 0.589 -> 0.565 across Ti 150-180 C - wrong direction
 and a span 23x too small. Printed as an unscored TREND DIAGNOSTIC rather than
 folded into the verdict, because registering a clause after seeing its result is
 moving the bar.
 
-The cause is structural: `ThermalProfile` depends only on the freeze-off
-temperature profile through force and moment balance, and that balance is nearly
-scale-invariant - raising Ti scales the profile without reshaping it. The source
-models a viscous-elastic-elastic transition where material above Tg relaxes,
-which is what makes its crossing Ti-dependent. **This is the thermal channel's
-first identified structural limitation, and it took one case to find it.**
+The snapshot construction could not move the crossing at all. The incremental one
+CAN: with post-vitrification cooling excluded it spans **0.375 -> 0.874**, against
+a published 0.3 -> 0.85 - almost exactly right. But including that cooling, which
+the values above demand, flattens it to 0.645 -> 0.656, because every layer then
+cools from about Tg to the bath REGARDLESS of Ti.
+
+So the elastic stress is dominated by a Ti-independent term, and the
+Ti-dependence must live in the mechanism the source names and this channel lacks:
+**frozen-in ORIENTATION from stresses above Tg**, where time-above-Tg is exactly
+what Ti controls. That is a second thermal channel, not a correction to this one -
+and it is the same orientational mechanism the source says dominates the quench
+birefringence in the first place. **The channel now gets the structure and the
+magnitudes right and is missing the orientational half, which is what was
+predicted in writing before the case was ever run.**
 
 Converged in shape, drifting at the surface node: crossing 0.581 / 0.575 / 0.572
 / 0.571 and ratio 1.50 / 1.67 / 1.76 / 1.81 at nz 41 / 81 / 161 / 321. Default is
