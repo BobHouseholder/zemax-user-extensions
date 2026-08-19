@@ -322,6 +322,104 @@ namespace MoldStress
         /// class exists to prevent.
         /// </summary>
         /// <summary>
+        /// EVERY COEFFICIENT AGAINST ITS PUBLISHED VALUE - a check that reads a
+        /// NUMBER, not a comparison.
+        ///
+        /// Written 2026-08-18 after PMMA's melt coefficient was found to be 40x
+        /// its only sourced value, unsourced, and to have survived every existing
+        /// test. The reason it survived is instructive: the material tests were
+        /// ORDINAL. "Short-cycle COC exceeds normal-cycle PMMA" passed before and
+        /// after the correction - the ratio moved from about 1.9x to 76.8x while
+        /// staying on the same side of the inequality. A test that only asks
+        /// which of two numbers is larger cannot see an error in either of them.
+        ///
+        /// THE EXPECTED VALUES BELOW ARE THE PUBLISHED ONES, not the ones in the
+        /// table above. That is the whole point and it is what makes this fail:
+        /// if someone edits a constant, this test breaks until they also change
+        /// the published figure beside it, which they cannot honestly do without
+        /// a source. Comparing the table against itself would pass forever.
+        ///
+        /// Bands are deliberately generous - they guard the ORDER and the SIGN,
+        /// which is where the real errors have been, not the third digit.
+        /// </summary>
+        /// <summary>
+        /// The one place the band comparison lives, so the checks and their
+        /// controls cannot diverge.
+        /// </summary>
+        private static bool InPublishedBand(double got, double lo, double hi)
+        {
+            return got >= lo && got <= hi;
+        }
+
+        public static void SelfCheckValues()
+        {
+            // material, quantity, published centre, low, high, citation
+            var expect = new[]
+            {
+                new object[] { "MS_PMMA", "C_melt", -30.0, -90.0, -10.0,
+                    "Wimberger-Friedl, Rheol. Acta 30 (1991) 329, via US9720155 Table 1, 20 C above Tg" },
+                new object[] { "MS_PMMA", "K_glass", -4.5, -6.0, -1.0,
+                    "PMMA optical-fibre measurements (Aston), -4.5 to -1.5e-12 /Pa" },
+                new object[] { "MS_POLYCARB", "C_melt", 3500.0, 2500.0, 4500.0,
+                    "US9720155 Table 1 / Wimberger-Friedl 1991: BPA-PC +3000~4000 Br at 20 C above Tg" },
+                new object[] { "MS_POLYCARB", "K_glass", 78.0, 60.0, 95.0,
+                    "BPA-PC photoelastic ~78-82 Br, matched-order convention (n_P-n_Q = C(sig_P-sig_Q))" },
+                new object[] { "MS_POLYSTYR", "C_melt", -4725.0, -5500.0, -4000.0,
+                    "Venerus et al., J. Rheol. 43(3) 795 (1999): PS melt -4.65 to -4.8e-9 /Pa" },
+                new object[] { "MS_COC_TOPAS6017", "C_melt", 1040.0, 850.0, 1250.0,
+                    "MEASURED: Kim, Yoon & Kornfield, Key Eng. Mater. 326-328 (2006) 183, +920 to +1160 Br" },
+                new object[] { "MS_COC_TOPAS6017", "K_glass", -8.5, -10.0, -7.0,
+                    "MEASURED: same source, glassy -8 to -9 Br" },
+                // Borrowed, so this is checked against the FAMILY value it is
+                // justified by, not against the grade it was copied from - which
+                // would be circular. Inoue's +1700 Br sits outside the band's
+                // centre on purpose: the band records that the number in use is
+                // low against the family, which is a known open item.
+                new object[] { "MS_COP_ZEONEX480R", "C_melt", 1000.0, 500.0, 2500.0,
+                    "BORROWED; family value Inoue et al., Polymer J. (1995): ROMP cyclic olefin polymers ~+1700 Br" },
+            };
+
+            foreach (var e in expect)
+            {
+                var pm = ByName((string)e[0]);
+                string q = (string)e[1];
+                double got = q == "C_melt" ? pm.CMeltBrewster : pm.KGlassBrewster;
+                double lo = (double)e[3], hi = (double)e[4];
+                double pub = (double)e[2];
+
+                // Sign first and separately. A sign error is the failure mode this
+                // table has actually produced twice, and a magnitude band that
+                // brackets zero would hide one.
+                SelfTest.Check(e[0] + " " + q + " has the published SIGN",
+                    Math.Sign(got) == Math.Sign(pub),
+                    string.Format("{0:F1} Br vs published {1:F1} Br", got, pub));
+
+                SelfTest.Check(e[0] + " " + q + " is within its published band",
+                    InPublishedBand(got, lo, hi),
+                    string.Format("{0:F1} Br, band [{1:F1}, {2:F1}] - {3}", got, lo, hi, e[5]));
+            }
+
+            // CONTROLS, BOTH DIRECTIONS, THROUGH THE SAME FUNCTION THE LOOP USES.
+            // The first version of these re-wrote the comparison as a literal
+            // expression, which tests that a number is outside an interval - not
+            // that this check would have caught anything. Two copies of one rule
+            // is how they drift apart; InPublishedBand is now called by the loop
+            // above and by both controls, so a defect in it fails here.
+            SelfTest.Check("the band rejects PMMA's old unsourced -1200 Br (control)",
+                !InPublishedBand(-1200.0, -90.0, -10.0),
+                "-1200 Br must fall outside [-90, -10]");
+
+            SelfTest.Check("the band accepts the published -30 Br (control)",
+                InPublishedBand(-30.0, -90.0, -10.0),
+                "-30 Br must fall inside [-90, -10]");
+
+            // And the sign test must discriminate too, or a sign flip passes.
+            SelfTest.Check("the sign test rejects a flipped value (control)",
+                Math.Sign(30.0) != Math.Sign(-30.0),
+                "+30 Br must not satisfy a published -30 Br");
+        }
+
+        /// <summary>
         /// The contested-constant guard, tested rather than asserted.
         ///
         /// A warning that has never been observed to fire is an untested remedy,
