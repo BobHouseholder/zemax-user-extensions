@@ -255,8 +255,8 @@ namespace MoldStress
                 KGlassBrewster = -8.5, K11Brewster = 2.43,
                 KSource = "BORROWED from TOPAS 6017 (Kim, Yoon & Kornfield 2006). A photoelastic coefficient of 5.0e-12 /Pa is quoted for 'Zeonor 480R' in a USPTO document that could NOT be retrieved to verify - not used, recorded as a lead only. NOTE this GLASSY constant is what Zeon's low-birefringence marketing refers to ('ultra-low photoelastic constant'), and it drives the THERMAL channel, not the melt orientation that sets the in-plane peak",
                 Provisional = true,
-                CMeltBrewster = 1000.0,
-                CMeltSource = "REBASED 2026-08-18. The number is unchanged at +1000 Br but its JUSTIFICATION no longer routes through TOPAS: it now rests on Inoue et al., Polymer Journal (1995), which measured C_R ~1700 Br, positive, for amorphous polyolefins with a five-membered ring in the MAIN CHAIN - i.e. ROMP-made cyclic olefin POLYMERS, which is exactly what ZEONEX is. That is the same family as this grade, where the old justification borrowed across families from a COC",
+                CMeltBrewster = 1700.0,
+                CMeltSource = "REBASED 2026-08-18, then CORRECTED the same day from +1000 to +1700 Br. The rebase moved the JUSTIFICATION off TOPAS and onto Inoue but LEFT TOPAS'S NUMBER IN PLACE - so the entry cited one source and carried another's value, which is the cross-family borrowing the rebase existed to remove. The value is now Inoue's: it now rests on Inoue et al., Polymer Journal (1995), which measured C_R ~1700 Br, positive, for amorphous polyolefins with a five-membered ring in the MAIN CHAIN - i.e. ROMP-made cyclic olefin POLYMERS, which is exactly what ZEONEX is. That is the same family as this grade, where the old justification borrowed across families from a COC",
                 CMeltContested = "NARROWED 2026-08-18. The earlier worry was that a reported "
                     + "-700 Br for TOPAS 5013 would refute Inoue's structure-insensitivity and "
                     + "destroy this borrowing. Reading US Patent 9720155 Table 1 confirms the -700 "
@@ -375,8 +375,8 @@ namespace MoldStress
                 // would be circular. Inoue's +1700 Br sits outside the band's
                 // centre on purpose: the band records that the number in use is
                 // low against the family, which is a known open item.
-                new object[] { "MS_COP_ZEONEX480R", "C_melt", 1000.0, 500.0, 2500.0,
-                    "BORROWED; family value Inoue et al., Polymer J. (1995): ROMP cyclic olefin polymers ~+1700 Br" },
+                new object[] { "MS_COP_ZEONEX480R", "C_melt", 1700.0, 900.0, 2500.0,
+                    "Inoue et al., Polymer J. (1995): ROMP cyclic olefin polymers ~+1700 Br - the family this grade belongs to. Still not measured for 480R itself" },
             };
 
             foreach (var e in expect)

@@ -182,7 +182,7 @@ namespace MoldStress
         /// <summary>Flags that consume the following token as their value.</summary>
         private static readonly string[] ValueFlags = {
             "-file", "-filltime", "-fountain", "-frontmode", "-gateconfig",
-            "-materials", "-melttemp", "-moldtemp", "-nz", "-shape-nodes", "-shape-particles", "-shape-steps", "-ti", "-tc", "-nzexport",
+            "-materials", "-melttemp", "-moldtemp", "-gatewidth", "-nz", "-shape-nodes", "-shape-particles", "-shape-steps", "-ti", "-tc", "-nzexport",
             "-curvature", "-lambdascale", "-out", "-outdir", "-packpressure", "-packtime",
             "-particles",
         };

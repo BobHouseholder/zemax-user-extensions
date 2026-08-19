@@ -274,7 +274,10 @@ namespace MoldStress
             lens.Gate = new GateSpec
             {
                 Kind = GateKind.EdgeRadial, AzimuthDeg = 0,
-                WidthMm = 2.0 * Math.PI * lens.SemiDiameterMm / 8.0,
+                // Exposed 2026-08-18 so the ONE remaining unsourced input can be
+                // swept. Default unchanged (one eighth of the circumference).
+                WidthMm = Program.Value(args, "-gatewidth",
+                                        2.0 * Math.PI * lens.SemiDiameterMm / 8.0),
                 ThicknessMm = 0.8, IsDefault = false,
             };
             lens.PartingLineZMm = Gating.DefaultPartingLineZ(lens);
