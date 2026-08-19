@@ -115,32 +115,40 @@ namespace MoldStress
     /// ratio is withdrawn and must not be requoted.
     ///
     /// ============================================================
-    /// THE REGISTERED REFERENCE IS IN DOUBT, 2026-08-18 - READ BEFORE TRUSTING
-    /// THIS CLAUSE IN EITHER DIRECTION.
+    /// THE REGISTERED REFERENCE WAS WRONG BY A FACTOR OF 100. SETTLED
+    /// 2026-08-18 BY READING FIG. 7 DIRECTLY.
     ///
-    /// The companion paper on THIS lens - Lai & Wang, Applied Optics 47(12)
-    /// 2017-2027 (2008), obtained and read in full - measures the SAME part and
-    /// reports a birefringence about FIFTY TIMES the 3.7e-5 registered here.
-    /// Two independent routes in that paper agree:
+    /// Fig. 7's y-axis is labelled "Birefringence (x 10^-5)" and its peak reads
+    /// 3.7, which is where the registered 3.7e-5 came from. THE LABEL IS A TYPO
+    /// FOR x10^-3, and the paper refutes it with its own arithmetic:
     ///
-    ///   (i)  Fig. 6 gives a fringe order of 6.5, unchanged by annealing. Over
-    ///        the 2 mm thickness that is dn = 1.9e-3 at 589 nm, 2.1e-3 at 633 nm.
-    ///   (ii) Fig. 14's right-hand axis is "Removal Birefringence (x10^-3)",
-    ///        full scale 2.21e-3 aligned with 50% on the left-hand axis - so
-    ///        removing 0.4 mm removes about 2.0e-3, and the total is of that
-    ///        order.
+    ///   Eq. (9) of that paper is dn = lambda*N/h.
+    ///   Its text states the maximum fringe count observed under the circular
+    ///   polariscope is N = 5 (4 from simulation).
+    ///   The gate thickness is h = 0.80 mm - confirmed independently by the
+    ///   layer-removal experiment, where 0.4 mm is described as "half of total
+    ///   thickness at the gate area".
+    ///   So dn = 589.3e-9 * 5 / 0.8e-3 = 3.68e-3.
     ///
-    /// AGAINST THAT NUMBER THIS MODEL IS ABOUT 4x LOW, NOT 12.87x HIGH. The
-    /// registered 3.7e-5 was read off Fig. 7 of the OTHER paper (Chang et al.),
-    /// and the two cannot both describe the same quantity on the same lens.
+    /// Fig. 7's peak reads 3.7. Against 3.68e-3 that agrees to two significant
+    /// figures; against 3.7e-5 it is out by 100x. A label can be mistyped; the
+    /// paper's own equation, its own stated fringe count and its own gate
+    /// thickness cannot all three be wrong in the same direction.
     ///
-    /// NOTHING IS CHANGED HERE ON THAT BASIS. Rewriting a registered reference
-    /// because a newer source disagrees is the move this project refuses, and the
-    /// discrepancy is not yet explained - Fig. 7 may plot a different plane, a
-    /// different station, an annealed sample, or a normalised quantity. What is
-    /// recorded is that the clause's DIRECTION is now unsafe to quote: "12.87x
-    /// too high" rests on a reference that a companion paper contradicts by 51x.
-    /// Resolving it needs Fig. 7's caption and axis read directly.
+    /// TWO INDEPENDENT CROSS-CHECKS, both from the companion paper (Lai & Wang,
+    /// Appl. Opt. 47(12) 2017): a fringe order of 6.5 over the 2 mm centre is
+    /// 1.9e-3, and Fig. 14's removal axis runs to 2.21e-3 at 50% removal. Same
+    /// order of magnitude. Nothing anywhere in either paper supports 1e-5.
+    ///
+    /// THE CORRECTION DOES NOT RESCUE THIS CLAUSE, WHICH IS WHY IT CAN BE
+    /// TRUSTED. It inverts the failure rather than removing it: the model reads
+    /// 4.434e-4 against a corrected 3.68e-3, so it is about 8x LOW where it had
+    /// been recorded as 12x HIGH. The bar is a factor of 2 either way and is not
+    /// touched. Every conclusion drawn from the old direction is withdrawn -
+    /// including "the model over-predicts", the suspicion of the melt-fracture
+    /// shear stress as a cause of over-prediction, and the reading that 480R's
+    /// borrowed melt coefficient being LARGER than 1000 Br would make things
+    /// worse. It would now make them better.
     /// ============================================================
     ///
     /// So the in-plane peak clause is NOT presently a test of the birefringence
@@ -157,7 +165,9 @@ namespace MoldStress
     /// is caught by its magnitude clause.
     internal static class RefCase2
     {
-        public const double PublishedInPlanePeakDn = 3.7e-5;
+        // CORRECTED 2026-08-18, from 3.7e-5, after reading Fig. 7 directly. The
+        // FIGURE'S AXIS LABEL IS WRONG BY A FACTOR OF 100 - see the header.
+        public const double PublishedInPlanePeakDn = 3.68e-3;
         public const double FactorBar = 2.0;
 
         // Cumulative fraction of the through-thickness retardance held in the
@@ -414,7 +424,8 @@ namespace MoldStress
             Console.WriteLine("  measured along the filling path (paper Fig. 7, error < 10%)");
             Console.WriteLine("    distance   measured     model");
             double[] mmPts = { 0, 3, 6, 12, 24 };
-            double[] measPts = { 3.7e-5, 2.5e-5, 1.0e-5, 0.2e-5, 0.4e-5 };
+            // Same x100 correction as the peak - these are the same curve.
+            double[] measPts = { 3.7e-3, 2.5e-3, 1.0e-3, 0.2e-3, 0.4e-3 };
             for (int j = 0; j < mmPts.Length; j++)
             {
                 int idx = (int)Math.Round(mmPts[j] / Math.Max(ch.S[ns - 1], 1e-9) * (ns - 1));

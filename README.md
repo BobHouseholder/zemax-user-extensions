@@ -428,15 +428,32 @@ quantity removed IS the quantity measured.
 
 | Clause | Result | Bar | |
 |---|---|---|---|
-| in-plane peak | 4.763e-4 against a published 3.7e-5 - **12.87x** | within 2x | **FAIL** |
+| in-plane peak | 4.434e-4 against a published **3.68e-3** - **0.12x** | within 2x | **FAIL (LOW)** |
 | in-plane shape | maximum at the gate, 14% of it at the far edge | must decay | PASS |
 | layer removal | 32.4 / 44.7 / 48.9 / 50.0% against 27.9 / 30.8 / 43.9 / 46.2% | 3 of 4 within 10 pts | PASS |
 
-**The in-plane clause is not currently a test of the birefringence model.** Its
-wall shear stress is 1.67 MPa against industry maxima of 0.25-0.50 MPa for
-amorphous grades (case 1's 0.297 is inside), and the two inputs that set it - the
-cavity's share of the shot and a 12.6 mm flow width - are unsourced choices.
-Searched for and not found; see the sources file.
+**The registered reference was wrong by a factor of 100, and correcting it
+INVERTS this failure.** Chang et al. Fig. 7's y-axis is labelled x10^-5 and its
+peak reads 3.7 - the source of the old 3.7e-5. That label is a typo. The same
+paper gives dn = lambda*N/h, states a maximum observed fringe count of N = 5, and
+has a 0.80 mm gate, so 589.3e-9 x 5 / 0.8e-3 = **3.68e-3** - matching the plotted
+3.7 to two significant figures. Two cross-checks from the companion paper agree
+in order: 6.5 fringes over the 2 mm centre is 1.9e-3, and its removal axis runs
+to 2.21e-3. Nothing in either paper supports 1e-5.
+
+The model reads 4.434e-4, so it is about **8x LOW** where it had been recorded as
+12x HIGH. **The correction does not rescue the clause - it still fails, in the
+other direction - which is why it can be trusted.** Withdrawn along with the old
+direction: "the model over-predicts"; the suspicion that a melt-fracture-level
+wall shear stress was CAUSING an over-prediction; and the reading that 480R's
+borrowed melt coefficient being larger than 1000 Br would make matters worse. It
+would now help.
+
+**The fill time is now sourced** at 0.50 s (Lai & Wang Fig. 5c), replacing a
+0.109 s derivation that assumed the whole screw output entered this one cavity.
+tau_wall falls 1.67 -> 1.05 MPa, within ~20% of that paper's own simulated
+0.75-0.89 MPa peak, so the melt-fracture concern largely dissolves on sourced
+numbers. The gate width remains a choice of mine.
 
 #### Case 3 - free quench, the THERMAL channel alone
 
