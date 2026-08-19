@@ -368,8 +368,13 @@ Candidate sources for further checks are in
 What changed is the depth history, not a constant - see below. `-eulerian-depth`
 restores the previous behaviour exactly, including both failures.
 
-Converged from **nz=41** since the freeze-history fix, and the depth ratio is
-flat at 3.43-3.46 across nz 41/81/161/321.
+Converged at **nz=41**, which is the default since 2026-08-18. Re-taken on the
+shipped configuration rather than carried over from the Eulerian sweep: depth
+ratio 3.43 / 3.46 / 3.45 / 3.43 and in-plane peak 1.16x / 1.16x / 1.16x / 1.17x
+at nz 41 / 81 / 161 / 321, so nz=41 lands on nz=321's depth ratio to three
+figures. nz=21 was measured and is NOT converged - ratio 3.34 with the peak
+pinned at the wall - so 41 is a floor with something below it rather than the
+smallest grid that passed. The case runs in 15 s where nz=321 took 6m29.
 
 ### Case 2 - ZEONEX 480R plano-convex lens
 

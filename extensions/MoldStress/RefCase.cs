@@ -162,7 +162,30 @@ namespace MoldStress
             // convergence. The convergence established earlier was measured on
             // the model as it stood before the fountain default, the viscosity
             // weighting and the measured constants, and does not carry over.
-            int nzGrid = (int)Program.Value(args, "-nz", 321.0);   // converged; see -nz sweep
+            //
+            // DEFAULT DROPPED 321 -> 41 on 2026-08-18, and the sweep behind it was
+            // RE-TAKEN rather than reused. The note this replaces did say
+            // "converged from nz=41", but it quoted depth 0.82 - the EULERIAN
+            // model, which is no longer the default. A convergence claim belongs
+            // to the model it was measured on, and carrying that one across would
+            // have justified the new default with the old model's evidence.
+            //
+            // Re-taken on the shipped configuration, nz 41 / 81 / 161 / 321 gives
+            // depth ratio 3.43 / 3.46 / 3.45 / 3.43, in-plane peak 1.16x / 1.16x /
+            // 1.16x / 1.17x, peak position 95% / 93% / 93% / 94%, and in-plane
+            // shape 47.3% / 46.7% / 46.5% / 46.3% at the far edge. nz=41 lands on
+            // the same depth ratio as nz=321 to three figures.
+            //
+            // It is worth 26x: the case runs in 15 s at nz=41 against 6m29 at
+            // nz=321, and the particle solve is a small part of that - nz drives
+            // the freeze solve and the Eulerian channel, which is where the rest
+            // of the time was going once the solve was made cheaper.
+            //
+            // nz=21 was measured too and is NOT converged - depth ratio 3.34, the
+            // peak pinned at 100% of the half-wall, and the depth null down to a
+            // 62% change. 41 is a floor with something below it, not the smallest
+            // grid that happened to pass.
+            int nzGrid = (int)Program.Value(args, "-nz", 41.0);   // converged; see -nz sweep
             if (nzGrid % 2 == 0) nzGrid++;
             int nFdGrid = 10 * nzGrid;
 
@@ -171,9 +194,11 @@ namespace MoldStress
             say("  TOPAS 6017S-04, 100 x 100 x 1.5 mm plate, film gate on one edge");
             say(string.Format(ci, "  grid: nz {0}, nFD {1}", nzGrid, nFdGrid));
             if (nzGrid < 321)
-                say("  NOTE: converged from nz=41 since the 2026-08-17 freeze-history " +
-                    "fix. Sweep: peak 1.16x / depth 0.82 at nz 41, 81 and 161, " +
-                    "1.17x / 0.82 at 321. Below 41 is untested.");
+                say("  NOTE: nz=41 is the converged default, re-taken 2026-08-18 on " +
+                    "the Lagrangian depth shape. Sweep - depth ratio 3.43 / 3.46 / " +
+                    "3.45 / 3.43 and peak 1.16x / 1.16x / 1.16x / 1.17x at nz 41 / " +
+                    "81 / 161 / 321. nz=21 is NOT converged (ratio 3.34, peak pinned " +
+                    "at the wall) so 41 is the floor, not a minimum.");
             // The old text here warned that neither number was converged below
             // nz=321 and quoted a drifting sweep. That drift was a BUG, not
             // physics: FreezeHistory sampled the cooling curve every 50 steps into
