@@ -93,6 +93,20 @@ namespace MoldStress
                     p.Name, p.KGlassBrewster, p.K11Brewster, p.K12Brewster,
                     p.Provisional ? "PROVISIONAL" : "measured"));
             }
+            // A CONTESTED constant is invisible in the table above, because a
+            // number with a source beside it looks settled whether or not anyone
+            // disagrees with it. Printed separately so it cannot be skimmed past.
+            var contested = Polymers.All.Where(x => !string.IsNullOrEmpty(x.CMeltContested)).ToList();
+            if (contested.Count > 0)
+            {
+                Console.WriteLine();
+                Console.WriteLine("  CONTESTED melt stress-optical coefficients ("
+                                  + contested.Count + "):");
+                foreach (var p2 in contested)
+                    Console.WriteLine("    " + p2.Name + " (" + p2.CMeltBrewster.ToString("F0")
+                                      + " Br): " + p2.CMeltContested);
+            }
+
             Console.WriteLine();
             Console.WriteLine("  Units are 1e-6 mm^2/N (== 1e-12 /Pa == Brewster), which is what");
             Console.WriteLine("  OpticStudio expects. K = K12 - K11 by construction.");

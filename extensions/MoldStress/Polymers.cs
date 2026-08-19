@@ -49,6 +49,19 @@ namespace MoldStress
         public double CMeltBrewster;
         public string CMeltSource;
 
+        /// <summary>
+        /// Set when a published value for this constant CONFLICTS with the one
+        /// carried here, in sign or by more than a factor of two. Null when the
+        /// constant is simply measured, and null when it is merely BORROWED -
+        /// borrowing is recorded in CMeltSource and is a different, milder thing.
+        ///
+        /// It exists because a contested constant is invisible at the point of
+        /// use: a number with a source string beside it looks settled whether or
+        /// not anyone disagrees with it, and the aliasing feature makes borrowing
+        /// one onto another grade a single command-line flag.
+        /// </summary>
+        public string CMeltContested;
+
         // --- thermal / rheological -----------------------------------------
         public double TgC;                  // glass transition, degC
         public double MeltTempC;            // typical melt temperature, degC
@@ -187,7 +200,17 @@ namespace MoldStress
                 KSource = "MEASURED: Kim, Yoon & Kornfield, Key Eng. Mater. 326-328 (2006) 183 - glassy -8 to -9 Br; midpoint taken. K11/K12 split assumed",
                 Provisional = false,
                 CMeltBrewster = 1000.0,
-                CMeltSource = "MEASURED: same source, melt +920 to +1160 Br; corroborated at +1.0e-9 /Pa for TOPAS 5013, Korea-Australia Rheol. J. (2012)",
+                CMeltSource = "MEASURED: same source, melt +920 to +1160 Br. A corroboration from TOPAS 5013 was claimed here and is now CONTESTED - see CMeltContested",
+                CMeltContested = "2026-08-18: this entry claimed corroboration at +1.0e-9 /Pa "
+                    + "(+1000 Br) for TOPAS 5013 from Korea-Australia Rheol. J. (2012). US Patent "
+                    + "9720155 Table 1 reports TOPAS 5013 at -700 Br, NEGATIVE, citing Min & Yoon "
+                    + "(2012) - plausibly the same work, opposite sign. A pairing-convention "
+                    + "artifact was checked FIRST and does not explain it: that same table lists PC "
+                    + "at +3000 to +4000 Br, which is the standard convention, so its negative 5013 "
+                    + "is negative under a convention that gets PC right. UNRESOLVED - neither "
+                    + "primary source was read. THE MEASURED 6017 VALUE ITSELF IS NOT IN DOUBT "
+                    + "(+920 to +1160 Br, Kim/Yoon/Kornfield 2006); what is in doubt is whether it "
+                    + "generalises to other cyclo-olefin grades.",
                 MeltModulusPa = 2.8e5,
                 TgC = 178, MeltTempC = 290, MoldTempC = 120,
                 DiffusivityMm2PerS = 0.10, CtePerK = 60e-6, ModulusMPa = 3000, PoissonRatio = 0.36,
@@ -211,7 +234,15 @@ namespace MoldStress
                 KSource = "BORROWED from TOPAS 6017 (Kim, Yoon & Kornfield 2006). A photoelastic coefficient of 5.0e-12 /Pa is quoted for 'Zeonor 480R' in a USPTO document that could NOT be retrieved to verify - not used, recorded as a lead only. NOTE this GLASSY constant is what Zeon's low-birefringence marketing refers to ('ultra-low photoelastic constant'), and it drives the THERMAL channel, not the melt orientation that sets the in-plane peak",
                 Provisional = true,
                 CMeltBrewster = 1000.0,
-                CMeltSource = "BORROWED from TOPAS 6017, AND THE BORROWING IS NOW JUSTIFIED rather than merely flagged. Inoue et al., Dynamic Birefringence of Amorphous Polyolefins II, Polymer Journal (1995): C_R for five amorphous polyolefins is ~1.7e-9 /Pa (1700 Br), all positive, all close together, and explicitly 'relatively insensitive to the details of molecular structure for this kind of polyolefins'. TOPAS's measured 1000 Br sits within a factor of 2 of that family value, so no plausible 480R melt coefficient is an eighth of it - see the refuted falsifier in VALIDATION-SOURCES.md",
+                CMeltSource = "BORROWED from TOPAS 6017, AND THE BORROWING IS NOW JUSTIFIED rather than merely flagged. Inoue et al., Dynamic Birefringence of Amorphous Polyolefins II, Polymer Journal (1995): C_R for five amorphous polyolefins is ~1.7e-9 /Pa (1700 Br), all positive, all close together, and explicitly 'relatively insensitive to the details of molecular structure for this kind of polyolefins'. TOPAS's measured 1000 Br sits within a factor of 2 of that family value, so no plausible 480R melt coefficient is an eighth of it - see the refuted falsifier in VALIDATION-SOURCES.md. THE JUSTIFICATION IS WEAKER AS OF 2026-08-18 - see CMeltContested",
+                CMeltContested = "2026-08-18: the borrowing rests on Inoue et al. (1995) - C_R "
+                    + "for amorphous polyolefins is ~1700 Br, all POSITIVE and structure-"
+                    + "insensitive. A reported -700 Br for TOPAS 5013 (US Patent 9720155 Table 1, "
+                    + "citing Min & Yoon 2012) would contradict that family claim directly, and if "
+                    + "it stands then 'structure-insensitive across polyolefins' is false and this "
+                    + "borrowing loses its basis. Unresolved. Case 2's in-plane peak over-predicts "
+                    + "by 12.87x, and a sign error would not explain that (the clause reads a "
+                    + "magnitude) - but a factor-of-2 grade difference is inside the borrowing.",
                 MeltModulusPa = 2.8e5,
                 DiffusivityMm2PerS = 0.10, CtePerK = 60e-6, ModulusMPa = 2100, PoissonRatio = 0.36,
                 DensityGPerCm3 = 1.01,
@@ -264,6 +295,45 @@ namespace MoldStress
         /// it is not, the two have been swapped, which is the error this whole
         /// class exists to prevent.
         /// </summary>
+        /// <summary>
+        /// The contested-constant guard, tested rather than asserted.
+        ///
+        /// A warning that has never been observed to fire is an untested remedy,
+        /// and this one fires on a code path (aliasing a real lens material) that
+        /// no reference case exercises. So the flag is checked directly, in BOTH
+        /// directions: the two cyclo-olefins must carry it, and a material whose
+        /// melt coefficient nobody disputes must NOT - otherwise the field could
+        /// be set on everything and the check would pass while meaning nothing.
+        /// </summary>
+        public static void SelfCheckContested()
+        {
+            foreach (var name in new[] { "MS_COC_TOPAS6017", "MS_COP_ZEONEX480R" })
+            {
+                var p = ByName(name);
+                SelfTest.Check("melt coefficient of " + name + " is marked contested",
+                    !string.IsNullOrEmpty(p.CMeltContested),
+                    p.CMeltBrewster.ToString("F0") + " Br");
+                SelfTest.Check("the contest on " + name + " names the conflicting value",
+                    p.CMeltContested != null && p.CMeltContested.Contains("-700"),
+                    "must name the -700 Br report so it can be checked");
+            }
+
+            // CONTROL: the field must discriminate. PC's melt coefficient is
+            // corroborated (+3 to +4e-9 /Pa, Wimberger-Friedl 1991) and nothing
+            // found disputes it, so it must come back clean. If this ever fails,
+            // the flag has been applied indiscriminately and means nothing.
+            // NAMED EXPLICITLY, via ByName so a rename THROWS rather than
+            // skipping. The first version searched for a name containing "PC";
+            // the entry is called MS_POLYCARB, so it matched nothing, the control
+            // silently did not run, and the suite still reported all-pass - a
+            // control that iterates zero times, which is the exact failure this
+            // control was written to catch, committed inside the control itself.
+            var pc = ByName("MS_POLYCARB");
+            SelfTest.Check("an uncontested material is NOT flagged (control)",
+                string.IsNullOrEmpty(pc.CMeltContested),
+                pc.Name + " at " + pc.CMeltBrewster.ToString("F0") + " Br");
+        }
+
         public static List<string> Validate()
         {
             var errs = new List<string>();

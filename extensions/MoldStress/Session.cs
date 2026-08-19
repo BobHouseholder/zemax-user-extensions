@@ -84,6 +84,32 @@ namespace MoldStress
                         string target = m.Substring(eq + 1).Trim();
                         Polymers.Aliases[real] = target;
                         known.Add(real);
+
+                        // ALIASING IS BORROWING, AND A CONTESTED CONSTANT MUST
+                        // NOT BE BORROWED SILENTLY. The alias map is a single
+                        // command-line flag that gives one grade another grade's
+                        // measured constants; that is the intended feature, and
+                        // it is exactly how a disputed number reaches a material
+                        // nobody checked it against.
+                        try
+                        {
+                            var tp = Polymers.ByName(target);
+                            if (!string.IsNullOrEmpty(tp.CMeltContested))
+                                Console.WriteLine(
+                                    "  WARNING: '" + real + "' borrows the melt stress-optical "
+                                    + "coefficient of " + tp.Name + ", which is CONTESTED. "
+                                    + tp.CMeltContested);
+                            else if (tp.Provisional)
+                                Console.WriteLine(
+                                    "  NOTE: '" + real + "' borrows PROVISIONAL constants from "
+                                    + tp.Name + " - representative of the family, not measured "
+                                    + "for this grade.");
+                        }
+                        catch (ArgumentException)
+                        {
+                            // Unknown target is reported later by ByName at the
+                            // point of use, with the full list of known names.
+                        }
                     }
                     else known.Add(m.Trim());
                 }
