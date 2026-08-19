@@ -483,7 +483,22 @@ namespace MoldStress
                         if (Math.Abs(freeze.Z[k]) / halfWc >= zStarC) dnShear = 0.0;
                     }
 
-                    c.DnFlow[i, k] = dnShear + dnFountain;
+                    // The second flow channel. Added to the same DnFlow because
+                    // it IS flow orientation - a different stress field, not a
+                    // different kind of birefringence.
+                    double dnPack = 0.0;
+                    if (proc.PackingOrientation)
+                    {
+                        double sigPack = PackingOrientationMPa(
+                            zLocal, hLoc * 0.5, tArrive + freeze.FreezeTimeS[k] * tScale,
+                            tArrive + tFill, proc.PackTimeS, fill.DpDs[i],
+                            proc.PackPressureMPa, fill.PathLengthMm,
+                            proc.PackFlowFraction, lambda,
+                            freeze.FreezeTimeS, freeze.Z);
+                        dnPack = 2.0 * p.CMeltBrewster * 1e-6 * sigPack;
+                    }
+
+                    c.DnFlow[i, k] = dnShear + dnFountain + dnPack;
 
                     c.SigmaThermalMPa[i, k] = sigma[k];
 
@@ -1122,6 +1137,84 @@ namespace MoldStress
                     for (int k = 0; k < n; k++)
                         sigma[k] += eOver1MinusNu * ((a + b * z[k]) - fRest[k]);
                 }
+            }
+            return sigma;
+        }
+
+        /// <summary>
+        /// PACKING ORIENTATION - the second flow channel, active where the first
+        /// one cannot reach.
+        ///
+        /// WHY IT EXISTS. The fill channel freezes orientation as
+        /// 2*C*tau_fill(z)*memory(z), and tau_fill is proportional to z: largest
+        /// at the wall, ZERO at the mid-plane. The retained fraction runs the
+        /// other way, so the product peaks in between and its thickness average
+        /// is bounded by 2*C*&lt;tau_fill&gt;. On reference case 2 that bound is
+        /// 0.49 of the measured value - unreachable by any parameter, which six
+        /// swept candidates each confirmed by buying about 15%.
+        ///
+        /// THE MECHANISM, from Chang et al. rather than invented here: during
+        /// holding, the frozen layer grows inward and the molten channel closes.
+        /// Melt is still being packed through that shrinking channel, so the
+        /// shear rate inside it RISES - and the material still molten is the
+        /// material at the CENTRE of the gap. The last fluid to freeze is
+        /// therefore sheared hardest, which is why the source measures a SECOND
+        /// birefringence peak near mid-thickness.
+        ///
+        /// HOW IT IS COMPUTED. At time t the melt occupies |z| &lt; delta(t),
+        /// where delta is the freeze front taken from the freeze history rather
+        /// than modelled again. Poiseuille flow through that channel gives
+        ///
+        ///     dp/ds_pack(t) = dp/ds_fill * f * (h_half / delta(t))^3
+        ///
+        /// with f the packing flow fraction - packing compensates shrinkage and
+        /// moves far less material than filling. The cube is the whole point: as
+        /// delta falls the gradient diverges, so late packing puts large stress
+        /// into a thin central core.
+        ///
+        /// TWO THINGS BOUND IT, because a diverging term needs bounding:
+        ///   - the gradient cannot exceed what the packing PRESSURE can drive
+        ///     over the flow length, P_pack / L;
+        ///   - a layer accumulates only while it is molten, and stops at its own
+        ///     freeze time, exactly as the fill channel does.
+        /// Orientation follows the same single-mode Maxwell relaxation in reduced
+        /// time as the fill channel, so the two are not different physics - they
+        /// are the same physics driven by a different stress field.
+        /// </summary>
+        public static double PackingOrientationMPa(
+            double zMm, double halfGapMm, double freezeTimeS, double tFillS,
+            double packTimeS, double dpdsFillMPaPerMm, double packPressureMPa,
+            double pathLengthMm, double packFlowFraction, double lambdaS,
+            double[] freezeTimesS, double[] zGridMm)
+        {
+            double zAbs = Math.Abs(zMm);
+            if (zAbs >= halfGapMm || freezeTimeS <= tFillS) return 0.0;
+
+            // The packing window: from end of fill to this layer's own freeze.
+            double tEnd = Math.Min(freezeTimeS, tFillS + Math.Max(packTimeS, 0.0));
+            if (tEnd <= tFillS) return 0.0;
+
+            double gradCap = pathLengthMm > 1e-9 ? packPressureMPa / pathLengthMm : double.MaxValue;
+            const int nStep = 200;
+            double dt = (tEnd - tFillS) / nStep;
+            double sigma = 0.0;
+
+            for (int j = 0; j < nStep; j++)
+            {
+                double t = tFillS + (j + 0.5) * dt;
+
+                // Freeze front: the melt still occupies |z| < delta(t).
+                double delta = 0.0;
+                for (int k = 0; k < zGridMm.Length; k++)
+                    if (freezeTimesS[k] > t) delta = Math.Max(delta, Math.Abs(zGridMm[k]));
+                if (delta <= zAbs) break;          // this layer has frozen
+
+                double closure = halfGapMm / Math.Max(delta, 1e-6);
+                double dpds = dpdsFillMPaPerMm * packFlowFraction * closure * closure * closure;
+                if (dpds > gradCap) dpds = gradCap;
+
+                double tau = dpds * zAbs;
+                sigma += (tau - sigma) * (1.0 - Math.Exp(-dt / Math.Max(lambdaS, 1e-9)));
             }
             return sigma;
         }

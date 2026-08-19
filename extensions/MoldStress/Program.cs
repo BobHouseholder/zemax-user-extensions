@@ -182,15 +182,51 @@ namespace MoldStress
         /// <summary>Flags that consume the following token as their value.</summary>
         private static readonly string[] ValueFlags = {
             "-file", "-filltime", "-fountain", "-frontmode", "-gateconfig",
-            "-materials", "-melttemp", "-moldtemp", "-gatewidth", "-nz", "-shape-nodes", "-shape-particles", "-shape-steps", "-ti", "-tc", "-nzexport",
+            "-materials", "-melttemp", "-moldtemp", "-gatewidth", "-packfrac", "-nz", "-shape-nodes", "-shape-particles", "-shape-steps", "-ti", "-tc", "-nzexport",
             "-curvature", "-lambdascale", "-out", "-outdir", "-packpressure", "-packtime",
             "-particles",
         };
 
         /// <summary>Flags that stand alone.</summary>
+        /// <summary>
+        /// Refuse a flag this MODE does not read, even when the flag is valid
+        /// somewhere else in the tool.
+        ///
+        /// `RejectUnknownArgs` asks whether a flag EXISTS. That is not the same
+        /// question, and the difference has now bitten three times in one day:
+        /// -fountain and friends were accepted by -refcase2 and ignored by it
+        /// until they were wired; -shape-nodes returned identical numbers because
+        /// the clause samples the one station where interpolation cannot act; and
+        /// -packtime was swept across 3 to 40 seconds on -refcase2, produced
+        /// identical output at every value, and was never read at all - which
+        /// made the sweep vacuous and nearly produced a wrong conclusion about a
+        /// mechanism.
+        ///
+        /// A silently ignored flag is worse than an unknown one. An unknown flag
+        /// stops the run; an ignored flag returns a confident number for a
+        /// configuration nobody ran.
+        /// </summary>
+        public static int RejectFlagsNotReadBy(string[] args, string[] readsHere, string mode)
+        {
+            var known = new HashSet<string>(readsHere, StringComparer.OrdinalIgnoreCase);
+            foreach (var a in args)
+            {
+                if (a == null || !a.StartsWith("-")) continue;
+                if (string.Equals(a, mode, StringComparison.OrdinalIgnoreCase)) continue;
+                if (known.Contains(a)) continue;
+                if (string.Equals(a, "-quiet", StringComparison.OrdinalIgnoreCase)) continue;
+                Console.Error.WriteLine(
+                    "MoldStress: '" + a + "' is a valid flag but " + mode + " does not read it. "
+                    + "It would have been ignored silently, so the run is refused instead.");
+                Console.Error.WriteLine("  " + mode + " reads: " + string.Join(" ", readsHere));
+                return UsageError;
+            }
+            return 0;
+        }
+
         private static readonly string[] BoolFlags = {
             "-complementary", "-deposition-decay", "-deposition-support",
-            "-depthdiag", "-directindex", "-eulerian-depth", "-incremental-thermal", "-narrowing", "-snapshot",
+            "-depthdiag", "-directindex", "-eulerian-depth", "-incremental-thermal", "-narrowing", "-packing-orientation", "-snapshot",
             "-gates", "-h", "-help", "-quiet",
             "-lagrangian", "-lagrangian-depth", "-refquench",
             "-refcase", "-refcase2", "-relax-below-tg", "-ribbon",

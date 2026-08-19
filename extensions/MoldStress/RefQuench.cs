@@ -86,6 +86,13 @@ namespace MoldStress
             var ci = CultureInfo.InvariantCulture;
             Action<string> say = Console.WriteLine;
 
+            // Refuse a flag this mode does not read. The helper existed for one
+            // build without being CALLED anywhere - a guard that cannot fire,
+            // which is the same defect it was written to prevent.
+            int badForMode = Program.RejectFlagsNotReadBy(
+                args, new[] { "-nz", "-ti", "-tc", "-snapshot" }, "-refquench");
+            if (badForMode != 0) return badForMode;
+
             int nz = (int)Program.Value(args, "-nz", 161.0);
             if (nz % 2 == 0) nz++;
 

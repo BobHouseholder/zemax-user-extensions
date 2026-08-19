@@ -134,6 +134,17 @@ namespace MoldStress
             // - the region where this model gives almost nothing. Swept, not
             // assumed.
             if (Program.Has(args, "-narrowing")) proc.ChannelNarrowing = true;
+            if (Program.Has(args, "-packing-orientation")) proc.PackingOrientation = true;
+            // Packing time and pressure gate the packing channel entirely, so
+            // they must be sweepable: a mechanism that only acts while material
+            // is still molten is decided by how long the packing window overlaps
+            // the freezing.
+            if (Program.Has(args, "-packtime"))
+                proc.PackTimeS = Program.Value(args, "-packtime", proc.PackTimeS);
+            if (Program.Has(args, "-packpressure"))
+                proc.PackPressureMPa = Program.Value(args, "-packpressure", proc.PackPressureMPa);
+            if (Program.Has(args, "-packfrac"))
+                proc.PackFlowFraction = Program.Value(args, "-packfrac", 0.05);
             // The relaxation time is the physically open constant: lambda = eta0/G
             // is the MAXWELL time, while the terminal time for chain ORIENTATION -
             // which is what freezes in - is longer by a factor of order 3-6 for an

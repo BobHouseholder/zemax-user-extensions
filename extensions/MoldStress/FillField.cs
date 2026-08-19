@@ -265,6 +265,30 @@ namespace MoldStress
         /// </summary>
         public int DepthShapeSteps = 2000;
 
+        /// <summary>
+        /// A SECOND flow-orientation channel: packing flow through the channel
+        /// narrowed by the growing frozen layer, which orients material at the
+        /// CENTRE of the gap where the fill shear stress is small.
+        ///
+        /// Chang et al. name this mechanism for the second birefringence peak
+        /// they measure near mid-thickness, and it is the only route past the
+        /// ceiling that reference case 2's in-plane clause runs into: the fill
+        /// channel is bounded by 2*C*&lt;tau_fill(z)&gt;, which is 0.49 of the
+        /// published value, because tau_fill is largest exactly where the
+        /// retained fraction is smallest.
+        ///
+        /// Off by default until measured on all three cases.
+        /// </summary>
+        public bool PackingOrientation = false;
+
+        /// <summary>
+        /// The packing flow rate as a fraction of the fill rate. Packing moves
+        /// far less material than filling - it is compensating shrinkage, not
+        /// filling a cavity - so this is small. Exposed because it is the one
+        /// number in the packing channel that is not derived.
+        /// </summary>
+        public double PackFlowFraction = 0.05;
+
         public bool ChannelNarrowing = false;
     }
 
