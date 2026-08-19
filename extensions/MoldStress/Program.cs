@@ -50,6 +50,7 @@ namespace MoldStress
                 if (Has(args, "-selftest")) return SelfTest.Run(args);
                 if (Has(args, "-gates")) return Gates(args);
                 if (Has(args, "-run")) return Runner.Run(args);
+                if (Has(args, "-refplate")) return RefPlate.Run(args);
                 if (Has(args, "-refquench")) return RefQuench.Run(args);
                 if (Has(args, "-refcase2")) return RefCase2.Run(args);
                 if (Has(args, "-refcase")) return RefCase.Run(args);
@@ -184,7 +185,7 @@ namespace MoldStress
             "-file", "-filltime", "-fountain", "-frontmode", "-gateconfig",
             "-materials", "-melttemp", "-moldtemp", "-gatewidth", "-packfrac", "-nz", "-shape-nodes", "-shape-particles", "-shape-steps", "-ti", "-tc", "-nzexport",
             "-curvature", "-lambdascale", "-out", "-outdir", "-packpressure", "-packtime",
-            "-particles",
+            "-particles", "-station", "-semidia", "-gatethick",
         };
 
         /// <summary>Flags that stand alone.</summary>
@@ -228,7 +229,7 @@ namespace MoldStress
             "-complementary", "-deposition-decay", "-deposition-support",
             "-depthdiag", "-directindex", "-eulerian-depth", "-incremental-thermal", "-narrowing", "-normal-stress", "-packing-orientation", "-snapshot",
             "-gates", "-h", "-help", "-quiet",
-            "-lagrangian", "-lagrangian-depth", "-refquench",
+            "-lagrangian", "-lagrangian-depth", "-refquench", "-refplate",
             "-refcase", "-refcase2", "-relax-below-tg", "-ribbon",
             "-run", "-selftest",
             "-thinned-lambda",
