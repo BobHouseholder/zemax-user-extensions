@@ -145,20 +145,23 @@ namespace MoldStress
                 KGlassBrewster = -4.5, K11Brewster = 2.3,
                 KSource = "glassy stress-optic coefficient, PMMA fibre measurements, -4.5 to -1.5e-12 /Pa (Aston, polymer optical fibre); most negative value taken",
                 Provisional = true,
-                CMeltBrewster = -1200.0,
-                CMeltSource = "UNSOURCED AND DISPUTED - see CMeltContested. The text here claimed 'order 1e-9 /Pa from rheo-optical literature' and named no paper",
-                CMeltContested = "2026-08-18: this -1200 Br carries NO citation, and the only "
-                    + "sourced value found is -30 Br - forty times smaller - from Wimberger-Friedl "
-                    + "(1991), read via US Patent 9720155 Table 1, measured 20 C above Tg. The same "
-                    + "table's PC and PS values match this model's independently, so the table is "
-                    + "not suspect. THE VALUE WAS NOT SWAPPED, deliberately: Wimberger-Friedl also "
-                    + "reports that PMMA's stress-optical coefficient CHANGES SIGN near 144 C, and "
-                    + "-30 Br was measured at ~125 C while this model runs PMMA from a 250 C melt "
-                    + "down through Tg - straddling that inversion. Adopting -30 would trade an "
-                    + "unsourced number for one measured outside the regime it would be used in. "
-                    + "PMMA PREDICTIONS SHOULD NOT BE TRUSTED until a temperature-resolved C_R is "
-                    + "obtained; both candidate values are wrong somewhere in the range this model "
-                    + "integrates over.",
+                CMeltBrewster = -30.0,
+                CMeltSource = "MEASURED: Wimberger-Friedl, Rheol. Acta 30 (1991) 329-340, read via US Patent 9720155 Table 1 - PMMA -30 Br at 20 C above Tg. That is the SAME convention and the SAME paper this model's polycarbonate entry uses (+3000~4000 Br, carried here as +4000), so the two are now consistent",
+                CMeltContested = "CORRECTED 2026-08-18, from an unsourced -1200 Br to a sourced "
+                    + "-30 Br - a factor of forty. The old source string read 'order 1e-9 /Pa from "
+                    + "rheo-optical literature' and named no paper; -30 Br is 3e-11 /Pa, two orders "
+                    + "below what that asserted. WHAT REMAINS GENUINELY OPEN, and it is a property "
+                    + "of PMMA rather than of this entry: its stress-optical coefficient CHANGES "
+                    + "SIGN near 144 C (Wimberger-Friedl 1991, 'the peculiar rheo-optical behaviour "
+                    + "of bisphenol A-polycarbonate and polymethylmethacrylate'). This model carries "
+                    + "ONE constant while integrating orientation from a 250 C melt down through a "
+                    + "105 C Tg, a range that straddles the inversion, so no single number is right "
+                    + "across it. -30 Br is used because frozen-in orientation is locked at "
+                    + "VITRIFICATION, not at peak melt, and 20 C above Tg is that regime - which is "
+                    + "also why the '20 C above Tg' convention is the one materials data for this "
+                    + "purpose is reported in. PMMA remains the least trustworthy entry in this "
+                    + "table, and a temperature-resolved C(T) would replace the constant rather "
+                    + "than re-tune it.",
                 TgC = 105, MeltTempC = 250, MoldTempC = 70,
                 DiffusivityMm2PerS = 0.11, CtePerK = 70e-6, ModulusMPa = 3200, PoissonRatio = 0.37,
                 DensityGPerCm3 = 1.19,
@@ -345,6 +348,16 @@ namespace MoldStress
             // corroborated (+3 to +4e-9 /Pa, Wimberger-Friedl 1991) and nothing
             // found disputes it, so it must come back clean. If this ever fails,
             // the flag has been applied indiscriminately and means nothing.
+            // PMMA's melt coefficient was -1200 Br and unsourced until 2026-08-18,
+            // forty times the only sourced value. Pinned against the source so an
+            // edit back to the old order of magnitude fails loudly. The bound is
+            // generous (a factor of 3) because the underlying quantity really is
+            // temperature-sensitive - it is guarding the ORDER, not the digit.
+            var pmma = ByName("MS_PMMA");
+            SelfTest.Check("PMMA melt coefficient is the sourced order, not the old -1200 Br",
+                Math.Abs(pmma.CMeltBrewster) > 10.0 && Math.Abs(pmma.CMeltBrewster) < 90.0,
+                pmma.CMeltBrewster.ToString("F0") + " Br (source: -30 Br, 20 C above Tg)");
+
             // NAMED EXPLICITLY, via ByName so a rename THROWS rather than
             // skipping. The first version searched for a name containing "PC";
             // the entry is called MS_POLYCARB, so it matched nothing, the control
