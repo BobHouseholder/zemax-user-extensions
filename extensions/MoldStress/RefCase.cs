@@ -355,6 +355,25 @@ namespace MoldStress
                         flowOnlyDeep > 0 ? flowOnlySurface / flowOnlyDeep : double.PositiveInfinity,
                         coreDn > 0 ? surfaceDn / coreDn : double.PositiveInfinity));
 
+                    // THE ACTUAL CONTRIBUTIONS, because a ratio built from a
+                    // SIGNED sum cannot be attributed from the ratio alone: a
+                    // small thermal term that OPPOSES the flow at one sampling
+                    // depth and ADDS at the other moves the ratio far more than
+                    // its own size suggests. Printed at both sampling depths so
+                    // the share can be read rather than inferred.
+                    double thSurf = surfaceDn - flowOnlySurface;
+                    double thDeep = coreDn - flowOnlyDeep;
+                    say(string.Format(ci,
+                        "      at {0:P0}: flow {1:E3}  thermal {2:+0.000E+000;-0.000E+000}  " +
+                        "total {3:E3}  (thermal is {4:F0} % of flow)",
+                        SurfaceFraction, flowOnlySurface, thSurf, surfaceDn,
+                        100.0 * Math.Abs(thSurf) / Math.Max(Math.Abs(flowOnlySurface), 1e-30)));
+                    say(string.Format(ci,
+                        "      at {0:P0}: flow {1:E3}  thermal {2:+0.000E+000;-0.000E+000}  " +
+                        "total {3:E3}  (thermal is {4:F0} % of flow)",
+                        DeepFraction, flowOnlyDeep, thDeep, coreDn,
+                        100.0 * Math.Abs(thDeep) / Math.Max(Math.Abs(flowOnlyDeep), 1e-30)));
+
                     double s2 = 0; int c2 = 0;
                     for (int k = 0; k < nz; k++)
                         if (Math.Abs(freeze.Z[k]) < 0.17 * e.CentreThicknessMm)

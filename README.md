@@ -358,7 +358,7 @@ Candidate sources for further checks are in
 | in-plane peak | 1.398e-4 against a published 1.2e-4 - **1.16x** | within a factor of 2 | PASS |
 | in-plane shape | maximum at the gate, 46.5% of it at the far edge | must decay from the gate | PASS |
 | gate null | peak moves x=0 -> x=100 mm when the gate moves | must track the gate | PASS |
-| depth ratio | **4.12** surface/deep against a published 2.78 | [1.39, 5.56] | PASS |
+| depth ratio | **3.44** surface/deep against a published 2.78 | [1.39, 5.56] | PASS |
 | depth peak position | maximum at **93%** of the half-wall | beyond 75% | PASS |
 | depth null (flow) | denominator collapses to exactly 0 with the freeze order mirrored | must respond | PASS |
 | depth null (thermal) | CTE=0 collapses to flow-only, and the channel is material | must collapse | PASS |
@@ -367,16 +367,20 @@ Candidate sources for further checks are in
 2026-08-18** (`-snapshot` restores the old single-instant construction). Case 2
 is insensitive; case 1's depth ratio moves 3.43 -> 4.12.
 
-**That move is AWAY from the published 2.78, and it exposes something rather than
-causing it.** The FLOW channel alone gives 2.84 - within 2% of the reference -
-and adding the thermal channel takes it to 3.43 (snapshot) or 4.12 (incremental).
-Chang et al. put the thermal share at 8% for this material class; a share that
-small cannot produce a 21% shift, let alone 45%. So **the thermal channel appears
-to over-contribute on case 1**, the snapshot construction was partly masking it,
-and the depth clause passes with a margin it may not deserve. Recorded as an open
-failure rather than tuned away - and note the flow-only agreement is NOT evidence
-the thermal channel should be zero, since the published 2.78 contains whatever
-thermal contribution the real plate had.
+**The thermal over-contribution that flip exposed is now fixed, and the fix is a
+boundary condition rather than a constant.** Completing the cooling after every
+layer is solid put the thermal channel at 26% of flow at the surface sampling
+depth, against a published 8% for this material class. A freely quenched sheet
+MUST have that increment - without it case 3's core reads 7.6e-7 against a
+published 7e-4 - but a moulding must not: at that stage the part is fully solid
+and still adhered to the cavity, so it cannot relieve in-plane, and on ejection
+the denied contraction is identical for every layer and cancels.
+
+That last clause was implemented and MEASURED rather than assumed. A
+constrained-then-released branch returned identically ZERO, which refuted it as a
+general construction and simultaneously justified excluding the increment for a
+moulding. Case 1's thermal share is now 14% at the surface and 6% at the deep
+point, bracketing the published 8%, and the depth ratio reads 3.44.
 
 **`-refcase` now reports the registered criterion as MET.** It did not before
 2026-08-18; the depth ratio was 0.82 and the peak sat at 53% of the half-wall.

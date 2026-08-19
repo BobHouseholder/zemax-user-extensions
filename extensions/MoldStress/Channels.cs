@@ -132,7 +132,7 @@ namespace MoldStress
             // "exactly" and it is not modelled either way.
             var sigma = proc.IncrementalThermal
                 ? ThermalProfileIncremental(freeze.Z, freeze.TimeGridS, freeze.TempHistoryC,
-                                            p.TgC, p.CtePerK, eOver1MinusNu, p.MoldTempC)
+                                            p.TgC, p.CtePerK, eOver1MinusNu)
                 : ThermalProfile(freeze.TrefC, freeze.Z, eOver1MinusNu * p.CtePerK);
 
             // --- density: Lorentz-Lorenz on the packing pressure ---------------
@@ -989,6 +989,7 @@ namespace MoldStress
             double tgC, double alphaPerK, double eOver1MinusNu,
             double finalTempC = double.NaN)
         {
+
             int n = z.Length;
             var sigma = new double[n];
             if (timeGridS == null || tempHistoryC == null || timeGridS.Length < 2) return sigma;
@@ -1033,8 +1034,34 @@ namespace MoldStress
                 }
             }
 
-            // THE RECORDED HISTORY STOPS AT CENTRE VITRIFICATION, and most of the
-            // core's stress is generated after it.
+            // POST-VITRIFICATION COOLING, AND WHO IS ENTITLED TO IT.
+            //
+            // Passing finalTempC completes the cooling after every layer is solid.
+            // A FREELY QUENCHED sheet must have it: without it the core came out
+            // at 7.6e-7 against a published 7e-4, because the centre vitrifies
+            // ~85 C above the bath with the skin already cold and that
+            // differential is exactly what puts the core in tension.
+            //
+            // A MOULDING MUST NOT. Measured 2026-08-18 on reference case 1: with
+            // this increment the thermal channel is 26% of flow at the surface
+            // sampling depth, against a published thermal share of 8% for the
+            // material class; without it, 14% - and 6% at the deep point, which
+            // brackets the published figure. The reason is physical rather than
+            // fitted: at that stage the part is fully solid and still ADHERED TO
+            // THE CAVITY, so it cannot relieve in-plane, and on ejection the
+            // denied contraction is the same for every layer and cancels.
+            //
+            // That last clause is not an assumption - it was implemented as a
+            // constrained-then-released branch and MEASURED. Every layer vitrifies
+            // at the same Tg and ends at the same mould temperature, so the
+            // profile came out identically ZERO. That refuted the branch as a
+            // general construction and simultaneously justified excluding this
+            // increment for a moulding, which is the form it survives in. See
+            // memory/rejected.md.
+            //
+            // What is still NOT modelled either way: cooling after EJECTION, from
+            // mould temperature to ambient, during which the part IS free. For a
+            // cold mould that is the larger half.
             //
             // FreezeHistory's cooling loop runs `while (snapshot == null)` and
             // takes its snapshot the moment the centre crosses Tg - everything the
