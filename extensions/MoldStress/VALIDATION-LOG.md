@@ -558,3 +558,353 @@ Options: `-writecatalog [-out <agf>]`, `-gates`, `-run`, `-refcase`, `-selftest`
 plus `-file <zmx>` (headless batch mode), `-gateconfig <file>`, `-outdir <dir>`,
 `-filltime`, `-packpressure`, `-packtime`, `-melttemp`, `-moldtemp`,
 `-materials A,B`, `-directindex`.
+
+---
+
+# Second consolidation, 2026-08-18 (evening)
+
+The README's validation section had grown from 441 to 686 lines across ten
+commits in one day, and had accreted two structural faults worth naming because
+both are the same shape as faults this project found elsewhere the same day:
+
+- **The cases ran 1, 3, 2.** Case 3 was inserted by anchoring on case 2's
+  heading, which is exactly the misordering found in `verify-the-artifact` that
+  morning (its questions ran Q1-Q5, Q7, Q6, from a patch appended in the wrong
+  place). Same defect, same cause, six hours apart.
+- **A heading that no longer described its contents** - "The two open failures"
+  above a section covering three cases and five open items.
+
+And one stale row, found the same way as the four found in the first
+consolidation: by re-deriving from the binary rather than reading the prose. Case
+2's layer-removal points read 32.4 / 44.7 / 48.9 / 50.0 where the README said
+32.6 / 45.0 / 49.1 / 50.0 - they had moved when the thermal channel changed and
+nobody re-took them.
+
+The full text cut in that consolidation follows.
+
+---
+
+## Validation, and what currently fails
+
+Two published reference cases, run with `-refcase` and `-refcase2`. Both exit
+non-zero unless every clause holds, and **both currently fail** - the tool is
+usable as an estimate and is not validated as a predictor.
+
+Numbers below are read from the binary at `-nz 161`, not carried in prose.
+How they were arrived at, including every mechanism tried and rejected, is in
+[`extensions/MoldStress/VALIDATION-LOG.md`](extensions/MoldStress/VALIDATION-LOG.md).
+Candidate sources for further checks are in
+[`extensions/MoldStress/VALIDATION-SOURCES.md`](extensions/MoldStress/VALIDATION-SOURCES.md).
+
+### Case 1 - TOPAS 6017S-04 plate
+
+100 x 100 x 1.5 mm, film gate on one edge, polarimetry at 594 nm, 280 C melt /
+150 C mould / 71.3 MPa. Material constants from Kim, Yoon & Kornfield,
+*Key Eng. Mater.* **326-328** (2006) 183.
+
+| Clause | Result | Bar | |
+|---|---|---|---|
+| in-plane peak | 1.398e-4 against a published 1.2e-4 - **1.16x** | within a factor of 2 | PASS |
+| in-plane shape | maximum at the gate, 46.5% of it at the far edge | must decay from the gate | PASS |
+| gate null | peak moves x=0 -> x=100 mm when the gate moves | must track the gate | PASS |
+| depth ratio | **3.44** surface/deep against a published 2.78 | [1.39, 5.56] | PASS |
+| depth peak position | maximum at **93%** of the half-wall | beyond 75% | PASS |
+| depth null (flow) | denominator collapses to exactly 0 with the freeze order mirrored | must respond | PASS |
+| depth null (thermal) | CTE=0 collapses to flow-only, and the channel is material | must collapse | PASS |
+
+**The thermal channel accumulates INCREMENTALLY on all three cases since
+2026-08-18** (`-snapshot` restores the old single-instant construction). Case 2
+is insensitive; case 1's depth ratio moves 3.43 -> 4.12.
+
+**The thermal over-contribution that flip exposed is now fixed, and the fix is a
+boundary condition rather than a constant.** Completing the cooling after every
+layer is solid put the thermal channel at 26% of flow at the surface sampling
+depth, against a published 8% for this material class. A freely quenched sheet
+MUST have that increment - without it case 3's core reads 7.6e-7 against a
+published 7e-4 - but a moulding must not: at that stage the part is fully solid
+and still adhered to the cavity, so it cannot relieve in-plane, and on ejection
+the denied contraction is identical for every layer and cancels.
+
+That last clause was implemented and MEASURED rather than assumed. A
+constrained-then-released branch returned identically ZERO, which refuted it as a
+general construction and simultaneously justified excluding the increment for a
+moulding. Case 1's thermal share is now 14% at the surface and 6% at the deep
+point, bracketing the published 8%, and the depth ratio reads 3.44.
+
+**Cooling after EJECTION contributes exactly zero, and that is a proof rather than
+an omission** - retracting an earlier claim here that called it "the larger half
+for a cold mould". After ejection the part is entirely glassy: no layer
+vitrifies, there is no sub-Tg relaxation mechanism in this model, and every layer
+carries one modulus. A linear-elastic body taken through a thermal cycle that
+starts uniform and ends uniform has zero residual stress - the transient stresses
+are real but fully recovered. The condition is mould < Tg, and this tool already
+ENFORCES it (`FreezeHistory` refuses anything else outright, "need mould < Tg <
+melt"), so the result is unconditional here rather than a property of the cases
+that happen to be run.
+
+A warning for the mould-above-Tg case was written and then removed as dead code.
+With case 1 set to a 200 C mould against a 178 C Tg it never printed, because the
+run fails earlier at the freeze solve. What guards the proof is the precondition,
+not a warning - so the self-test now asserts that instead, in both directions: a
+mould at or above Tg is REFUSED, and one below is accepted.
+
+**`-refcase` now reports the registered criterion as MET.** It did not before
+2026-08-18; the depth ratio was 0.82 and the peak sat at 53% of the half-wall.
+What changed is the depth history, not a constant - see below. `-eulerian-depth`
+restores the previous behaviour exactly, including both failures.
+
+**What that pass does and does not establish, added 2026-08-18 after a literature
+sweep.** The depth-peak clause samples the surface at 97.5% of the half-wall,
+which on this 1.5 mm plate is **18.8 um from the wall**, and the ported shape
+peaks at 93%, i.e. **52.5 um in**. Flaman (TU Eindhoven, 1990) reports that
+birefringence could not be resolved within ~60 um of the surface, and that the
+maximum the literature calls the "skin peak" therefore sits at z/H ~ 0.75-0.8 -
+about 165 um in. **Both this criterion's sampling point and the new model's peak
+lie inside a band at least one careful study says its instrument cannot resolve.**
+The pass stands (different paper, material and instrument, and this case's own
+0.2 mm slab question was already open) but it means "the model now peaks in the
+outer quarter", not "the model gets the depth profile right" - the data that
+would separate 78% from 93% is not in any source found. See
+[`VALIDATION-SOURCES.md`](extensions/MoldStress/VALIDATION-SOURCES.md), section 1
+of the third sweep.
+
+Converged at **nz=41**, which is the default since 2026-08-18. Re-taken on the
+shipped configuration rather than carried over from the Eulerian sweep: depth
+ratio 3.43 / 3.46 / 3.45 / 3.43 and in-plane peak 1.16x / 1.16x / 1.16x / 1.17x
+at nz 41 / 81 / 161 / 321, so nz=41 lands on nz=321's depth ratio to three
+figures. nz=21 was measured and is NOT converged - ratio 3.34 with the peak
+pinned at the wall - so 41 is a floor with something below it rather than the
+smallest grid that passed. The case runs in 15 s where nz=321 took 6m29.
+
+### Case 3 - free quench, and the first test of the THERMAL channel alone
+
+Bisphenol-A polycarbonate, 2 mm sheet, quenched 160 C -> 60 C. Wimberger-Friedl,
+PhD thesis, TU Eindhoven (1991) ch. 3.2, open access. Run with `-refquench`.
+
+Cases 1 and 2 are mouldings, so every number in them is flow and thermal
+together; the thermal channel had only ever been tested by NULLING it. A quench
+has no flow, and `ThermalProfile` reads only the freeze history - so this case
+needs no gate, flow rate or fill time, and none of case 2's unsourced inputs can
+reach it.
+
+| Clause | Result | Bar | |
+|---|---|---|---|
+| sign reversal | core +5.4e-4, surface -9.5e-4 | must reverse | PASS |
+| direction | core tension, surface compression | as published | PASS |
+| zero crossing | **z/d 0.572** (published 0.5-0.8) | [0.40, 0.90] | PASS |
+| shape ratio | \|surface\|/\|core\| **1.76** (published 1.7-4.0) | [1.0, 8.0] | PASS |
+| magnitude | \|surface\| 9.5e-4 against a published 1.75e-3 | within 3x | PASS |
+| null | CTE=0 collapses the profile to exactly 0 | must collapse | PASS |
+| control on the null | CTE restored gives 9.8e-4 | must not be dead | PASS |
+
+**The thermal channel now accumulates stress INCREMENTALLY** - each layer becomes
+elastic when it vitrifies, and every later cooling increment re-equilibrates over
+the layers solid at that moment, so the total is force- and moment-balanced
+without imposing it. The previous construction evaluated the temperature profile
+at one instant (when the centre hits Tg) and removed its mean and linear parts.
+`-snapshot` still runs the old one.
+
+| | snapshot | incremental | published |
+|---|---|---|---|
+| core | 5.4e-4 | 5.4e-4 | +5..+9e-4 |
+| surface | -9.5e-4 | **-1.42e-3** | -1.5..-2.0e-3 |
+| ratio | 1.76 (bottom edge) | **2.64** (centre) | 1.7-4.0 |
+| crossing | 0.572 | 0.649 | 0.5-0.8 |
+
+**A defect found on the way, and it was in a shared component.** FreezeHistory's
+cooling loop runs `while (snapshot == null)` and stops the moment the centre
+crosses Tg - all the flow channel ever needed. But the centre vitrifies ~85 C
+above the bath with the skin already cold, and that differential contraction is
+what puts the core in tension. Integrating only the recorded window left the core
+at 7.6e-7 against a published 7e-4 and the ratio at 627. Completing it needs no
+change to the shared solve: once every layer is solid the solid set stops
+changing and the accumulated stress depends only on the TOTAL remaining dT, not
+the path, so the rest of the cooling is exactly one increment.
+
+**The Ti trend is still NOT reproduced, and failing to fix it is the sharper
+result.** The source reports the zero crossing moving OUTWARD as
+the initial temperature rises, z/d ~0.3 to ~0.85, naming Ti the dominant control.
+The model moves it INWARD, 0.589 -> 0.565 across Ti 150-180 C - wrong direction
+and a span 23x too small. Printed as an unscored TREND DIAGNOSTIC rather than
+folded into the verdict, because registering a clause after seeing its result is
+moving the bar.
+
+The snapshot construction could not move the crossing at all. The incremental one
+CAN: with post-vitrification cooling excluded it spans **0.375 -> 0.874**, against
+a published 0.3 -> 0.85 - almost exactly right. But including that cooling, which
+the values above demand, flattens it to 0.645 -> 0.656, because every layer then
+cools from about Tg to the bath REGARDLESS of Ti.
+
+So the elastic stress is dominated by a Ti-independent term, and the
+Ti-dependence must live in the mechanism the source names and this channel lacks:
+**frozen-in ORIENTATION from stresses above Tg**, where time-above-Tg is exactly
+what Ti controls. That is a second thermal channel, not a correction to this one -
+and it is the same orientational mechanism the source says dominates the quench
+birefringence in the first place. **The channel now gets the structure and the
+magnitudes right and is missing the orientational half, which is what was
+predicted in writing before the case was ever run.**
+
+Converged in shape, drifting at the surface node: crossing 0.581 / 0.575 / 0.572
+/ 0.571 and ratio 1.50 / 1.67 / 1.76 / 1.81 at nz 41 / 81 / 161 / 321. Default is
+161; at nz=41 the ratio falls below the published range.
+
+### Case 2 - ZEONEX 480R plano-convex lens
+
+32 mm diameter, 2 mm centre thickness, 0.8 mm edge gate, 275 C / 124 C,
+98.10 MPa. Chang, Yu, Chiu, Yang, Lai & Wang (CoreTech / NTHU). A better check
+than case 1 in three ways - it is a lens rather than a plate, the material is a
+cyclo-olefin, and its depth data comes from one self-consistent method
+(successive 0.1 mm layers turned off, fringe order recounted).
+
+| Clause | Result | Bar | |
+|---|---|---|---|
+| in-plane peak | 4.763e-4 against a published 3.7e-5 - **12.87x** | within a factor of 2 | **FAIL** |
+| in-plane shape | maximum at the gate, 14% of it at the far edge | must decay from the gate | PASS |
+| layer removal | 3 of 4 cumulative points within 10 points | 3 of 4 | PASS |
+
+### The two open failures, and what is known about each
+
+**The depth profile peaks mid-wall on both cases; the measurements peak at the
+skin.** Located 2026-08-18 with the model's own stored intermediates rather than
+a recomputation. The memory factor itself peaks at 60% of the half-wall:
+
+| depth | reduced time at freeze | memory | tau (MPa) | dn_flow |
+|---|---|---|---|---|
+| 100% (wall) | 0.000 | 0.0000 | 1.67 | 1.49e-4 |
+| 80% | 1.096 | 0.1603 | 1.34 | 5.54e-4 |
+| **60%** | 4.521 | **0.4447** | 1.00 | **9.66e-4** |
+| 40% | 9.716 | 0.4156 | 0.67 | 5.88e-4 |
+| 0% (core) | 16.989 | 0.2273 | 0.00 | 9.83e-6 |
+
+Memory is the product of two monotone factors running in opposite directions -
+build-up needs reduced time, retention is destroyed by it - so the product must
+peak somewhere between wall and core. At the wall a layer freezes before it can
+build anything; at the core it builds fully and then relaxes.
+
+**The flow channel's depth shape comes from the Lagrangian particle model, and
+this is the default since 2026-08-18.** `-eulerian-depth` turns it off and
+restores the previous behaviour exactly. It takes the depth SHAPE from `Lagrangian.cs` and applies it to
+the Eulerian per-station magnitude, normalised to mean 1 over the wall - so each
+station's thickness average is multiplied by 1 and cannot move. Every clause that
+reads a thickness average is invariant by construction, asserted at runtime
+rather than hoped for; only the depth clauses can respond. In-plane numbers come
+back bit-identical either way on both cases.
+
+The shape is solved **per station on the local gap**. It depends on the station
+only through the gap, so it is solved at a few gap ratios spanning the part and
+interpolated between them, using the same similarity the Eulerian channel already
+applies - depths scale with the gap, times with its square. A uniform gap
+collapses to a single solve, so the plate case costs exactly what it did.
+
+| | case 1 depth ratio | case 1 peak position | case 2 layer removal |
+|---|---|---|---|
+| `-eulerian-depth` (was the default) | 0.82 **FAIL** | 53% **FAIL** | 3 of 4 **PASS** |
+| Lagrangian, one shape per part | 3.45 PASS | 93% PASS | 2 of 4 **FAIL** |
+| **Lagrangian, per-station (default)** | **3.45 PASS** | **93% PASS** | **3 of 4 PASS** |
+
+On the default, **case 1 meets the registered criterion** and case 2 has only its
+in-plane peak outstanding.
+
+**It costs time, though much less than it did.** `-selftest` runs in about 1m20
+and case 2 in about 19 s, against 2m47 and 36 s when the shape first became the
+default. Two things did that. The temperature lookup inside the particle solve
+was doing two linear scans - one over the depth grid, one over the time grid - on
+every particle on every step, 12 million times; an element's depth node is fixed
+until the front deposits it and its clock only moves forward, so both became O(1)
+with the answer bit-identical. And an element below Tg is inert but was still
+being visited and looked up every remaining step, which the skin pays for
+thousands of times over; it is now retired permanently, guarded by a runtime
+check that the cooling history really is monotone.
+
+**Where the cost actually is, measured rather than assumed.** At the shipped
+nz=41 default, case 1 takes 1.9 s with the shape OFF and 11 s with it on - so the
+Eulerian channel and the freeze solve together are under two seconds and the
+particle shape is the rest.
+
+The channel is not what scales badly either. Case 1 with the shape off runs in
+1.1 / 6.5 / 51 s at nz 41 / 81 / 161 - roughly nz-cubed, which is the EXPLICIT
+conduction solve rather than the channel: `dt = 0.2*dz^2/alpha` is a stability
+limit, so halving dz quadruples the step count on top of the extra nodes.
+Flattening that means an implicit scheme, which would change a validated
+component and move the reference numbers, and at nz=41 it costs 1.1 s. Recorded
+as measured and deliberately not done.
+
+Shapes are cached between builds, keyed on the CONTENTS of the fill field, freeze
+history and the four process fields the solve reads. It is worth less than it
+sounds: `-selftest` reuses 6 of 32 requests and case 1 reuses 1 of 6, because
+these runs mostly ask for genuinely different things - a mirrored freeze history,
+a zero-CTE polymer, freeze times scaled by a probe, one gap node per station. The
+cache removes the repeats and there are not many. Keying it on object identity
+instead, which was the first version, reused NOTHING at all: each self-test
+section builds its own fill field and freeze history even where the geometry is
+identical.
+
+The middle row is why the per-station solve exists. A single part-wide shape
+makes `DnFlow[i,k] = A_i * phi[k]`, so the normalised depth profile is identical
+at every station - right for a plate, wrong for a lens whose gap varies 2.5x.
+Case 2's layer-removal clause is evaluated at the 0.8 mm gate region, and a shape
+computed on the 2.0 mm centre thickness put 43.0% of the retardance in the first
+0.1 mm against a measured 27.9%. On the local gap it reads 32.6%.
+
+**What was swept, and what the sweeps cost.** Grid: phi at the wall 2.268 to
+2.326 across nz 41/81/161/321 with the depth ratio flat at 3.43-3.46. Particles:
+the first default of 4000 was carrying about 6% - phi goes 2.466 / 2.628 / 2.637
+and 6.908 / 6.489 / 6.430 at 4000 / 16000 / 64000 - so the default is now 16000,
+where it is converged to ~1%. Gap nodes: at 4000 particles the node count looked
+to matter by 11%, and at 16000 that falls to 1-3% and goes non-monotone, so most
+of it was particle noise; 6 nodes ships. Both are settable with
+`-shape-particles` and `-shape-nodes`. A reference case takes 2-3 minutes with
+the shape on.
+
+**Two self-tests had to move, and neither was a numerical regression.** Both
+were written for the Eulerian decomposition that the port replaces, so both are
+now pinned to `-eulerian-depth`, where the property they assert is true and still
+worth guarding. "The fountain is the same at the gate and the far edge" assumed
+the fountain is a separable additive term at a fixed depth; under the port it is
+folded into the station's thickness average and redistributed by a shape. "Shear
+birefringence vanishes at the mid-plane" holds because an Eulerian element there
+has sat at zero shear stress since t=0 - give the material a path and the element
+now at the mid-plane arrived from somewhere with nonzero shear, so it carries
+orientation. Asserting that on the default path would be asserting the assumption
+the port exists to remove.
+
+The default path gained two checks of its own: the port must leave the thickness
+average alone (it matches to 1.2e-16) and it must actually move the skin value
+(7.37e-5 -> 8.45e-4), so the first cannot pass on a port that did nothing. 57
+self-tests pass, 0 fail.
+
+**One clause cannot test the interpolation, and says so.** Case 2's layer removal
+samples s = 0, which is the minimum gap and therefore the first interpolation
+node exactly - so it returns identical numbers for every node count by
+construction. The per-station phi rows printed beside it are what actually
+exercise the interpolation.
+
+**The underlying Eulerian defect is still not a term that can be corrected.** It is what an Eulerian channel
+computes when it assumes every layer sat at its final depth since t=0. The
+measured profile peaks at the skin because the skin's orientation was never
+built locally - it was sheared in the hot core, carried to the wall by the
+advancing front and quenched on arrival (Mavridis, Hrymak & Vlachopoulos,
+*J. Rheol.* **32**(6) 639, 1988). `Lagrangian.cs` carries that history properly
+and is not yet the shipped path.
+
+Eight configurations of additional terms have been measured against this and
+rejected; tripling the deposition term raises the wall from 1.49e-4 to 4.47e-4
+and **leaves the peak at 60%**. The log records each one so they are not
+proposed again.
+
+**Case 2's 12.87x is a model error, not a bad input - but its magnitude clause
+is not currently a clean test.** Every material and process input has been
+sourced or shown to be a safe borrowing, and each correction made the gap
+larger. The one registered falsifier - that ZEONEX 480R might have a melt
+stress-optical coefficient an eighth of the borrowed value - **is dead**: Inoue
+et al., [*Polymer Journal* (1995)](https://www.nature.com/articles/pj1995122),
+measure ~1700 Br for amorphous polyolefins and state it is insensitive to
+molecular structure, with ROMP cyclic olefins at the *high* end. Zeon's
+low-birefringence claim is about the **photoelastic** constant, which governs the
+thermal channel; the two coefficients are three orders apart.
+
+The caution: the model **over-retains** rather than over-stresses (case 1
+retention 0.235 against a measured 0.202; case 2 0.143 against 0.0111), and the
+wall shear stress it computes, 1.67 MPa, is above the melt-fracture threshold.
+Both inputs that set it - the cavity's share of the shot, and a 12.6 mm flow
+width - are unsourced choices.
