@@ -122,7 +122,18 @@ namespace MoldStress
             // balance are imposed rather than assumed, which is what makes the
             // uniform and linear controls meaningful.
             double eOver1MinusNu = p.ModulusMPa / (1.0 - p.PoissonRatio);
-            var sigma = ThermalProfile(freeze.TrefC, freeze.Z, eOver1MinusNu * p.CtePerK);
+            //
+            // The final temperature handed to the incremental construction is the
+            // MOULD temperature, which is where this freeze solve's conduction
+            // asymptotes - its walls are held there. Cooling after EJECTION, from
+            // mould temperature to ambient, is a separate stage this model does
+            // not solve; it is close to uniform through a thin wall and therefore
+            // mostly removed by force and moment balance, but "mostly" is not
+            // "exactly" and it is not modelled either way.
+            var sigma = proc.IncrementalThermal
+                ? ThermalProfileIncremental(freeze.Z, freeze.TimeGridS, freeze.TempHistoryC,
+                                            p.TgC, p.CtePerK, eOver1MinusNu, p.MoldTempC)
+                : ThermalProfile(freeze.TrefC, freeze.Z, eOver1MinusNu * p.CtePerK);
 
             // --- density: Lorentz-Lorenz on the packing pressure ---------------
             double llFactor = (p.Nd * p.Nd - 1.0) * (p.Nd * p.Nd + 2.0) / (6.0 * p.Nd);

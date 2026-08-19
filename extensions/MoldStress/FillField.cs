@@ -217,6 +217,25 @@ namespace MoldStress
         /// build that took under a second takes tens of seconds. -eulerian-depth
         /// turns it off and restores the previous behaviour exactly.
         /// </summary>
+        /// <summary>
+        /// Accumulate thermal stress INCREMENTALLY as the solidification front
+        /// sweeps, instead of setting it from the temperature profile at the
+        /// single instant the centre vitrifies. Validated on reference case 3
+        /// (free quench) where it moved every number toward the published values.
+        /// ON by default since 2026-08-18, after measurement on cases 1 and 2.
+        /// Case 2 is insensitive (first layer 32.6% -> 32.7%, every verdict
+        /// unchanged). Case 1 still meets its criterion but its depth ratio moves
+        /// 3.43 -> 4.12 against a published 2.78 - i.e. AWAY from the reference.
+        /// Adopted anyway, and the reason matters: the snapshot construction was
+        /// demonstrably capped (its crossing could not move with initial
+        /// temperature at all), and what the move exposes is a thermal
+        /// over-contribution on case 1 that the snapshot was partly masking - the
+        /// FLOW channel alone gives 2.84 against a published 2.78, and a source
+        /// for this material puts the thermal share at 8%, which cannot produce a
+        /// 21% shift let alone 45%. `-snapshot` restores the old construction.
+        /// </summary>
+        public bool IncrementalThermal = true;
+
         public bool LagrangianDepthHistory = true;
 
         /// <summary>

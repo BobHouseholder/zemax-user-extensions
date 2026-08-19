@@ -127,6 +127,8 @@ namespace MoldStress
             // they mean. -eulerian-depth is the opt-out.
             if (Program.Has(args, "-lagrangian-depth")) proc.LagrangianDepthHistory = true;
             if (Program.Has(args, "-eulerian-depth")) proc.LagrangianDepthHistory = false;
+            if (Program.Has(args, "-incremental-thermal")) proc.IncrementalThermal = true;
+            if (Program.Has(args, "-snapshot")) proc.IncrementalThermal = false;
             if (Program.Has(args, "-shape-nodes"))
                 proc.DepthShapeGapNodes = (int)Program.Value(args, "-shape-nodes", 6);
             if (Program.Has(args, "-shape-particles"))

@@ -358,10 +358,25 @@ Candidate sources for further checks are in
 | in-plane peak | 1.398e-4 against a published 1.2e-4 - **1.16x** | within a factor of 2 | PASS |
 | in-plane shape | maximum at the gate, 46.5% of it at the far edge | must decay from the gate | PASS |
 | gate null | peak moves x=0 -> x=100 mm when the gate moves | must track the gate | PASS |
-| depth ratio | **3.45** surface/deep against a published 2.78 | [1.39, 5.56] | PASS |
+| depth ratio | **4.12** surface/deep against a published 2.78 | [1.39, 5.56] | PASS |
 | depth peak position | maximum at **93%** of the half-wall | beyond 75% | PASS |
 | depth null (flow) | denominator collapses to exactly 0 with the freeze order mirrored | must respond | PASS |
 | depth null (thermal) | CTE=0 collapses to flow-only, and the channel is material | must collapse | PASS |
+
+**The thermal channel accumulates INCREMENTALLY on all three cases since
+2026-08-18** (`-snapshot` restores the old single-instant construction). Case 2
+is insensitive; case 1's depth ratio moves 3.43 -> 4.12.
+
+**That move is AWAY from the published 2.78, and it exposes something rather than
+causing it.** The FLOW channel alone gives 2.84 - within 2% of the reference -
+and adding the thermal channel takes it to 3.43 (snapshot) or 4.12 (incremental).
+Chang et al. put the thermal share at 8% for this material class; a share that
+small cannot produce a 21% shift, let alone 45%. So **the thermal channel appears
+to over-contribute on case 1**, the snapshot construction was partly masking it,
+and the depth clause passes with a margin it may not deserve. Recorded as an open
+failure rather than tuned away - and note the flow-only agreement is NOT evidence
+the thermal channel should be zero, since the published 2.78 contains whatever
+thermal contribution the real plate had.
 
 **`-refcase` now reports the registered criterion as MET.** It did not before
 2026-08-18; the depth ratio was 0.82 and the peak sat at 53% of the half-wall.
