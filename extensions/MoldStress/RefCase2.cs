@@ -135,6 +135,36 @@ namespace MoldStress
     /// paper's own equation, its own stated fringe count and its own gate
     /// thickness cannot all three be wrong in the same direction.
     ///
+    /// SETTLED WITHOUT CIRCULARITY, 2026-08-18. The argument above assumes the
+    /// gate thickness in order to correct the axis, and the sampling thickness
+    /// was then "confirmed" from the corrected axis - which is circular and was
+    /// caught before it was relied on. The non-circular form solves Eq. (9) for
+    /// the thickness each axis reading would REQUIRE, assuming nothing about h:
+    ///
+    ///   axis x10^-5 as labelled  ->  h = lambda*N/dn = 79.6 mm
+    ///   axis x10^-3              ->  h =                0.796 mm
+    ///
+    /// 79.6 mm is FORTY TIMES this lens's 2 mm centre thickness and a hundred
+    /// times its gate land; there is no dimension in the part, the mould or the
+    /// runner anywhere near it. 0.796 mm is the 0.80 mm gate land to within 0.5%.
+    /// The label is refuted by its own equation before h is chosen at all, and h
+    /// then follows rather than being assumed.
+    ///
+    /// So the sampling thickness is NOT an open input. Eq. (9)'s text calls Fig. 7
+    /// "the gap wise average residual birefringence", which is the same quantity
+    /// this model averages through the thickness, and h = 0.80 mm at the peak is
+    /// over-determined by three independent statements in the paper. The earlier
+    /// note here treating h as the term that decides the clause is WITHDRAWN: it
+    /// decides nothing, because it is pinned.
+    ///
+    /// THE CONSEQUENCE IS THAT THE 5x DEFICIT IS REAL AND UNEXPLAINED. It is not
+    /// the flow inputs (the fill time is sourced and tau matches the paper's own
+    /// simulation), not the relaxation time (an 8x change buys 15%), not the
+    /// retained fraction (its limit still leaves 2x), not the depth port's
+    /// normalisation (the particle model predicts the same magnitude), and not
+    /// the conversion thickness (pinned here). What remains is the model's
+    /// structure: it never has high stress and high retention at the same depth.
+    ///
     /// TWO INDEPENDENT CROSS-CHECKS, both from the companion paper (Lai & Wang,
     /// Appl. Opt. 47(12) 2017): a fringe order of 6.5 over the 2 mm centre is
     /// 1.9e-3, and Fig. 14's removal axis runs to 2.21e-3 at 50% removal. Same

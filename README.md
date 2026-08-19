@@ -455,6 +455,16 @@ tau_wall falls 1.67 -> 1.05 MPa, within ~20% of that paper's own simulated
 0.75-0.89 MPa peak, so the melt-fracture concern largely dissolves on sourced
 numbers. The gate width remains a choice of mine.
 
+**The sampling thickness in the reference is pinned, not open.** Eq. (9)'s text
+calls Fig. 7 the "gap wise average residual birefringence" - the same quantity
+this model averages - and solving that equation for the thickness each axis
+reading would require settles both at once, assuming nothing: the x10^-5 label
+needs h = 79.6 mm, forty times the lens's centre thickness, while x10^-3 needs
+0.796 mm, the 0.80 mm gate land to within 0.5%. So the 5x deficit is real and
+none of the five candidates explains it - not the flow inputs, the relaxation
+time, the retained fraction, the depth port's normalisation, or the conversion
+thickness.
+
 #### Case 3 - free quench, the THERMAL channel alone
 
 Bisphenol-A polycarbonate, 2 mm sheet, 160 C -> 60 C bath. Wimberger-Friedl, PhD
