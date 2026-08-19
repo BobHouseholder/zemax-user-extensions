@@ -382,6 +382,23 @@ general construction and simultaneously justified excluding the increment for a
 moulding. Case 1's thermal share is now 14% at the surface and 6% at the deep
 point, bracketing the published 8%, and the depth ratio reads 3.44.
 
+**Cooling after EJECTION contributes exactly zero, and that is a proof rather than
+an omission** - retracting an earlier claim here that called it "the larger half
+for a cold mould". After ejection the part is entirely glassy: no layer
+vitrifies, there is no sub-Tg relaxation mechanism in this model, and every layer
+carries one modulus. A linear-elastic body taken through a thermal cycle that
+starts uniform and ends uniform has zero residual stress - the transient stresses
+are real but fully recovered. The condition is mould < Tg, and this tool already
+ENFORCES it (`FreezeHistory` refuses anything else outright, "need mould < Tg <
+melt"), so the result is unconditional here rather than a property of the cases
+that happen to be run.
+
+A warning for the mould-above-Tg case was written and then removed as dead code.
+With case 1 set to a 200 C mould against a 178 C Tg it never printed, because the
+run fails earlier at the freeze solve. What guards the proof is the precondition,
+not a warning - so the self-test now asserts that instead, in both directions: a
+mould at or above Tg is REFUSED, and one below is accepted.
+
 **`-refcase` now reports the registered criterion as MET.** It did not before
 2026-08-18; the depth ratio was 0.82 and the peak sat at 53% of the half-wall.
 What changed is the depth history, not a constant - see below. `-eulerian-depth`
