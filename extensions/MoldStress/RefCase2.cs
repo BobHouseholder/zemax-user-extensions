@@ -229,6 +229,8 @@ namespace MoldStress
                 proc.DepthShapeGapNodes = (int)Program.Value(args, "-shape-nodes", 6);
             if (Program.Has(args, "-shape-particles"))
                 proc.DepthShapeParticles = (int)Program.Value(args, "-shape-particles", 4000);
+            if (Program.Has(args, "-shape-steps"))
+                proc.DepthShapeSteps = (int)Program.Value(args, "-shape-steps", 3000);
             if (Program.Has(args, "-fountain"))
                 proc.FountainStrain = Program.Value(args, "-fountain", 1.0);
             if (Program.Has(args, "-thinned-lambda")) proc.ShearThinnedLambdaDuringFill = true;

@@ -444,10 +444,18 @@ being visited and looked up every remaining step, which the skin pays for
 thousands of times over; it is now retired permanently, guarded by a runtime
 check that the cooling history really is monotone.
 
-**On case 1 the shape is no longer the expensive part.** That case takes 47 s with
-the shape OFF and 60 s with it on, so the remaining minute is the Eulerian channel
-at nz=161, not the particle model. Further work on the solve has little left to
-give there.
+**Where the cost actually is, measured rather than assumed.** At the shipped
+nz=41 default, case 1 takes 1.9 s with the shape OFF and 11 s with it on - so the
+Eulerian channel and the freeze solve together are under two seconds and the
+particle shape is the rest.
+
+The channel is not what scales badly either. Case 1 with the shape off runs in
+1.1 / 6.5 / 51 s at nz 41 / 81 / 161 - roughly nz-cubed, which is the EXPLICIT
+conduction solve rather than the channel: `dt = 0.2*dz^2/alpha` is a stability
+limit, so halving dz quadruples the step count on top of the extra nodes.
+Flattening that means an implicit scheme, which would change a validated
+component and move the reference numbers, and at nz=41 it costs 1.1 s. Recorded
+as measured and deliberately not done.
 
 Shapes are cached between builds, keyed on the CONTENTS of the fill field, freeze
 history and the four process fields the solve reads. It is worth less than it

@@ -238,6 +238,14 @@ namespace MoldStress
         /// </summary>
         public int DepthShapeParticles = 4000;
 
+        /// <summary>
+        /// Time steps in each particle solve. Hardcoded at 3000 and never tested
+        /// until 2026-08-18, which is the same gap the particle count had - and
+        /// this one is now the dominant cost of a reference case, so an untested
+        /// constant here is an untested runtime.
+        /// </summary>
+        public int DepthShapeSteps = 2000;
+
         public bool ChannelNarrowing = false;
     }
 

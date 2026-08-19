@@ -423,7 +423,7 @@ namespace MoldStress
             // model: the deposited layer records arrival order.
             double depositedHeight = 0.0;
 
-            int nStep = 3000;
+            int nStep = Math.Max(100, proc.DepthShapeSteps);
             double tEnd = Math.Max(freeze.CentreFreezeTimeS, tFill) * 1.05;
             double dt = tEnd / nStep;
 
