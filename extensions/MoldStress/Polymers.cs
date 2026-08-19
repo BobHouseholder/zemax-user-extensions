@@ -146,7 +146,19 @@ namespace MoldStress
                 KSource = "glassy stress-optic coefficient, PMMA fibre measurements, -4.5 to -1.5e-12 /Pa (Aston, polymer optical fibre); most negative value taken",
                 Provisional = true,
                 CMeltBrewster = -1200.0,
-                CMeltSource = "melt-state stress-optical coefficient for PMMA, order 1e-9 /Pa from rheo-optical literature",
+                CMeltSource = "UNSOURCED AND DISPUTED - see CMeltContested. The text here claimed 'order 1e-9 /Pa from rheo-optical literature' and named no paper",
+                CMeltContested = "2026-08-18: this -1200 Br carries NO citation, and the only "
+                    + "sourced value found is -30 Br - forty times smaller - from Wimberger-Friedl "
+                    + "(1991), read via US Patent 9720155 Table 1, measured 20 C above Tg. The same "
+                    + "table's PC and PS values match this model's independently, so the table is "
+                    + "not suspect. THE VALUE WAS NOT SWAPPED, deliberately: Wimberger-Friedl also "
+                    + "reports that PMMA's stress-optical coefficient CHANGES SIGN near 144 C, and "
+                    + "-30 Br was measured at ~125 C while this model runs PMMA from a 250 C melt "
+                    + "down through Tg - straddling that inversion. Adopting -30 would trade an "
+                    + "unsourced number for one measured outside the regime it would be used in. "
+                    + "PMMA PREDICTIONS SHOULD NOT BE TRUSTED until a temperature-resolved C_R is "
+                    + "obtained; both candidate values are wrong somewhere in the range this model "
+                    + "integrates over.",
                 TgC = 105, MeltTempC = 250, MoldTempC = 70,
                 DiffusivityMm2PerS = 0.11, CtePerK = 70e-6, ModulusMPa = 3200, PoissonRatio = 0.37,
                 DensityGPerCm3 = 1.19,
@@ -200,17 +212,24 @@ namespace MoldStress
                 KSource = "MEASURED: Kim, Yoon & Kornfield, Key Eng. Mater. 326-328 (2006) 183 - glassy -8 to -9 Br; midpoint taken. K11/K12 split assumed",
                 Provisional = false,
                 CMeltBrewster = 1000.0,
-                CMeltSource = "MEASURED: same source, melt +920 to +1160 Br. A corroboration from TOPAS 5013 was claimed here and is now CONTESTED - see CMeltContested",
-                CMeltContested = "2026-08-18: this entry claimed corroboration at +1.0e-9 /Pa "
-                    + "(+1000 Br) for TOPAS 5013 from Korea-Australia Rheol. J. (2012). US Patent "
-                    + "9720155 Table 1 reports TOPAS 5013 at -700 Br, NEGATIVE, citing Min & Yoon "
-                    + "(2012) - plausibly the same work, opposite sign. A pairing-convention "
-                    + "artifact was checked FIRST and does not explain it: that same table lists PC "
-                    + "at +3000 to +4000 Br, which is the standard convention, so its negative 5013 "
-                    + "is negative under a convention that gets PC right. UNRESOLVED - neither "
-                    + "primary source was read. THE MEASURED 6017 VALUE ITSELF IS NOT IN DOUBT "
-                    + "(+920 to +1160 Br, Kim/Yoon/Kornfield 2006); what is in doubt is whether it "
-                    + "generalises to other cyclo-olefin grades.",
+                CMeltSource = "MEASURED: Kim, Yoon & Kornfield, Key Eng. Mater. 326-328 (2006) 183, melt +920 to +1160 Br. A corroboration from TOPAS 5013 was claimed here until 2026-08-18 and was WITHDRAWN - see CMeltContested. This value now rests on its own measurement alone, which is what it always should have done",
+                CMeltContested = "RESOLVED 2026-08-18, and the conflict was real rather than a "
+                    + "convention artifact. US Patent 9720155 Table 1 was read verbatim: it lists "
+                    + "TOPAS 5013 at -700 Br, NEGATIVE, measured 20 C above Tg (so genuinely the "
+                    + "rubbery coefficient), citing Min & Yoon (2012), under the plain definition "
+                    + "dn = C.dsigma. The table is internally consistent and standard - it gives "
+                    + "BPA-PC +3000~4000 Br and PMMA -30 Br, both from Wimberger-Friedl (1991) and "
+                    + "both independently corroborated - so a reversed pairing convention does NOT "
+                    + "explain the sign. THIS ENTRY'S OLD CLAIM THAT 5013 CORROBORATES IT AT "
+                    + "+1.0e-9 /Pa IS WITHDRAWN AS FALSE. What survives: 6017's own measurement is "
+                    + "untouched, and the two need not agree, because TOPAS is an ethylene-NORBORNENE "
+                    + "copolymer whose C_R composition-dependence is reported as UNCLEAR (Dynamic "
+                    + "birefringence of cyclic olefin copolymers - for ethylene-cyclododecene C_R "
+                    + "falls with cyclic content; for ethylene-norbornene no systematic trend was "
+                    + "found). 5013 and 6017 differ in norbornene content - 5013 Tg ~134 C against "
+                    + "6017's 178 C - so a sign difference between grades of this family is not "
+                    + "excluded by anything measured. DO NOT borrow this value onto another COC "
+                    + "grade.",
                 MeltModulusPa = 2.8e5,
                 TgC = 178, MeltTempC = 290, MoldTempC = 120,
                 DiffusivityMm2PerS = 0.10, CtePerK = 60e-6, ModulusMPa = 3000, PoissonRatio = 0.36,
@@ -234,15 +253,19 @@ namespace MoldStress
                 KSource = "BORROWED from TOPAS 6017 (Kim, Yoon & Kornfield 2006). A photoelastic coefficient of 5.0e-12 /Pa is quoted for 'Zeonor 480R' in a USPTO document that could NOT be retrieved to verify - not used, recorded as a lead only. NOTE this GLASSY constant is what Zeon's low-birefringence marketing refers to ('ultra-low photoelastic constant'), and it drives the THERMAL channel, not the melt orientation that sets the in-plane peak",
                 Provisional = true,
                 CMeltBrewster = 1000.0,
-                CMeltSource = "BORROWED from TOPAS 6017, AND THE BORROWING IS NOW JUSTIFIED rather than merely flagged. Inoue et al., Dynamic Birefringence of Amorphous Polyolefins II, Polymer Journal (1995): C_R for five amorphous polyolefins is ~1.7e-9 /Pa (1700 Br), all positive, all close together, and explicitly 'relatively insensitive to the details of molecular structure for this kind of polyolefins'. TOPAS's measured 1000 Br sits within a factor of 2 of that family value, so no plausible 480R melt coefficient is an eighth of it - see the refuted falsifier in VALIDATION-SOURCES.md. THE JUSTIFICATION IS WEAKER AS OF 2026-08-18 - see CMeltContested",
-                CMeltContested = "2026-08-18: the borrowing rests on Inoue et al. (1995) - C_R "
-                    + "for amorphous polyolefins is ~1700 Br, all POSITIVE and structure-"
-                    + "insensitive. A reported -700 Br for TOPAS 5013 (US Patent 9720155 Table 1, "
-                    + "citing Min & Yoon 2012) would contradict that family claim directly, and if "
-                    + "it stands then 'structure-insensitive across polyolefins' is false and this "
-                    + "borrowing loses its basis. Unresolved. Case 2's in-plane peak over-predicts "
-                    + "by 12.87x, and a sign error would not explain that (the clause reads a "
-                    + "magnitude) - but a factor-of-2 grade difference is inside the borrowing.",
+                CMeltSource = "REBASED 2026-08-18. The number is unchanged at +1000 Br but its JUSTIFICATION no longer routes through TOPAS: it now rests on Inoue et al., Polymer Journal (1995), which measured C_R ~1700 Br, positive, for amorphous polyolefins with a five-membered ring in the MAIN CHAIN - i.e. ROMP-made cyclic olefin POLYMERS, which is exactly what ZEONEX is. That is the same family as this grade, where the old justification borrowed across families from a COC",
+                CMeltContested = "NARROWED 2026-08-18. The earlier worry was that a reported "
+                    + "-700 Br for TOPAS 5013 would refute Inoue's structure-insensitivity and "
+                    + "destroy this borrowing. Reading US Patent 9720155 Table 1 confirms the -700 "
+                    + "is real, but it does NOT reach this entry: Inoue's set is ROMP polymers with "
+                    + "a five-membered ring in the main chain (COP - Zeonex, Zeonor), while TOPAS is "
+                    + "an ethylene-norbornene chain copolymer (COC). They are different families, "
+                    + "and the structure-insensitivity claim was only ever made about the first. So "
+                    + "this grade being a COP is what supports it, and routing the justification "
+                    + "through a COC was the actual defect. WHAT REMAINS OPEN: no melt coefficient "
+                    + "has been measured for 480R itself, and Inoue's family value is +1700 Br "
+                    + "against the +1000 used here - a factor of 1.7 that would make case 2's "
+                    + "in-plane over-prediction WORSE, not better.",
                 MeltModulusPa = 2.8e5,
                 DiffusivityMm2PerS = 0.10, CtePerK = 60e-6, ModulusMPa = 2100, PoissonRatio = 0.36,
                 DensityGPerCm3 = 1.01,
