@@ -114,6 +114,35 @@ namespace MoldStress
     /// runner exists and Q therefore cannot all be reaching the cavity. The 29x
     /// ratio is withdrawn and must not be requoted.
     ///
+    /// ============================================================
+    /// THE REGISTERED REFERENCE IS IN DOUBT, 2026-08-18 - READ BEFORE TRUSTING
+    /// THIS CLAUSE IN EITHER DIRECTION.
+    ///
+    /// The companion paper on THIS lens - Lai & Wang, Applied Optics 47(12)
+    /// 2017-2027 (2008), obtained and read in full - measures the SAME part and
+    /// reports a birefringence about FIFTY TIMES the 3.7e-5 registered here.
+    /// Two independent routes in that paper agree:
+    ///
+    ///   (i)  Fig. 6 gives a fringe order of 6.5, unchanged by annealing. Over
+    ///        the 2 mm thickness that is dn = 1.9e-3 at 589 nm, 2.1e-3 at 633 nm.
+    ///   (ii) Fig. 14's right-hand axis is "Removal Birefringence (x10^-3)",
+    ///        full scale 2.21e-3 aligned with 50% on the left-hand axis - so
+    ///        removing 0.4 mm removes about 2.0e-3, and the total is of that
+    ///        order.
+    ///
+    /// AGAINST THAT NUMBER THIS MODEL IS ABOUT 4x LOW, NOT 12.87x HIGH. The
+    /// registered 3.7e-5 was read off Fig. 7 of the OTHER paper (Chang et al.),
+    /// and the two cannot both describe the same quantity on the same lens.
+    ///
+    /// NOTHING IS CHANGED HERE ON THAT BASIS. Rewriting a registered reference
+    /// because a newer source disagrees is the move this project refuses, and the
+    /// discrepancy is not yet explained - Fig. 7 may plot a different plane, a
+    /// different station, an annealed sample, or a normalised quantity. What is
+    /// recorded is that the clause's DIRECTION is now unsafe to quote: "12.87x
+    /// too high" rests on a reference that a companion paper contradicts by 51x.
+    /// Resolving it needs Fig. 7's caption and axis read directly.
+    /// ============================================================
+    ///
     /// So the in-plane peak clause is NOT presently a test of the birefringence
     /// model. It is a test of two flow inputs nobody has sourced, and it should
     /// not be "fixed" by tuning the model. It becomes evaluable when the gate
@@ -179,13 +208,32 @@ namespace MoldStress
             // the memory. Three directional predictions in this project have been
             // wrong for exactly that reason - see new-goal step 1b. Measured, not
             // argued.
+            // FILL TIME IS NOW SOURCED, 2026-08-18, from Lai & Wang, Applied
+            // Optics 47(12) 2017-2027 (2008) - the companion paper on THIS lens.
+            // Its Fig. 5(c) plots shear stress at sensor nodes against "Filling
+            // Time (sec)" over 0.28-0.50 s, with every curve rising to its
+            // maximum at the right-hand edge: filling ENDS at about 0.50 s.
+            //
+            // The derivation below gave 0.109 s and is kept because it is still
+            // the only way to get a fill time from the ORIGINAL paper - but it
+            // assumes the whole screw output enters this one cavity, and the
+            // measured 0.50 s says it does not, by about a factor of five. That is
+            // the cavity-plus-runner share that has been unsourced since this case
+            // was registered.
+            //
+            // MEASURED CONSEQUENCE: tau_wall falls 1.67 -> 1.05 MPa, which brings
+            // it within ~20% of the 0.75-0.89 MPa peak shear stress that paper's
+            // OWN simulation reports (Figs. 5a and 10, axes in units of 1e-1 MPa).
+            // The in-plane peak barely moves, 4.763e-4 -> 4.434e-4, exactly as the
+            // Cross exponent predicts.
+            const double SourcedFillTimeS = 0.50;
             double screwDiaMm = 22.0, injSpeedMmPerS = 22.0;
             double screwRate = Math.PI / 4.0 * screwDiaMm * screwDiaMm * injSpeedMmPerS;
             double sagMm = curvature - Math.Sqrt(Math.Max(curvature * curvature - 16.0 * 16.0, 0.0));
             double lensVolMm3 = Math.PI * 16.0 * 16.0 * 2.0
                               - Math.PI * sagMm * sagMm * (3.0 * curvature - sagMm) / 3.0;
             double fillDerived = Math.Max(lensVolMm3 / Math.Max(screwRate, 1e-9), 1e-4);
-            double fillUsed = Program.Value(args, "-filltime", fillDerived);
+            double fillUsed = Program.Value(args, "-filltime", SourcedFillTimeS);
 
             var proc = new Process
             {
@@ -229,9 +277,14 @@ namespace MoldStress
                 "  process: melt {0:F0} C, mould {1:F0} C, hold {2:F1} MPa, grid nz {3}",
                 p.MeltTempC, p.MoldTempC, proc.PackPressureMPa, nz));
             Console.WriteLine(string.Format(ci,
-                "  fill time {0:F4} s DERIVED from a {1:F0} mm screw at {2:F0} mm/s " +
-                "({3:F0} mm3/s) filling {4:F0} mm3 - the paper states no fill time",
+                "  fill time {0:F4} s SOURCED from Lai & Wang, Appl. Opt. 47(12) 2017 " +
+                "Fig. 5(c) (filling ends ~0.50 s). For contrast, a {1:F0} mm screw at {2:F0} mm/s " +
+                "({3:F0} mm3/s) filling {4:F0} mm3 would give",
                 proc.FillTimeS, screwDiaMm, injSpeedMmPerS, screwRate, lensVolMm3));
+            Console.WriteLine(string.Format(ci,
+                "    (that derivation gives {0:F4} s, {1:F1}x shorter - it assumes the WHOLE "
+                + "screw output enters this one cavity, and the measured fill time says it "
+                + "does not)", fillDerived, proc.FillTimeS / Math.Max(fillDerived, 1e-9)));
             Console.WriteLine();
 
             // EVERY model switch, not just the ones this case happened to need.
