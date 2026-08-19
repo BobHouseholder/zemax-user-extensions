@@ -95,6 +95,82 @@ fully standalone for batch/scripted use.
 Options: `-out <path.png>`, `-rays N` (default 7), `-width W -height H`,
 `-noorient`, `-file <path>` (headless batch mode), `-quiet`.
 
+### DistortionTarget
+
+Builds a chrome-on-glass dot distortion target in non-sequential mode: a glass
+plate carrying a square grid of chrome dots, replicated by an **Array** object
+rather than placed as individual objects, which is what makes ~40,000 dots
+affordable at all. Defaults reproduce [Edmund Optics
+15963](https://www.edmundoptics.com/p/100-x-100mm-05mm-spacing-glass-distortion-target/15963/)
+— 100 x 100 x 1.5 mm soda-lime, 0.250 mm dots on a 0.500 mm pitch, reflective
+first-surface chromium — and every default is a configuration that was built and
+traced against acceptance criteria fixed before the trace, not a guess. A ribbon
+run gets no command line, so the parameters are exposed in a settings dialog.
+
+Options: `-n <int>` (dots per side), `-pitch <mm>`, `-dot <mm>` (dot diameter),
+`-plate <mm>`, `-thick <mm>`, `-material <name>`, `-coating <name>`,
+`-film <mm>` (chrome film thickness), `-drawlimit <int>`, `-rig` (also add a
+collimated source and detector), `-save <path>`, `-file <path>`, `-nodialog`.
+
+The dialog seeds itself from the last run, so precedence is **explicit flag >
+last run > built-in default**: `-n 150` opens the dialog showing 150, not
+whatever was built last time.
+
+The dialog recomputes the derived geometry on every keystroke — span, outermost
+dot edge, clearance to the face, chrome fill fraction, whether a dot lands on
+axis — and **refuses to build while the corner dots hang over the edge of the
+plate**. That guard is there because the failure is invisible in the inputs and
+obvious in the outputs: reading the vendor's "pattern size 100 x 100" as the grid
+span gives 201 dots, whose outermost edge lands at 50.125 mm on a 100 mm plate.
+"201, 0.5, 100" looks perfectly reasonable; "clearance -0.125 mm" does not.
+
+Three things it does that are not obvious, each of which is a silent failure in
+the ZOS-API rather than an error:
+
+- **The dot is a thin Cylinder Volume, not a flat disc.** Assigning a `Coating`
+  to a single-face flat object — Annulus, Ellipse, Rectangle, CylinderPipe — is
+  silently ignored: no exception, and the property still reads `None` afterwards,
+  for any coating name including stock ones. Only multi-face solids and
+  PolygonObject accept one. A flat dot blocks light but carries no reflectance at
+  all, which is precisely wrong for a part sold on its reflective chrome. The
+  coating is read back after being set, and the build fails if it did not take.
+- **Face 1 is the front face** (0 = Side Faces, 2 = Back Face). Coating the wrong
+  face is exactly as silent as not coating at all.
+- **Parameter cells are typed.** The Array object's counts and draw limit are
+  Integer cells, and `DoubleValue` throws on them — from the getter as well as the
+  setter, so the type cannot be discovered by reading the cell first. Every write
+  dispatches on `cell.DataType`.
+
+**Dot visibility and render speed.** The layout will not show you all the dots,
+and that is deliberate — two separate mechanisms are at work, neither of which
+affects a single traced result:
+
+- **`Draw Limit`** (Array parameter 20, verified off the cell header) caps how
+  many array elements are *drawn*. OpticStudio's own default is 500; this
+  extension uses 2000. At the default target that means the layout renders 2000
+  of 39,601 dots, so the field looks sparse and the corners look empty. Set
+  `-drawlimit` to `n^2` (39601 for the stock target) to draw every one.
+- **The parent dot is hidden.** Object 2 carries *Do Not Draw*, because it is a
+  template the Array replicates rather than a dot in its own right. It also
+  carries *Rays Ignore This Object*, so it is not traced either — without that it
+  would double-count one dot.
+
+Raising the limit to the full field is slow, and heavier than the same grid drawn
+as flat discs would be: each dot is a solid **Cylinder Volume**, forced by the
+coating limitation above. Drawing 39,601 solids is a different proposition from
+drawing 39,601 discs. Prefer the wireframe
+**NSC 3D Layout** over **NSC Shaded Model** at high limits, raise it only when you
+actually want the render, and put it back afterwards.
+
+Timings are deliberately not quoted here: the ZOS-API runs headless with no
+graphics context — `ToFile` on a layout analysis writes a text stub whatever
+extension you give it — so the render can only be produced and timed in the GUI,
+and it has not been measured.
+
+Radiometry with this target requires **ray splitting on**. Without it OpticStudio
+applies no coating at all, so the chrome neither blocks nor reflects and the plate
+reads as bare glass.
+
 ### DetectorDump
 
 Batch-exports EVERY detector in a non-sequential system in one command,
@@ -496,6 +572,7 @@ at runtime by `ZOSAPI_NetHelper`.
 ```
 dotnet build extensions\ReverseSystem\ReverseSystem.csproj --configuration Release
 dotnet build extensions\EquivalentGlassFinder\EquivalentGlassFinder.csproj --configuration Release
+dotnet build extensions\DistortionTarget\DistortionTarget.csproj --configuration Release
 ```
 
 Copy the built `.exe` files to `{Zemax Data}\ZOS-API\Extensions\`.
