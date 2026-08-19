@@ -391,6 +391,46 @@ figures. nz=21 was measured and is NOT converged - ratio 3.34 with the peak
 pinned at the wall - so 41 is a floor with something below it rather than the
 smallest grid that passed. The case runs in 15 s where nz=321 took 6m29.
 
+### Case 3 - free quench, and the first test of the THERMAL channel alone
+
+Bisphenol-A polycarbonate, 2 mm sheet, quenched 160 C -> 60 C. Wimberger-Friedl,
+PhD thesis, TU Eindhoven (1991) ch. 3.2, open access. Run with `-refquench`.
+
+Cases 1 and 2 are mouldings, so every number in them is flow and thermal
+together; the thermal channel had only ever been tested by NULLING it. A quench
+has no flow, and `ThermalProfile` reads only the freeze history - so this case
+needs no gate, flow rate or fill time, and none of case 2's unsourced inputs can
+reach it.
+
+| Clause | Result | Bar | |
+|---|---|---|---|
+| sign reversal | core +5.4e-4, surface -9.5e-4 | must reverse | PASS |
+| direction | core tension, surface compression | as published | PASS |
+| zero crossing | **z/d 0.572** (published 0.5-0.8) | [0.40, 0.90] | PASS |
+| shape ratio | \|surface\|/\|core\| **1.76** (published 1.7-4.0) | [1.0, 8.0] | PASS |
+| magnitude | \|surface\| 9.5e-4 against a published 1.75e-3 | within 3x | PASS |
+| null | CTE=0 collapses the profile to exactly 0 | must collapse | PASS |
+| control on the null | CTE restored gives 9.8e-4 | must not be dead | PASS |
+
+**All seven clauses passed on the first run, and the case immediately found a
+failure they cannot see.** The source reports the zero crossing moving OUTWARD as
+the initial temperature rises, z/d ~0.3 to ~0.85, naming Ti the dominant control.
+The model moves it INWARD, 0.589 -> 0.565 across Ti 150-180 C - wrong direction
+and a span 23x too small. Printed as an unscored TREND DIAGNOSTIC rather than
+folded into the verdict, because registering a clause after seeing its result is
+moving the bar.
+
+The cause is structural: `ThermalProfile` depends only on the freeze-off
+temperature profile through force and moment balance, and that balance is nearly
+scale-invariant - raising Ti scales the profile without reshaping it. The source
+models a viscous-elastic-elastic transition where material above Tg relaxes,
+which is what makes its crossing Ti-dependent. **This is the thermal channel's
+first identified structural limitation, and it took one case to find it.**
+
+Converged in shape, drifting at the surface node: crossing 0.581 / 0.575 / 0.572
+/ 0.571 and ratio 1.50 / 1.67 / 1.76 / 1.81 at nz 41 / 81 / 161 / 321. Default is
+161; at nz=41 the ratio falls below the published range.
+
 ### Case 2 - ZEONEX 480R plano-convex lens
 
 32 mm diameter, 2 mm centre thickness, 0.8 mm edge gate, 275 C / 124 C,

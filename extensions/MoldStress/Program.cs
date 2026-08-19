@@ -50,6 +50,7 @@ namespace MoldStress
                 if (Has(args, "-selftest")) return SelfTest.Run(args);
                 if (Has(args, "-gates")) return Gates(args);
                 if (Has(args, "-run")) return Runner.Run(args);
+                if (Has(args, "-refquench")) return RefQuench.Run(args);
                 if (Has(args, "-refcase2")) return RefCase2.Run(args);
                 if (Has(args, "-refcase")) return RefCase.Run(args);
                 if (Has(args, "-depthdiag")) return DepthDiag.Run(args);
@@ -181,7 +182,7 @@ namespace MoldStress
         /// <summary>Flags that consume the following token as their value.</summary>
         private static readonly string[] ValueFlags = {
             "-file", "-filltime", "-fountain", "-frontmode", "-gateconfig",
-            "-materials", "-melttemp", "-moldtemp", "-nz", "-shape-nodes", "-shape-particles", "-shape-steps", "-nzexport",
+            "-materials", "-melttemp", "-moldtemp", "-nz", "-shape-nodes", "-shape-particles", "-shape-steps", "-ti", "-tc", "-nzexport",
             "-curvature", "-lambdascale", "-out", "-outdir", "-packpressure", "-packtime",
             "-particles",
         };
@@ -191,7 +192,7 @@ namespace MoldStress
             "-complementary", "-deposition-decay", "-deposition-support",
             "-depthdiag", "-directindex", "-eulerian-depth",
             "-gates", "-h", "-help", "-quiet",
-            "-lagrangian", "-lagrangian-depth",
+            "-lagrangian", "-lagrangian-depth", "-refquench",
             "-refcase", "-refcase2", "-relax-below-tg", "-ribbon",
             "-run", "-selftest",
             "-thinned-lambda",
