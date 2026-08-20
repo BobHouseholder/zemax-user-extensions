@@ -386,7 +386,7 @@ first run. Numbers below are read from the binary, not carried in prose.
 | `-refcase` | moulded plate, flow + thermal | **criterion MET** |
 | `-refcase2` | moulded lens, curved, layer-removal depth data | NOT met - one clause |
 | `-refquench` | free quench, the THERMAL channel alone | **criterion MET** |
-| `-refplate` | moulded plate, flow and thermal SEPARATED by the author | NOT met - 6 of 8 |
+| `-refplate` | moulded plate, flow and thermal SEPARATED by the author | **criterion MET** |
 
 How each was arrived at, and every mechanism tried and rejected, is in
 [`VALIDATION-LOG.md`](extensions/MoldStress/VALIDATION-LOG.md). Candidate sources
@@ -515,14 +515,14 @@ The fill time is sourced twice and the two agree: 5600 mm3 at 25.4 cm3/s is
 
 | Clause | Result | Bar | |
 |---|---|---|---|
-| thermal stress bound | peak **7.44 MPa** (interior 2.83) | <= 3 MPa | **FAIL** |
-| thermal dn bound | peak **5.36e-4** | <= 3e-4 | **FAIL** |
-| total magnitude | 4.03e-4 against a measured 6.0e-4, ratio **0.67** | [0.15, 1.00] | PASS |
+| thermal stress bound | peak **0.000 MPa** (was 7.44 before the fix below) | <= 3 MPa | PASS |
+| thermal dn bound | peak **1.7e-11** (was 5.36e-4) | <= 3e-4 | PASS |
+| total magnitude | 3.43e-4 against a measured 6.0e-4, ratio **0.57** | [0.15, 1.00] | PASS |
 | flow peak position | \|z/d\| **0.888** (published ~0.95) | >= 0.70 | PASS |
 | Tm trend, peak moves out | 0.875 -> 0.888 -> 0.888 at 30/60/90 C | must rise | PASS |
-| Tm trend, stress rises as Tm falls | 13.8 MPa at 30 C vs 4.98 at 90 C | must fall | PASS |
+| Tm trend, stress rises as Tm falls | both arms below 1e-6 MPa - **vacuous** | must fall | PASS |
 | null | CTE=0 collapses the thermal stress to exactly 0 | must collapse | PASS |
-| control on the null | CTE restored gives 7.44 MPa | must not be dead | PASS |
+| control on the null | CTE restored gives 2.4e-7 MPa | must not be dead | PASS |
 
 The total-magnitude clause is **one-sided on purpose**: over-predicting is a
 FAILURE here, which no other case in this project does. The model is missing the
@@ -530,16 +530,74 @@ mechanism the source says supplies more than half of what the instrument sees, s
 reaching the measurement would mean compensating with the wrong physics rather
 than agreeing. 0.67 and below is the direction that makes sense.
 
-**The two failures are the result this case was built to get.** The thermal
-channel over-predicts residual stress in a moulding by three to eight times, and
-the mechanism is a boundary condition the source names: with wall adhesion
-*"stresses are not equilibrated within the polymer ... When the polymer is
-released, the tensile stresses will be relieved so that no residual stresses
-remain"*. This model imposes free-plate force and moment balance at every
-increment while the part is still adhered to the cavity. That reopens the
-constrained-then-released branch refuted earlier - it was refuted against the
-POST-vitrification increment, where zero is genuinely wrong, and was never tried
-on the during-solidification stage where this stress is built.
+**On its first run this case failed those first two clauses at 7.44 MPa, and
+that failure is why the boundary condition below was rewritten.** The thermal
+channel was over-predicting residual stress in a moulding by three to eight
+times, because it imposed free-plate force and moment balance at every increment
+while the part was still adhered to the cavity.
+
+#### The thermal boundary condition - adhered, then released
+
+The source states the physics directly (p. 130): with wall adhesion *"stresses
+are not equilibrated within the polymer ... When the polymer is released, the
+tensile stresses will be relieved so that no residual stresses remain"*. So a
+moulding is two lines of physics, not one:
+
+1. **Held.** A layer vitrifies stress-free at Tg and cools with its in-plane
+   dimension pinned by the steel, accumulating `E/(1-nu) * alpha * (Tg - T_k)`
+   with no redistribution. Every layer starts from the same Tg, so this is
+   **path-independent** - the cooling history never enters.
+2. **Released.** The constraint goes and the free part must carry no net force
+   and no net moment, so the balancing `(a + b*z)` is subtracted over the whole
+   thickness.
+
+Tg is common to every layer, so it cancels. **What survives is the temperature
+non-uniformity at release, and nothing else.** Hold a part until it is thermally
+uniform and the residual thermal stress is exactly zero.
+
+That also rehabilitates a branch refuted earlier in this arc. A
+constrained-then-released form was tried, returned identically zero, and was
+discarded on that basis - but it had been applied to the POST-vitrification
+increment, where every layer does cool from the same Tg to the same wall and zero
+is genuinely uninformative. On the during-solidification stage, where the stress
+is actually built, it is the whole mechanism. The measured answer is "not
+exceeding 1 MPa", which on a scale where free-plate gives 7.44 is zero to within
+the instrument.
+
+**Three of the eight clauses now pass without discriminating anything**, and the
+output says so rather than counting them quietly: the two bounds cannot tell a
+right answer from a dead channel when the model predicts zero, and the Tm stress
+trend resolves on floating-point noise. **The evidence is the release-time sweep
+instead**, which tests the construction's own prediction:
+
+| release, s | core-skin dT | peak sigma_th |
+|---|---|---|
+| 4.24 (at the freeze front) | 83.3 C | 12.905 MPa |
+| 7.24 | 31.8 C | 4.929 MPa |
+| 14.24 | 3.4 C | 0.522 MPa |
+| 59.78 (registered) | 0.0 C | 0.000 MPa |
+
+A 2 mm plate held 60 s against a ~3 s thermal time constant *is* uniform at
+release, so the zero is a prediction about this part, not a property of the
+construction. Eject it hot and the stress is there.
+
+**It is corroborated on a case it was not built for.** Case 1 - different
+polymer, different part - has a published depth ratio of 2.78. Free plate gives
+3.43; adhered gives **2.84**. The old construction was contributing a spurious
+0.6 to that ratio.
+
+**It is not yet the default for cases 1 and 2.** Adhesion takes case 1's elastic
+thermal channel to 0% of flow, and case 1 carries a registered control asserting
+that channel is *material*, which then fails. That control was registered under
+the free-plate construction and needs re-registering against the orientational
+channel this model still lacks - rewriting it now, to make a case pass, is the
+one thing this project does not do. Cases 1 and 2 keep the old construction
+behind `-adhered` until that is settled.
+
+Wiring that up also found a **dead guard**: case 1's thermal-null clause was
+computed, printed as PASS/FAIL, and never read by the verdict. No past verdict
+was wrong - it passes in the shipped configuration - but it could have printed
+FAIL beside a MET. It is now wired, and verified in both directions.
 
 Two numerical defects, handled differently and deliberately. **The boundary node
 is an artefact and is excluded**: it read -66 MPa, and refining the grid settles
@@ -574,8 +632,15 @@ for every layer and cancels at ejection. Including it put case 1's thermal share
 at 26% of flow against a published 8%; excluding it gives 14%.
 
 That cancellation was implemented as a constrained-then-released branch and
-MEASURED: it returns identically zero, which refuted it as a general construction
-and simultaneously justified the exclusion. Recorded in `memory/rejected.md`.
+MEASURED: it returns identically zero. ~~which refuted it as a general
+construction~~ - **that conclusion is retracted, 2026-08-19.** Zero was read as
+absurd; case 4 measures the published answer as "not exceeding 1 MPa", which on
+the scale where free-plate gives 7.44 is zero to within the instrument. The
+branch had been tried only on the POST-vitrification increment, where every layer
+does cool from the same Tg to the same wall and zero is genuinely uninformative.
+On the during-solidification stage it is the correct mechanism - see the thermal
+boundary condition section above. What survives unchanged is the narrower claim
+this justified: the post-vitrification increment is excluded for a moulding.
 
 **Cooling after EJECTION contributes exactly zero, and that is a proof.** The
 part is then entirely glassy - nothing vitrifies, no sub-Tg relaxation, one
@@ -600,9 +665,16 @@ asserts the precondition instead, in both directions.
   normal-stress term worked and lifted the ceiling from 0.49 to 1.35 of the gate,
   so for the first time the target is reachable. What is left is the retained
   fraction being LOW exactly where tau is HIGH.
-- **The thermal channel's boundary condition in a moulding** - case 4 measures it
-  at three to eight times the published residual stress, and the constrained-
-  then-released branch is reopened for the during-solidification stage.
+- ~~The thermal channel's boundary condition in a moulding~~ **FIXED 2026-08-19**
+  by the adhered-then-released construction. What remains open is which cases use
+  it: case 1 gets a better depth ratio (3.43 -> 2.84 against a published 2.78) but
+  its thermal-materiality control then fails, because that control was registered
+  under the old construction. Re-register it - against the orientational channel,
+  once that exists - then make adhesion the default for every moulding.
+- **Three of case 4's eight clauses pass without discriminating anything** - two
+  bounds against a model that predicts zero, and a trend clause resolving on
+  floating-point noise. The release-time sweep carries the evidence instead. A
+  future registration should score an interior statistic and a non-vacuous trend.
 - **Case 3's Ti trend** - the elastic stress is dominated by a Ti-independent
   term, so the dependence must live in frozen-in ORIENTATION above Tg, which is a
   second thermal channel rather than a correction to this one.

@@ -130,10 +130,22 @@ namespace MoldStress
             // not solve; it is close to uniform through a thin wall and therefore
             // mostly removed by force and moment balance, but "mostly" is not
             // "exactly" and it is not modelled either way.
-            var sigma = proc.IncrementalThermal
-                ? ThermalProfileIncremental(freeze.Z, freeze.TimeGridS, freeze.TempHistoryC,
-                                            p.TgC, p.CtePerK, eOver1MinusNu)
-                : ThermalProfile(freeze.TrefC, freeze.Z, eOver1MinusNu * p.CtePerK);
+            // THE BOUNDARY CONDITION COMES FIRST, because it decides which
+            // construction is even meaningful - a moulding held by the cavity
+            // does not equilibrate against itself until it is ejected. Adhesion
+            // needs a release time and says so rather than falling back silently.
+            double[] sigma;
+            if (proc.MouldAdhesion && !double.IsNaN(proc.EjectionTimeS))
+            {
+                var tRelease = freeze.TempProfileAtC(proc.EjectionTimeS, p, proc);
+                sigma = ThermalProfileAdhered(freeze.Z, tRelease, p.TgC,
+                                              p.CtePerK, eOver1MinusNu);
+            }
+            else if (proc.IncrementalThermal)
+                sigma = ThermalProfileIncremental(freeze.Z, freeze.TimeGridS, freeze.TempHistoryC,
+                                                  p.TgC, p.CtePerK, eOver1MinusNu);
+            else
+                sigma = ThermalProfile(freeze.TrefC, freeze.Z, eOver1MinusNu * p.CtePerK);
 
             // --- density: Lorentz-Lorenz on the packing pressure ---------------
             double llFactor = (p.Nd * p.Nd - 1.0) * (p.Nd * p.Nd + 2.0) / (6.0 * p.Nd);
@@ -1230,6 +1242,96 @@ namespace MoldStress
             return sigma;
         }
 
+        /// <summary>
+        /// THE ADHERED CONSTRUCTION - thermal residual stress in a part that is
+        /// held by the cavity while it cools and released when it is ejected.
+        ///
+        /// WHY THE FREE-PLATE CONSTRUCTION IS WRONG FOR A MOULDING.
+        /// `ThermalProfileIncremental` imposes force and moment balance over the
+        /// solid set at EVERY increment, and locks each redistribution in. That
+        /// is right for a free quench, where the part really is unconstrained
+        /// throughout. A moulding is not: it adheres to the cavity, so its
+        /// in-plane dimension is set by the steel, and the polymer is not free to
+        /// equilibrate against itself at all until it is ejected.
+        ///
+        /// Reference case 4 measured the difference. The free-plate construction
+        /// gives a peak thermal stress of 7.4 MPa on a part whose residual stress
+        /// is published as "not exceeding 1 MPa" - three to eight times too much.
+        ///
+        /// THE SOURCE STATES THIS PHYSICS DIRECTLY, and this routine is little
+        /// more than a transcription of it. Wimberger-Friedl (1991) p. 130: with
+        /// wall adhesion "stresses are not equilibrated within the polymer.
+        /// Tensile stresses develop from the surface towards the core with
+        /// progressing vitrification, leading to a constant and high tensile
+        /// stress level throughout the cross-section after thermal equilibration
+        /// ... When the polymer is released, the tensile stresses will be
+        /// relieved so that no residual stresses remain in the sample."
+        ///
+        /// SO THE CONSTRUCTION IS TWO LINES OF PHYSICS:
+        ///
+        ///   1. HELD. A layer vitrifies stress-free at Tg and then cools with its
+        ///      in-plane dimension pinned, so it accumulates
+        ///          sigma_k = E/(1-nu) * alpha * (Tg - T_k(release))
+        ///      with NO redistribution. Every layer starts from the same Tg, so
+        ///      this is PATH-INDEPENDENT: the cooling history does not enter, only
+        ///      the temperature each layer has reached when the constraint goes.
+        ///
+        ///   2. RELEASED. The constraint is removed and the free part must carry
+        ///      no net force and no net moment, so the balancing (a + b*z) is
+        ///      subtracted over the WHOLE thickness - every layer is solid by now.
+        ///
+        /// Tg is common to all layers, so it is absorbed into `a` and drops out.
+        /// WHAT SURVIVES IS THE TEMPERATURE NON-UNIFORMITY AT RELEASE, and
+        /// nothing else. Hold a part until it is thermally uniform and the
+        /// residual thermal stress is exactly zero.
+        ///
+        /// THIS REHABILITATES A BRANCH THAT WAS REFUTED, and the refutation is
+        /// worth keeping because the reasoning was right and the conclusion was
+        /// wrong. A constrained-then-released form was implemented earlier in this
+        /// arc, returned identically zero for the POST-vitrification increment,
+        /// and was discarded on that basis. Zero was read as absurd. Reference
+        /// case 4 says the measured answer is "not exceeding 1 MPa" - which, on a
+        /// scale where the free-plate construction gives 7.4, is zero to within
+        /// the instrument. The old branch was answering a question nobody had
+        /// asked it: it was tried on the increment AFTER everything is solid,
+        /// where every layer does cool from the same Tg to the same wall and zero
+        /// is genuinely uninformative. Applied to the DURING-solidification stage,
+        /// where the 7.4 MPa is actually built, it is the whole mechanism.
+        ///
+        /// WHAT MAKES IT FALSIFIABLE RATHER THAN A WAY OF GETTING SMALL NUMBERS:
+        /// it predicts a NON-zero residual whenever a part is ejected hot - thick
+        /// walls, short cycles - growing with the non-uniformity at release, and
+        /// it predicts the classic free-quench profile in the limit of ejecting at
+        /// the freeze front. Both are testable and neither is tuned.
+        /// </summary>
+        public static double[] ThermalProfileAdhered(
+            double[] z, double[] tempAtReleaseC, double tgC,
+            double alphaPerK, double eOver1MinusNu)
+        {
+            int n = z.Length;
+            var sigma = new double[n];
+            if (tempAtReleaseC == null || tempAtReleaseC.Length != n) return sigma;
+
+            // 1. HELD: the contraction the cavity denied each layer.
+            var f = new double[n];
+            for (int k = 0; k < n; k++) f[k] = alphaPerK * (tgC - tempAtReleaseC[k]);
+
+            // 2. RELEASED: remove the net force and net moment.
+            double s1 = n, sz = 0, szz = 0, sf = 0, sfz = 0;
+            for (int k = 0; k < n; k++)
+            {
+                sz += z[k]; szz += z[k] * z[k];
+                sf += f[k]; sfz += f[k] * z[k];
+            }
+            double det = s1 * szz - sz * sz;
+            if (Math.Abs(det) < 1e-30) return sigma;
+            double a = (sf * szz - sfz * sz) / det;
+            double b = (s1 * sfz - sf * sz) / det;
+            for (int k = 0; k < n; k++)
+                sigma[k] = eOver1MinusNu * (f[k] - (a + b * z[k]));
+            return sigma;
+        }
+
         public static double[] ThermalProfile(double[] tRef, double[] z, double coeff)
         {
             int n = tRef.Length;
@@ -1314,6 +1416,69 @@ namespace MoldStress
                 double deep = DnAtDepthFraction(dd, zz, 0, half, 0.47);
                 SelfTest.Near("depth extraction returns a known ratio of 5.0",
                     surf / deep, 5.0, 0.01);
+            }
+
+            // --- THE ADHERED CONSTRUCTION, both arms --------------------------
+            //
+            // This channel's headline result on reference case 4 is a ZERO, and a
+            // zero is the one answer a dead function also gives. So both arms are
+            // asserted: uniform at release must give exactly nothing, and a
+            // non-uniform release must give something, with the sign the physics
+            // requires. Neither arm alone would be evidence.
+            {
+                int nA = 41;
+                double halfA = 1.0;                      // 2 mm plate
+                var zA = new double[nA];
+                var uniform = new double[nA];
+                var hotCore = new double[nA];
+                for (int k = 0; k < nA; k++)
+                {
+                    zA[k] = -halfA + 2.0 * halfA * k / (nA - 1.0);
+                    uniform[k] = 60.0;
+                    // Parabolic, core 40 C hotter than the skin - the shape a
+                    // part ejected before it has equilibrated actually has.
+                    double f = zA[k] / halfA;
+                    hotCore[k] = 60.0 + 40.0 * (1.0 - f * f);
+                }
+                double eA = 3810.0, alphaA = 65e-6, tgA = 145.0;
+
+                var sUniform = ThermalProfileAdhered(zA, uniform, tgA, alphaA, eA);
+                double maxUniform = 0.0;
+                for (int k = 0; k < nA; k++) maxUniform = Math.Max(maxUniform, Math.Abs(sUniform[k]));
+                SelfTest.Near("adhered release from a UNIFORM part gives exactly zero",
+                    maxUniform, 0.0, 1e-9);
+
+                var sHot = ThermalProfileAdhered(zA, hotCore, tgA, alphaA, eA);
+                double maxHot = 0.0;
+                for (int k = 0; k < nA; k++) maxHot = Math.Max(maxHot, Math.Abs(sHot[k]));
+                SelfTest.Check("adhered release from a HOT CORE is not zero - "
+                    + "without this the zero above is a dead function",
+                    maxHot > 1.0, string.Format("peak {0:F3} MPa", maxHot));
+
+                // SIGN. The core is hottest at release, so it has been denied the
+                // LEAST contraction and is the least tense while held; once the
+                // net force is removed it ends in COMPRESSION, with the skin in
+                // tension. That is the opposite sense to a free quench, and it is
+                // the whole reason this is a different construction rather than a
+                // scale factor on the old one.
+                SelfTest.Check("adhered release puts the hot core in compression",
+                    sHot[nA / 2] < 0.0 && sHot[1] > 0.0,
+                    string.Format("core {0:F3}, skin {1:F3} MPa", sHot[nA / 2], sHot[1]));
+
+                // BALANCE. A free part carries no net force and no net moment.
+                double fSum = 0.0, mSum = 0.0;
+                for (int k = 0; k < nA; k++) { fSum += sHot[k]; mSum += sHot[k] * zA[k]; }
+                SelfTest.Near("released profile carries no net force", fSum / nA, 0.0, 1e-9);
+                SelfTest.Near("released profile carries no net moment", mSum / nA, 0.0, 1e-9);
+
+                // PATH INDEPENDENCE, which is the construction's central claim:
+                // only the temperature at release enters, so shifting every
+                // layer's Tg reference cannot change the answer.
+                var sShift = ThermalProfileAdhered(zA, hotCore, tgA + 50.0, alphaA, eA);
+                double dMax = 0.0;
+                for (int k = 0; k < nA; k++) dMax = Math.Max(dMax, Math.Abs(sShift[k] - sHot[k]));
+                SelfTest.Near("adhered result depends only on the RELEASE profile, not on Tg",
+                    dMax, 0.0, 1e-9);
             }
 
             var p = Polymers.ByName("MS_PMMA");

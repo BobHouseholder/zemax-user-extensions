@@ -122,6 +122,16 @@ namespace MoldStress
             // time only) and remain the declared defaults.
             var proc = new Process { FillTimeS = 1.0, PackPressureMPa = 71.3, PackTimeS = 3.0 };
             if (Program.Has(args, "-relax-below-tg")) proc.RelaxBelowTg = true;
+            // ADHERED BOUNDARY CONDITION, opt-in while it is being measured.
+            // The release time is SOURCED here: the paper states a 25 s cooling
+            // time, so the part leaves the cavity at fill + 25 s. That is the
+            // input reference case 4 had from its stated 60 s cycle, and it is
+            // why this can be tried on case 1 at all without inventing a number.
+            if (Program.Has(args, "-adhered"))
+            {
+                proc.MouldAdhesion = true;
+                proc.EjectionTimeS = Program.Value(args, "-ejecttime", proc.FillTimeS + 25.0);
+            }
             // -lagrangian-depth is now the default and is kept as an explicit
             // opt-IN so scripts written while it was optional still say what
             // they mean. -eulerian-depth is the opt-out.
@@ -261,6 +271,16 @@ namespace MoldStress
             double surfaceDn = 0, coreDn = 0;
             double bandSurfaceDn = 0, bandCoreDn = 0;
             double peakDepthFraction = 0, reversedRatio = 0;
+
+            // HOISTED so the verdict can read it. It was declared inside the
+            // block that prints it, computed, printed as PASS/FAIL, and never
+            // read again - a clause that could print FAIL while the verdict said
+            // MET. Found 2026-08-19 when the adhered boundary condition made it
+            // fail for the first time and the verdict did not move. No past
+            // verdict was wrong, because it passes in the shipped configuration;
+            // the guard was simply not wired, which is the same dead-guard defect
+            // as the flag rejector that shipped without being called.
+            bool thermalNullClause = true;
 
             Channels.ResetClampStats();
             foreach (double azimuth in new[] { 0.0, 180.0 })
@@ -554,6 +574,7 @@ namespace MoldStress
                     bool collapses = relS < 1e-9 && relD < 1e-9;
                     bool material = contribution > 0.10;
                     bool thermalNull = collapses && material;
+                    thermalNullClause = thermalNull;
                     say(string.Format(ci,
                         "      null (ii) thermal: CTE=0 collapses to flow-only " +
                         "(surface {0:E1}, deep {1:E1}) AND channel is material " +
@@ -769,7 +790,7 @@ namespace MoldStress
             say("  as one that passed.");
 
             bool pass = withinFactor && decays && nullMoves
-                        && depthInBand && peakOutside && depthNull;
+                        && depthInBand && peakOutside && depthNull && thermalNullClause;
             // A criterion result read without knowing a physical term is disabled
             // is worse than no result, so it is printed beside the verdict rather
             // than in a footnote.

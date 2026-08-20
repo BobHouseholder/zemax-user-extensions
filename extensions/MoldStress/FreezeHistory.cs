@@ -195,6 +195,65 @@ namespace MoldStress
             return f;
         }
 
+        /// <summary>
+        /// Temperature profile at an arbitrary LATER time, by continuing the
+        /// conduction solve from the centre-freeze snapshot.
+        ///
+        /// WHY THIS IS NEEDED. `Build` stops the moment the centre crosses Tg,
+        /// because that is everything the flow channel needs - its memory
+        /// integral ends there too. But a moulding stays in the cavity long after
+        /// that, and the residual thermal stress of an ADHERED part is set by the
+        /// temperature non-uniformity at the moment it is RELEASED, which is a
+        /// time this history has never carried.
+        ///
+        /// The march is the same explicit scheme `Build` uses, started from the
+        /// snapshot rather than from the melt, on the reporting grid rather than
+        /// the fine one. It is a smooth decaying field by then - every mode above
+        /// the fundamental is long gone - so the coarser grid costs nothing.
+        ///
+        /// Returns the snapshot unchanged when the requested time is at or before
+        /// the centre freeze, which is the honest answer rather than an
+        /// extrapolation backwards.
+        /// </summary>
+        public double[] TempProfileAtC(double tS, Polymer p, Process proc)
+        {
+            double wall = double.IsNaN(proc.MoldTempC) ? p.MoldTempC : proc.MoldTempC;
+            int n = Z.Length;
+            var T = (double[])TrefC.Clone();
+            if (!(tS > CentreFreezeTimeS)) return T;
+
+            double alpha = p.DiffusivityMm2PerS;
+            double dz = ThicknessMm / (n - 1);
+            double dt = 0.25 * dz * dz / alpha;      // half the explicit limit
+            var Tn = new double[n];
+            double t = CentreFreezeTimeS;
+
+            // A cap, because an unbounded while() driven by a user-supplied time
+            // is a hang waiting to happen. At the grids in use this allows a
+            // physical time far beyond any moulding cycle; StepsUsed is exposed
+            // so a run that hits the cap is visible rather than silently short.
+            const int maxSteps = 8000000;
+            int steps = 0;
+            while (t < tS && steps < maxSteps)
+            {
+                double h = Math.Min(dt, tS - t);
+                double r = alpha * h / (dz * dz);
+                for (int i = 1; i < n - 1; i++)
+                    Tn[i] = T[i] + r * (T[i + 1] - 2.0 * T[i] + T[i - 1]);
+                Tn[0] = Tn[n - 1] = wall;
+                Array.Copy(Tn, T, n);
+                t += h; steps++;
+            }
+            LastCoolSteps = steps;
+            LastCoolReachedS = t;
+            return T;
+        }
+
+        /// <summary>Instrumentation on the last TempProfileAtC call, so a run
+        /// that stopped at the step cap can be seen rather than inferred.</summary>
+        public int LastCoolSteps;
+        public double LastCoolReachedS;
+
         /// <summary>The short-time closed form, kept as the control and as the
         /// documented approximation the model deliberately does not use.</summary>
         public static double ErfFreezeTime(double depthMm, Polymer p, Process proc)

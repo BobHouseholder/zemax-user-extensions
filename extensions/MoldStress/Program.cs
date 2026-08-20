@@ -185,7 +185,7 @@ namespace MoldStress
             "-file", "-filltime", "-fountain", "-frontmode", "-gateconfig",
             "-materials", "-melttemp", "-moldtemp", "-gatewidth", "-packfrac", "-nz", "-shape-nodes", "-shape-particles", "-shape-steps", "-ti", "-tc", "-nzexport",
             "-curvature", "-lambdascale", "-out", "-outdir", "-packpressure", "-packtime",
-            "-particles", "-station", "-semidia", "-gatethick",
+            "-particles", "-station", "-semidia", "-gatethick", "-ejecttime",
         };
 
         /// <summary>Flags that stand alone.</summary>
@@ -230,7 +230,7 @@ namespace MoldStress
             "-depthdiag", "-directindex", "-eulerian-depth", "-incremental-thermal", "-narrowing", "-normal-stress", "-packing-orientation", "-snapshot",
             "-gates", "-h", "-help", "-quiet",
             "-lagrangian", "-lagrangian-depth", "-refquench", "-refplate",
-            "-refcase", "-refcase2", "-relax-below-tg", "-ribbon",
+            "-refcase", "-refcase2", "-relax-below-tg", "-ribbon", "-freeplate", "-adhered",
             "-run", "-selftest",
             "-thinned-lambda",
             "-writecatalog",

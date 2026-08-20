@@ -317,6 +317,27 @@ namespace MoldStress
         /// an explicit opt-in; there is no opt-out because the old form has no
         /// defence.
         /// </summary>
+        /// <summary>
+        /// The part is ADHERED TO THE CAVITY while it cools, so its in-plane
+        /// dimension is set by the mould and not by the polymer's own force and
+        /// moment balance. True for a moulding; FALSE for a free quench, where
+        /// the part is unconstrained from the first instant.
+        ///
+        /// This is a BOUNDARY CONDITION, not a coefficient, and it is the
+        /// difference between reference case 3 and reference case 4. Setting it
+        /// needs EjectionTimeS as well - the construction is meaningless without
+        /// a release time, and a silent fallback would be the same
+        /// looks-like-it-ran defect that RejectFlagsNotReadBy exists to stop.
+        /// </summary>
+        public bool MouldAdhesion = false;
+
+        /// <summary>
+        /// When the part leaves the cavity, seconds from the start of filling.
+        /// NaN means unspecified, and MouldAdhesion then has nothing to act on.
+        /// For a moulding this is the cycle time less the fill.
+        /// </summary>
+        public double EjectionTimeS = double.NaN;
+
         public bool NormalStressDifference = true;
 
         public bool ChannelNarrowing = false;

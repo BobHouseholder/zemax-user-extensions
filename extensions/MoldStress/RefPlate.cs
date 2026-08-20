@@ -146,6 +146,51 @@ namespace MoldStress
     ///       passes on a channel that is dead rather than one that responds.
     ///
     /// ==================================================================
+    /// THE BOUNDARY CONDITION WAS FIXED, AND THE CRITERION IS NOW MET
+    /// ==================================================================
+    ///
+    /// `Channels.ThermalProfileAdhered` replaces free-plate balance-at-every-
+    /// increment with the physics the source describes: held layers accumulate
+    /// uniform tension against the cavity, and release relieves it. See that
+    /// routine for the derivation. Applied here with the release time taken from
+    /// the stated 60 s cycle, ALL EIGHT CLAUSES PASS - peak thermal stress goes
+    /// 7.44 MPa -> 0.000, against a published "not exceeding 1 MPa".
+    ///
+    /// THREE OF THOSE PASSES CARRY NO INFORMATION, and saying so is the point.
+    /// (a) and (b) are bounds and the model now predicts essentially zero, so
+    /// they cannot distinguish a right answer from a dead channel; (e2) compares
+    /// two numbers at the 1e-7 MPa level and resolves on floating-point noise -
+    /// it is flagged VACUOUS in the output rather than quietly counted.
+    ///
+    /// SO THE EVIDENCE IS THE RELEASE-TIME SWEEP, not the verdict. The
+    /// construction predicts that residual stress tracks the temperature
+    /// non-uniformity at release and nothing else, and it does:
+    ///
+    ///     release s   core-skin dT   peak sigma_th MPa
+    ///        4.24        83.34 C          12.905
+    ///        7.24        31.83 C           4.929
+    ///       14.24         3.37 C           0.522
+    ///       59.78         0.00 C           0.000
+    ///
+    /// A 2 mm plate held 60 s against a ~3 s thermal time constant IS uniform at
+    /// release, so zero is a prediction about this part rather than a property of
+    /// the construction. Eject it hot and the stress is there.
+    ///
+    /// AND IT IS CORROBORATED ON A CASE IT WAS NOT BUILT FOR. Reference case 1,
+    /// a different polymer and a different part, has a published depth ratio of
+    /// 2.78. Free plate gives 3.43; adhered gives 2.84. The old construction was
+    /// contributing a spurious 0.6 to that ratio.
+    ///
+    /// WHY IT IS NOT YET THE DEFAULT FOR CASES 1 AND 2. Adhesion takes case 1's
+    /// elastic thermal channel to 0% of flow, and case 1 carries a registered
+    /// control asserting that channel is MATERIAL - which then fails. That
+    /// control was registered under the free-plate construction and needs
+    /// re-registering against the orientational channel this model still lacks;
+    /// re-writing it now, to make a case pass, is the one thing this project does
+    /// not do. So cases 1 and 2 keep the old construction behind `-adhered` until
+    /// that is settled, and the disagreement is recorded rather than smoothed.
+    ///
+    /// ==================================================================
     /// WHAT THIS CASE CANNOT SETTLE, stated before running
     /// ==================================================================
     ///
@@ -179,13 +224,15 @@ namespace MoldStress
     /// committed, and the criterion was not touched
     /// ==================================================================
     ///
-    /// SIX OF EIGHT CLAUSES PASS. (c) total magnitude 0.67 of the measurement,
+    /// SIX OF EIGHT CLAUSES PASSED ON THE FIRST RUN. (c) total magnitude 0.67 of the measurement,
     /// inside the one-sided band and below it, which is the direction the
     /// missing channel predicts. (d) the flow peak lands at |z/d| 0.888 against
     /// a published ~0.95. (e1) and (e2) both reproduce the published trend
     /// directions. The null and its control both hold.
     ///
-    /// (a) AND (b) FAIL, AND THAT IS THE RESULT THIS CASE WAS BUILT TO GET.
+    /// (a) AND (b) FAILED ON THE FIRST RUN, AND THAT IS THE RESULT THIS CASE WAS
+    /// BUILT TO GET - they pass now, and only because the boundary condition was
+    /// fixed. The record below is left as it stood.
     /// Peak |sigma_thermal| is 7.4 MPa where the measurement says the residual
     /// stress does not exceed 1 MPa; even the well-resolved interior runs
     /// 1-2.8 MPa. The thermal channel over-predicts residual stress in a
@@ -235,6 +282,9 @@ namespace MoldStress
         public const double MeltTempC = 320.0;
         public const double RefMouldTempC = 60.0;
         public const double InjectionRateMm3PerS = 25400.0;   // 25.4 cm3/s
+        /// <summary>Stated cycle time, p. 127. The part is in the cavity for all
+        /// of it bar the fill, so release is at cycle minus fill.</summary>
+        public const double CycleTimeS = 60.0;
 
         // --- the published observables ----------------------------------------
         /// <summary>"not exceeding 1 MPa", p. 137 and p. 143.</summary>
@@ -264,7 +314,8 @@ namespace MoldStress
 
             int badForMode = Program.RejectFlagsNotReadBy(
                 args, new[] { "-nz", "-moldtemp", "-station", "-semidia", "-filltime",
-                              "-gatethick", "-snapshot" }, "-refplate");
+                              "-gatethick", "-snapshot", "-freeplate", "-ejecttime" },
+                "-refplate");
             if (badForMode != 0) return badForMode;
 
             int nz = (int)Program.Value(args, "-nz", 161.0);
@@ -274,6 +325,11 @@ namespace MoldStress
             double stationFrac = Program.Value(args, "-station", 0.5);
             double gateThick = Program.Value(args, "-gatethick", 1.0);
             bool incremental = !Program.Has(args, "-snapshot");
+            // The part is ADHERED unless asked otherwise. -freeplate restores the
+            // old construction so the two can be compared in one command rather
+            // than argued about.
+            bool adhered = !Program.Has(args, "-freeplate");
+            double ejectS = Program.Value(args, "-ejecttime", double.NaN);
 
             // GEOMETRY, DERIVED rather than typed. The equal-volume disc is
             // computed from the plate's own dimensions, so if those are ever
@@ -289,6 +345,12 @@ namespace MoldStress
             double modelVolMm3 = Math.PI * semiDia * semiDia * ThicknessMm;
             double fillDerivedS = modelVolMm3 / InjectionRateMm3PerS;
             double fillS = Program.Value(args, "-filltime", fillDerivedS);
+
+            // RESOLVED BEFORE THE HEADER IS PRINTED. It was resolved after, for
+            // one build, and the header duly announced "released at NaN s" for a
+            // run that had used 59.8 - a label that would have had a reader
+            // conclude the feature had not run at all.
+            if (double.IsNaN(ejectS)) ejectS = Math.Max(CycleTimeS - fillS, fillS);
 
             say("");
             say("MoldStress - fourth reference case: MOULDED PLATE (channel split)");
@@ -308,8 +370,13 @@ namespace MoldStress
                 "  running R {0:F2} mm, fill {1:F4} s, Q {2:F0} mm3/s (stated {3:F0}), "
                 + "front width {4:F0} mm", semiDia, fillS, modelVolMm3 / fillS,
                 InjectionRateMm3PerS, PlateWidthMm));
-            say(string.Format(ci, "  grid: nz {0}, thermal construction: {1}, station {2:F2} "
-                + "of the path", nz, incremental ? "INCREMENTAL" : "snapshot", stationFrac));
+            say(string.Format(ci, "  grid: nz {0}, station {1:F2} of the path", nz, stationFrac));
+            say(string.Format(ci, "  thermal boundary condition: {0}",
+                adhered
+                    ? string.Format(ci, "ADHERED to the cavity, released at {0:F1} s "
+                        + "(cycle {1:F0} s less the fill)", ejectS, CycleTimeS)
+                    : "FREE PLATE at every increment (-freeplate) - " +
+                      (incremental ? "incremental" : "snapshot")));
             say("");
 
             var p = Polymers.ByName("MS_POLYCARB").WithProcessTemps(MeltTempC, tm);
@@ -319,6 +386,8 @@ namespace MoldStress
                 PackPressureMPa = 0.0,      // stated: no separate packing stage
                 PackTimeS = 0.0,
                 IncrementalThermal = incremental,
+                MouldAdhesion = adhered,
+                EjectionTimeS = ejectS,
             };
 
             var plate = BuildElement(semiDia, gateThick);
@@ -510,26 +579,47 @@ namespace MoldStress
             for (int j = 0; j < tmSeries.Length; j++)
             {
                 double pz, ps, av;
-                Measure(tmSeries[j], nz, semiDia, gateThick, fillS, incremental, stationFrac,
-                        out pz, out ps, out av);
+                Measure(tmSeries[j], nz, semiDia, gateThick, fillS, incremental, adhered,
+                        ejectS, stationFrac, out pz, out ps, out av);
                 peakZ[j] = pz; peakSig[j] = ps;
                 say(string.Format(ci, "    {0,3:F0} C       {1:F3}              {2:F3}"
                     + "               {3:E3}", tmSeries[j], pz, ps, av));
             }
             bool e1Ok = peakZ[1] >= peakZ[0] && peakZ[2] >= peakZ[1] && peakZ[2] > peakZ[0];
+            // IS (e2) MEASURING ANYTHING? Under the adhered boundary condition
+            // this part's thermal stress is zero to about 1e-7 MPa, and a
+            // strict > comparison between two numbers that size resolves on
+            // floating-point noise. It would then print PASS while carrying no
+            // information, which is worse than a FAIL.
+            //
+            // The registered clause is NOT changed - it stands as committed, and
+            // tightening a bar after watching it pass is still moving it. The
+            // vacuity is reported beside the verdict instead, and recorded for
+            // the next registration.
             bool e2Ok = peakSig[0] > peakSig[2];
+            bool e2Vacuous = Math.Max(peakSig[0], peakSig[2]) < 0.01;
             say(string.Format(ci,
                 "  (e1) flow peak moves OUTWARD with Tm: {0:F3} -> {1:F3} -> {2:F3}  =>  {3}",
                 peakZ[0], peakZ[1], peakZ[2], e1Ok ? "PASS" : "FAIL"));
             say(string.Format(ci,
                 "  (e2) thermal stress rises as Tm falls: {0:F3} MPa at 30 C vs {1:F3} at "
                 + "90 C  =>  {2}", peakSig[0], peakSig[2], e2Ok ? "PASS" : "FAIL"));
+            if (e2Vacuous)
+            {
+                say("       VACUOUS - both arms are below 0.01 MPa, so this clause is");
+                say("       resolving on floating-point noise and its verdict carries no");
+                say("       information. See the release-time sweep below for a test of");
+                say("       the same channel that does bite.");
+            }
 
             // ---- (f) null and (g) its control ---------------------------------
             say("");
             var pNull = p.WithZeroCte();
-            var chNull = Channels.Build(plate, pNull, proc, fill,
-                FreezeHistory.Build(plate.CentreThicknessMm, pNull, proc, nz, 10 * nz));
+            // The SAME freeze history. Zeroing the CTE cannot change the
+            // conduction solve - FreezeHistory reads diffusivity, Tg and the two
+            // process temperatures and never touches thermal expansion - so
+            // rebuilding it here solved the identical problem a second time.
+            var chNull = Channels.Build(plate, pNull, proc, fill, freeze);
             double nullMax = 0.0;
             for (int k = 1; k < nz - 1; k++)
                 nullMax = Math.Max(nullMax, Math.Abs(chNull.SigmaThermalMPa[iSta, k]));
@@ -541,6 +631,58 @@ namespace MoldStress
             say(string.Format(ci,
                 "  (g) control on the null: CTE restored gives {0:E3} MPa  =>  {1}",
                 sigMax, gOk ? "PASS" : "FAIL"));
+
+            // ---- RELEASE-TIME SWEEP: can the adhered channel respond at all? --
+            //
+            // THIS IS THE CONTROL ON A ZERO. Under adhesion this part's residual
+            // thermal stress comes out at ~1e-7 MPa, and a channel that returns
+            // zero is indistinguishable from a channel that is DEAD unless it is
+            // shown to move when the physics says it should. Clauses (a), (b) and
+            // (e2) all pass here without discriminating anything, so on their own
+            // they are not evidence.
+            //
+            // The construction's own prediction is specific and cheap to test:
+            // the residual is set by the temperature NON-UNIFORMITY at release
+            // and by nothing else, so ejecting the part early - while the core is
+            // still hot - must produce a large stress, and holding it until the
+            // wall temperature has reached the core must produce none. If the
+            // sweep is flat, the mechanism is not implemented, it is just absent.
+            if (adhered)
+            {
+                say("");
+                say("  RELEASE-TIME SWEEP (control on the zero - the mechanism's own");
+                say("  prediction is that residual stress tracks the non-uniformity at release):");
+                say("     release s    core-skin dT at release    peak sigma_th MPa");
+                double tFreeze = freeze.CentreFreezeTimeS;
+                var times = new[] { tFreeze, tFreeze + 1.0, tFreeze + 3.0, tFreeze + 10.0,
+                                    tFreeze + 30.0, ejectS };
+                double first = double.NaN, last = double.NaN;
+                // The freeze history does NOT depend on the release time - it is
+                // built from the melt and wall temperatures alone - so it is
+                // solved once and reused. Rebuilding it inside the loop cost six
+                // full conduction solves per run and changed nothing.
+                foreach (double te in times)
+                {
+                    var tRel = freeze.TempProfileAtC(te, p, proc);
+                    var sg = Channels.ThermalProfileAdhered(freeze.Z, tRel, p.TgC, p.CtePerK,
+                                                            eOver1MinusNuOf(p));
+                    double mx = 0.0;
+                    for (int k = 1; k < nz - 1; k++) mx = Math.Max(mx, Math.Abs(sg[k]));
+                    double dT = tRel[nz / 2] - tRel[1];
+                    if (double.IsNaN(first)) first = mx;
+                    last = mx;
+                    say(string.Format(ci, "     {0,8:F2}    {1,18:F2}    {2,17:F3}", te, dT, mx));
+                }
+                say(string.Format(ci,
+                    "    span {0:F3} -> {1:F3} MPa. The channel {2}.",
+                    first, last,
+                    first > 100.0 * Math.Max(last, 1e-9)
+                        ? "RESPONDS - ejecting hot builds stress, holding to uniformity removes it"
+                        : "DOES NOT RESPOND, so the zeros above are a dead channel, not a result"));
+                say("    So the ~0 at the registered release time is a PREDICTION about this");
+                say("    part - 2 mm held for 60 s against a ~3 s thermal time constant - and");
+                say("    not a property of the construction.");
+            }
 
             // ---- THE CHANNEL SPLIT, DIAGNOSTIC AND NOT SCORED -----------------
             //
@@ -583,6 +725,11 @@ namespace MoldStress
         /// series and the reference condition cannot drift apart - which is
         /// exactly how RefCase2's depth table once disagreed with the dn beside it.
         /// </summary>
+        private static double eOver1MinusNuOf(Polymer p)
+        {
+            return p.ModulusMPa / (1.0 - p.PoissonRatio);
+        }
+
         private static MouldedElement BuildElement(double semiDia, double gateThick)
         {
             var e = new MouldedElement
@@ -606,7 +753,8 @@ namespace MoldStress
         }
 
         private static void Measure(double tm, int nz, double semiDia, double gateThick,
-                                    double fillS, bool incremental, double stationFrac,
+                                    double fillS, bool incremental, bool adhered, double ejectS,
+                                    double stationFrac,
                                     out double flowPeakZOverD, out double peakSigmaMPa,
                                     out double avgTotalDn)
         {
@@ -615,6 +763,7 @@ namespace MoldStress
             {
                 FillTimeS = fillS, PackPressureMPa = 0.0, PackTimeS = 0.0,
                 IncrementalThermal = incremental,
+                MouldAdhesion = adhered, EjectionTimeS = ejectS,
             };
             var e = BuildElement(semiDia, gateThick);
             var fill = FillField.Build(e, p, proc, 101);
