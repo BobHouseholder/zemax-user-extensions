@@ -908,3 +908,328 @@ retention 0.235 against a measured 0.202; case 2 0.143 against 0.0111), and the
 wall shear stress it computes, 1.67 MPa, is above the melt-fracture threshold.
 Both inputs that set it - the cavity's share of the shot, and a 12.6 mm flow
 width - are unsourced choices.
+
+
+---
+
+# The four reference cases, in detail
+
+**MOVED OUT OF THE README 2026-08-20**, unchanged, when that file was cut in
+half. The README keeps the verdict table and the honest-use envelope; this is
+the working detail behind them. Nothing here was rewritten in the move - if a
+number below disagrees with the README, the README is newer.
+
+#### Case 1 - TOPAS 6017S-04 plate
+
+100 x 100 x 1.5 mm, film gate on one edge, 280 C / 150 C / 71.3 MPa. Constants
+from Kim, Yoon & Kornfield, *Key Eng. Mater.* **326-328** (2006) 183. Polymers
+2024 16(2) 168.
+
+| Clause | Result | Bar | |
+|---|---|---|---|
+| in-plane peak | 1.392e-4 against a published 1.2e-4 - **1.16x** | within 2x | PASS |
+| in-plane shape | maximum at the gate, 47.3% of it at the far edge | must decay | PASS |
+| gate null | peak moves x=0 -> x=100 mm when the gate moves | must track | PASS |
+| depth ratio | **3.44** against a published 2.78 | [1.39, 5.56] | PASS |
+| depth peak | maximum at 95% of the half-wall | beyond 75% | PASS |
+| depth null (flow) | mirrored freeze order drives the deep value to exactly 0 | must respond | PASS |
+| depth null (thermal) | CTE=0 collapses to flow-only, channel material (3.44 vs 2.84) | must collapse | PASS |
+
+Converged at **nz=41**: depth ratio 3.43 / 3.46 / 3.45 / 3.43 and peak 1.16x /
+1.16x / 1.16x / 1.17x at nz 41 / 81 / 161 / 321. nz=21 is NOT converged, so 41 is
+a floor rather than the smallest grid that passed.
+
+**Channel split, printed beside the clause because a ratio built from a SIGNED sum
+cannot be attributed from the ratio alone:** at the surface sampling depth flow is
+3.169e-4 and thermal +4.42e-5 (14%); at the deep point 1.116e-4 and -6.66e-6 (6%).
+That brackets the 8% thermal share published for this material class. It was 26%
+until the post-vitrification increment was restricted to free parts - see below.
+
+#### Case 2 - ZEONEX 480R plano-convex lens
+
+32 mm diameter, 2 mm centre thickness, 0.8 mm edge gate, 275 C / 124 C, 98.10 MPa.
+Chang, Yu, Chiu, Yang, Lai & Wang (CoreTech / NTHU). Chosen because it is a lens
+rather than a plate, a different material family, and its depth data comes from
+successive 0.1 mm layers turned off with the fringe order recounted - so the
+quantity removed IS the quantity measured.
+
+| Clause | Result | Bar | |
+|---|---|---|---|
+| in-plane peak | 4.434e-4 against a published **3.68e-3** - **0.12x** | within 2x | **FAIL (LOW)** |
+| in-plane shape | maximum at the gate, 14% of it at the far edge | must decay | PASS |
+| layer removal | 32.4 / 44.7 / 48.9 / 50.0% against 27.9 / 30.8 / 43.9 / 46.2% | 3 of 4 within 10 pts | PASS |
+
+**The registered reference was wrong by a factor of 100, and correcting it
+INVERTS this failure.** Chang et al. Fig. 7's y-axis is labelled x10^-5 and its
+peak reads 3.7 - the source of the old 3.7e-5. That label is a typo. The same
+paper gives dn = lambda*N/h, states a maximum observed fringe count of N = 5, and
+has a 0.80 mm gate, so 589.3e-9 x 5 / 0.8e-3 = **3.68e-3** - matching the plotted
+3.7 to two significant figures. Two cross-checks from the companion paper agree
+in order: 6.5 fringes over the 2 mm centre is 1.9e-3, and its removal axis runs
+to 2.21e-3. Nothing in either paper supports 1e-5.
+
+The model reads 4.434e-4, so it is about **8x LOW** where it had been recorded as
+12x HIGH. **The correction does not rescue the clause - it still fails, in the
+other direction - which is why it can be trusted.** Withdrawn along with the old
+direction: "the model over-predicts"; the suspicion that a melt-fracture-level
+wall shear stress was CAUSING an over-prediction; and the reading that 480R's
+borrowed melt coefficient being larger than 1000 Br would make matters worse. It
+would now help.
+
+**The fill time is now sourced** at 0.50 s (Lai & Wang Fig. 5c), replacing a
+0.109 s derivation that assumed the whole screw output entered this one cavity.
+tau_wall falls 1.67 -> 1.05 MPa, within ~20% of that paper's own simulated
+0.75-0.89 MPa peak, so the melt-fracture concern largely dissolves on sourced
+numbers. The gate width remains a choice of mine.
+
+**The sampling thickness in the reference is pinned, not open.** Eq. (9)'s text
+calls Fig. 7 the "gap wise average residual birefringence" - the same quantity
+this model averages - and solving that equation for the thickness each axis
+reading would require settles both at once, assuming nothing: the x10^-5 label
+needs h = 79.6 mm, forty times the lens's centre thickness, while x10^-3 needs
+0.796 mm, the 0.80 mm gate land to within 0.5%. So the 5x deficit is real and
+none of the five candidates explains it - not the flow inputs, the relaxation
+time, the retained fraction, the depth port's normalisation, or the conversion
+thickness.
+
+#### Case 3 - free quench, the THERMAL channel alone
+
+Bisphenol-A polycarbonate, 2 mm sheet, 160 C -> 60 C bath. Wimberger-Friedl, PhD
+thesis, TU Eindhoven (1991) ch. 3.2, open access. Cases 1 and 2 are mouldings, so
+every number in them is flow and thermal together; this channel had only ever
+been tested by NULLING it. A quench has no flow, and the thermal construction
+reads only the freeze history - so no gate, flow rate or fill time reaches it.
+
+| Clause | Result | Bar | |
+|---|---|---|---|
+| sign reversal | core +5.38e-4, surface -1.42e-3 | must reverse | PASS |
+| direction | core tension, surface compression | as published | PASS |
+| zero crossing | z/d **0.649** (published 0.5-0.8) | [0.40, 0.90] | PASS |
+| shape ratio | \|surface\|/\|core\| **2.64** (published 1.7-4.0) | [1.0, 8.0] | PASS |
+| magnitude | \|surface\| 1.42e-3 against a published 1.75e-3 | within 3x | PASS |
+| null | CTE=0 collapses the profile to exactly 0 | must collapse | PASS |
+| control on the null | CTE restored gives 3.20e-3 | must not be dead | PASS |
+
+Published figures are read off scanned figure axes at +-10-15%, so every band is
+set wide for that. The magnitude clause was registered as deliberately weak
+BEFORE running, because the source attributes much of the quench birefringence to
+frozen-in orientation above Tg, which this channel does not model.
+
+**All seven passed first run, and the case immediately found a failure they
+cannot see.** The source reports the zero crossing moving OUTWARD as initial
+temperature rises, z/d ~0.3 to ~0.85, naming Ti the dominant control. The model
+moves it 0.645 -> 0.656 - right direction, span 51x too small. Printed as an
+unscored trend diagnostic rather than folded into the verdict, because
+registering a clause after seeing its result is moving the bar.
+
+#### Case 4 - moulded PC plate, with the channels separated by the author
+
+80 x 35 x 2 mm polycarbonate plate, melt 320 C, mould 30-120 C, 25.4 cm3/s, no
+packing stage. Wimberger-Friedl (1991) ch. 3.3 - the injection-moulding half of
+the same open-access thesis that supplies case 3.
+
+**This is the first case that can test the SPLIT between the two channels**, and
+it can because the author took the part apart: residual stress by layer removal
+(*not exceeding 1 MPa*, below 1e-4), frozen-in thermal orientation (5e-4 average,
+*more than twice* the flow contribution), and flow orientation at the surface,
+attributed to elongation at the melt front. This model has the first and the
+third and not the second, so its like-for-like counterpart is the 1 MPa bound and
+NOT the 5e-4 plateau.
+
+The fill time is sourced twice and the two agree: 5600 mm3 at 25.4 cm3/s is
+0.220 s, and the measured cavity-pressure trace peaks at about 0.35 s.
+
+| Clause | Result | Bar | |
+|---|---|---|---|
+| thermal stress bound | peak **0.000 MPa** (was 7.44 before the fix below) | <= 3 MPa | PASS |
+| thermal dn bound | peak **1.7e-11** (was 5.36e-4) | <= 3e-4 | PASS |
+| total magnitude | 3.43e-4 against a measured 6.0e-4, ratio **0.57** | [0.15, 1.00] | PASS |
+| flow peak position | \|z/d\| **0.883** (published ~0.95) | >= 0.70 | PASS |
+| Tm trend, peak moves out | 0.878 -> 0.883 -> 0.888 at 30/60/90 C | must rise | PASS |
+| Tm trend, stress rises as Tm falls | both arms below 1e-6 MPa - **vacuous** | must fall | PASS |
+| null | CTE=0 collapses the thermal stress to exactly 0 | must collapse | PASS |
+| control on the null | CTE restored gives 2.4e-7 MPa | must not be dead | PASS |
+
+The total-magnitude clause is **one-sided on purpose**: over-predicting is a
+FAILURE here, which no other case in this project does. The model is missing the
+mechanism the source says supplies more than half of what the instrument sees, so
+reaching the measurement would mean compensating with the wrong physics rather
+than agreeing. 0.67 and below is the direction that makes sense.
+
+**On its first run this case failed those first two clauses at 7.44 MPa, and
+that failure is why the boundary condition below was rewritten.** The thermal
+channel was over-predicting residual stress in a moulding by three to eight
+times, because it imposed free-plate force and moment balance at every increment
+while the part was still adhered to the cavity.
+
+#### The thermal boundary condition - adhered, then released
+
+The source states the physics directly (p. 130): with wall adhesion *"stresses
+are not equilibrated within the polymer ... When the polymer is released, the
+tensile stresses will be relieved so that no residual stresses remain"*. So a
+moulding is two lines of physics, not one:
+
+1. **Held.** A layer vitrifies stress-free at Tg and cools with its in-plane
+   dimension pinned by the steel, accumulating `E/(1-nu) * alpha * (Tg - T_k)`
+   with no redistribution. Every layer starts from the same Tg, so this is
+   **path-independent** - the cooling history never enters.
+2. **Released.** The constraint goes and the free part must carry no net force
+   and no net moment, so the balancing `(a + b*z)` is subtracted over the whole
+   thickness.
+
+Tg is common to every layer, so it cancels. **What survives is the temperature
+non-uniformity at release, and nothing else.** Hold a part until it is thermally
+uniform and the residual thermal stress is exactly zero.
+
+That also rehabilitates a branch refuted earlier in this arc. A
+constrained-then-released form was tried, returned identically zero, and was
+discarded on that basis - but it had been applied to the POST-vitrification
+increment, where every layer does cool from the same Tg to the same wall and zero
+is genuinely uninformative. On the during-solidification stage, where the stress
+is actually built, it is the whole mechanism. The measured answer is "not
+exceeding 1 MPa", which on a scale where free-plate gives 7.44 is zero to within
+the instrument.
+
+**Three of the eight clauses now pass without discriminating anything**, and the
+output says so rather than counting them quietly: the two bounds cannot tell a
+right answer from a dead channel when the model predicts zero, and the Tm stress
+trend resolves on floating-point noise. **The evidence is the release-time sweep
+instead**, which tests the construction's own prediction:
+
+| release, s | core-skin dT | peak sigma_th |
+|---|---|---|
+| 4.24 (at the freeze front) | 83.3 C | 12.905 MPa |
+| 7.24 | 31.8 C | 4.929 MPa |
+| 14.24 | 3.4 C | 0.522 MPa |
+| 59.78 (registered) | 0.0 C | 0.000 MPa |
+
+A 2 mm plate held 60 s against a ~3 s thermal time constant *is* uniform at
+release, so the zero is a prediction about this part, not a property of the
+construction. Eject it hot and the stress is there.
+
+**It is corroborated on a case it was not built for.** Case 1 - different
+polymer, different part - has a published depth ratio of 2.78. Free plate gives
+3.43; adhered gives **2.84**. The old construction was contributing a spurious
+0.6 to that ratio.
+
+**It is not yet the default for cases 1 and 2.** Adhesion takes case 1's elastic
+thermal channel to 0% of flow, and case 1 carries a registered control asserting
+that channel is *material*, which then fails. That control was registered under
+the free-plate construction and needs re-registering against the orientational
+channel this model still lacks - rewriting it now, to make a case pass, is the
+one thing this project does not do. Cases 1 and 2 keep the old construction
+behind `-adhered` until that is settled.
+
+Wiring that up also found a **dead guard**: case 1's thermal-null clause was
+computed, printed as PASS/FAIL, and never read by the verdict. No past verdict
+was wrong - it passes in the shipped configuration - but it could have printed
+FAIL beside a MET. It is now wired, and verified in both directions.
+
+Two numerical defects, handled differently and deliberately. **The boundary node
+is an artefact and is excluded**: it read -66 MPa, and refining the grid settles
+which it is - -25.4 / -53.1 / -66.0 MPa at nz 41 / 81 / 161 while the interior
+converges to 2.8. A physical stress converges. Case 3 already excludes the same
+node for the same stated reason. **The peak statistic is grid-noisy and is NOT
+fixed**: the clause reads 3.07 / 10.42 / 7.44 MPa across the same grids, and a
+grid-robust interior companion is printed beside it and explicitly not scored,
+because changing a clause after watching it fail is moving the bar.
+
+The plate is rectangular and this solver's cavity is a disc, so the case uses the
+equal-VOLUME disc: Q and the fill time come out at the sourced values exactly and
+the path length carries the error (59.7 mm against 80). `-semidia 40` runs the
+alternative that gets the length right and Q 1.8x too high.
+
+#### The thermal channel, as of 2026-08-18
+
+**Stress accumulates INCREMENTALLY** - a layer is stress-free above Tg, becomes
+elastic when it vitrifies, and every later cooling increment re-equilibrates over
+the layers solid at that moment, so the total is force- and moment-balanced
+without imposing it. The previous construction read the temperature profile at
+one instant and removed its mean and linear parts; that is capped, since the
+profile then is near a similarity solution and its crossing cannot move. On case
+3 the incremental form took the surface from -9.5e-4 to -1.42e-3 and the ratio
+from 1.76 to 2.64. `-snapshot` restores the old one.
+
+**The post-vitrification increment is for FREE parts only.** Completing the
+cooling after every layer is solid is essential to a quench - case 3's core reads
+7.6e-7 without it - and wrong for a moulding, where the part is still adhered to
+the cavity and cannot relieve in-plane, so the denied contraction is identical
+for every layer and cancels at ejection. Including it put case 1's thermal share
+at 26% of flow against a published 8%; excluding it gives 14%.
+
+That cancellation was implemented as a constrained-then-released branch and
+MEASURED: it returns identically zero. ~~which refuted it as a general
+construction~~ - **that conclusion is retracted, 2026-08-19.** Zero was read as
+absurd; case 4 measures the published answer as "not exceeding 1 MPa", which on
+the scale where free-plate gives 7.44 is zero to within the instrument. The
+branch had been tried only on the POST-vitrification increment, where every layer
+does cool from the same Tg to the same wall and zero is genuinely uninformative.
+On the during-solidification stage it is the correct mechanism - see the thermal
+boundary condition section above. What survives unchanged is the narrower claim
+this justified: the post-vitrification increment is excluded for a moulding.
+
+**Cooling after EJECTION contributes exactly zero, and that is a proof.** The
+part is then entirely glassy - nothing vitrifies, no sub-Tg relaxation, one
+modulus - and a linear-elastic body taken through a cycle that starts and ends
+uniform has no residual stress. The condition is mould < Tg, which this tool
+already ENFORCES (`FreezeHistory` refuses anything else), so the result is
+unconditional rather than a property of the cases run. A warning for the
+mould-above-Tg case was written and removed as dead code: with case 1 set to a
+200 C mould it never printed, because the run fails earlier. The self-test
+asserts the precondition instead, in both directions.
+
+
+---
+
+# How the channels are built, and the catalog prerequisite
+
+**MOVED OUT OF THE README 2026-08-20**, unchanged, in the same cut. These are
+the mechanism notes - the polymer catalog STAR needs, the Lagrangian depth
+construction, and the fountain term - which belong with the working detail
+rather than in a front page.
+
+HOW THE CHANNELS ARE BUILT
+
+**A polymer catalog is a prerequisite, not an extra.** No polymer OpticStudio
+ships carries a `BD` record: across all 51 installed catalogs there are 578 of
+them and every one is on a glass. Without it STAR does not refuse the stress data
+through the ZOS-API — it accepts zero points, returns success, and reports
+retardance exactly zero, which is indistinguishable from a well-moulded part.
+`-writecatalog` writes the missing constants; they are marked PROVISIONAL
+everywhere because they are representative of the polymer family rather than
+measured for a grade.
+
+Two behaviours worth knowing, both measured rather than documented anywhere:
+`DirectIndex` and `Stress` are **mutually exclusive per surface** (loading the
+index onto a stressed surface silently empties the retardance map), which is why
+the density term rides in the stress tensor as a hydrostatic component; and
+`GetRetardanceMap`'s first argument is a sampling selector, not a point count.
+
+**The depth distribution of the flow channel comes from a Lagrangian particle
+model, and that is the default.** The Eulerian channel computes, for each depth,
+the stress an element would build up having sat there since t=0 - and under that
+assumption the retained orientation must peak between wall and core, because
+build-up and retention run in opposite directions in reduced time. Measurements
+peak at the skin, because in fountain flow the skin never sat at the wall: it was
+sheared in the hot core, carried to the wall by the advancing front and quenched
+on arrival. The particle model carries that history; the shape it produces is
+solved per station on the local gap and applied to the Eulerian per-station
+magnitude, normalised so that no thickness-averaged quantity can move. It costs
+tens of seconds per build. `-eulerian-depth` turns it off.
+
+**Fountain flow is ON by default.** Material reaching the cavity wall got there
+through the melt front, turning through roughly a right angle and stretching on
+the way; that strain is imposed once at deposition and then relaxes, so the skin
+keeps nearly all of it and the core loses nearly all of it. Its magnitude comes
+from the front kinematics — a Maxwell fluid extended at v_front/(h/2) for one
+gap-crossing time — not from a chosen strain.
+
+It was gated off for part of its history, because enabling it then made both
+criteria worse. The viscosity-weighted shear rate inverted that: shear alone now
+correctly gives a fast-freezing skin almost no orientation, so **deposition at the
+front is the only thing left that can orient one**. With both channels the
+in-plane peak goes from 0.62× to 1.16× of the published value and the depth ratio
+from 0.31 to 0.82, on measured constants with no fitted parameter between them.
+(Re-measured 2026-08-18 at `-nz 161`; the pair quoted here before the
+freeze-history fix, 0.26×/0.90× and 0.02/0.76, was taken on the bad grid.)
+Disable with `-fountain 0` to recover the shear-only model.
