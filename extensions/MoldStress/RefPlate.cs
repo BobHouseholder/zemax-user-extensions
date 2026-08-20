@@ -327,25 +327,57 @@ namespace MoldStress
         public const double CycleTimeS = 60.0;
 
         /// <summary>
-        /// THE MEASURED CAVITY-PRESSURE TRACE for this exact sample, read off the
-        /// source's own transducer recording: Wimberger-Friedl 1991 thesis,
-        /// ch. 3.3 Fig. 9, p. 137 - 25.4 cm3/s, mould 60 C, NO packing stage, so
-        /// the whole pulse is change-over compression.
+        /// THE MEASURED CAVITY-PRESSURE TRACE for this exact sample, digitised
+        /// from the source's own transducer recording: Wimberger-Friedl 1991
+        /// thesis, ch. 3.3 Fig. 9, p. 137 - 25.4 cm3/s, mould 60 C, barrel
+        /// 320 C, NO packing stage, so the whole pulse is change-over
+        /// compression.
         ///
-        /// READ OFF A SCANNED FIGURE, and therefore approximate: the rise time
-        /// and the decay tail are worth perhaps +-20%, the 80 MPa peak rather
-        /// better because the text quotes it. It is a measurement rather than a
-        /// solve, which is the point - the convolution can be tested against real
-        /// data before anything has to predict the trace.
+        /// AXIS CALIBRATION: y ticks at 0/20/40/60/80 MPa, x ticks at
+        /// 0/0.5/1.0/1.5 s. The screw-position trace xs descends to baseline at
+        /// t ~ 0.4 s, which independently marks the end of filling and agrees
+        /// with the 0.220 s fill time derived from 5600 mm3 at 25.4 cm3/s plus
+        /// the ~0.1 s before pressure registers.
         ///
-        /// The shape is what matters: a sharp pulse over roughly 0.1-0.8 s. Near-
-        /// surface layers vitrify inside that window; the core vitrifies at 4.2 s,
-        /// long after it has gone.
+        /// THE FOUR TRANSDUCERS ARE NOT RESOLVED SEPARATELY, and the text says
+        /// why they need not be: "After the completion of the filling all
+        /// pressure curves lie on top of each other" (p. 136). Before that they
+        /// differ, but the peak is where the frozen-in contribution is decided
+        /// and there they are within a few MPa of one another.
+        ///
+        /// UNCERTAINTY, stated per region rather than implied by the digit count:
+        ///   peak height      82 MPa, +-4    (the text quotes ~80)
+        ///   peak position    0.37 s, +-0.02
+        ///   rise            0.25-0.37 s, the LEAST reliable part of the read
+        ///                   because it is nearly vertical on the page
+        ///   decay           +-10% in pressure
+        ///   TAIL            3 MPa, and this is the dominant uncertainty - see
+        ///                   below and TailPressureMPa
+        ///
+        /// THE TAIL IS THE WHOLE BALL GAME, which a first pass got wrong by
+        /// treating it as a truncation artefact. After ~0.9 s the traces settle
+        /// a few MPa ABOVE the zero line and stay there to 1.9 s, which is
+        /// physically ordinary - the cavity stays pressed until the part shrinks
+        /// off the wall. It matters out of all proportion because a stress that
+        /// never returns to zero keeps the fully saturated stress-optical
+        /// coefficient: 0.2 MPa of deviatoric residual is worth 1.1e-3, half the
+        /// measured surface birefringence. So the tail is EXPOSED as a swept
+        /// parameter rather than digitised to a single number, and the case
+        /// prints the sensitivity instead of a point value.
         /// </summary>
         public static readonly double[] PressureTraceS =
-            { 0.00, 0.10, 0.20, 0.28, 0.33, 0.36, 0.42, 0.50, 0.60, 0.70, 0.85, 1.00, 1.20, 1.50 };
+            { 0.00, 0.10, 0.20, 0.25, 0.28, 0.30, 0.32, 0.34, 0.36, 0.37,
+              0.39, 0.42, 0.45, 0.50, 0.55, 0.60, 0.70, 0.80, 0.90, 1.00,
+              1.20, 1.50, 1.90 };
         public static readonly double[] PressureTraceMPa =
-            { 0.0,  2.0,  8.0, 30.0, 70.0, 80.0, 72.0, 45.0, 22.0, 10.0,  4.0,  2.0,  1.0,  0.5 };
+            { 0.0,  0.0,  0.0,  1.0,  3.0,  8.0, 20.0, 45.0, 70.0, 82.0,
+             78.0, 66.0, 52.0, 36.0, 24.0, 16.0,  9.0,  6.0,  4.5,  4.0,
+              3.5,  3.0,  3.0 };
+
+        /// <summary>Where the trace settles after the pulse, MPa. Swept, because
+        /// the frozen-in result is more sensitive to this than to the 82 MPa peak
+        /// and it is the hardest thing to read off the scan.</summary>
+        public const double TailPressureMPa = 3.0;
 
         // --- the published observables ----------------------------------------
         /// <summary>"not exceeding 1 MPa", p. 137 and p. 143.</summary>
@@ -888,10 +920,18 @@ namespace MoldStress
 
                 say("");
                 say("  sigma(t) CONVOLUTION on the MEASURED pressure trace (source Fig. 9):");
+                // DERIVED, not indexed. This read PressureTraceMPa[5] and printed
+                // "peak 8 MPa" the moment the trace was re-digitised and index 5
+                // stopped being the peak - a hardcoded position surviving the
+                // change it should have tracked.
+                int kPk = 0;
+                for (int j2 = 1; j2 < PressureTraceMPa.Length; j2++)
+                    if (PressureTraceMPa[j2] > PressureTraceMPa[kPk]) kPk = j2;
                 say(string.Format(ci,
-                    "    peak {0:F0} MPa cavity -> {1:F1} MPa deviatoric (Eq 8 factor "
-                    + "{2:F3} at nu = {3:F2}); pulse spans 0.1-0.8 s",
-                    PressureTraceMPa[5], devMPa[5], devFac, p.PoissonRatio));
+                    "    peak {0:F0} MPa cavity at {1:F2} s -> {2:F1} MPa deviatoric "
+                    + "(Eq 8 factor {3:F3} at nu = {4:F2}), tail {5:F1} MPa",
+                    PressureTraceMPa[kPk], PressureTraceS[kPk], devMPa[kPk], devFac,
+                    p.PoissonRatio, TailPressureMPa));
                 say("     z/d    freeze s     dn_frozen     vs measured 20e-4");
                 var rowT = new double[freeze.TimeGridS.Length];
                 double dnSurf = 0.0, dnCore = 0.0;
@@ -909,30 +949,54 @@ namespace MoldStress
                     say(string.Format(ci, "    {0:F2}  {1,10:F3}  {2,12:E3}  {3,14:F2}x",
                         zd, freeze.FreezeTimeS[k], dnp, dnp / PublishedSurfacePeakDn));
                 }
-                // CONTROL ON THE TAIL, because the core level turned out to be set
-                // entirely by where the digitised trace was truncated. Re-run with
-                // the trace forced to end at exactly zero: if the core collapses,
-                // the flat plateau above is a reading artefact and not physics.
-                var devZero = (double[])devMPa.Clone();
-                devZero[devZero.Length - 1] = 0.0;
-                devZero[devZero.Length - 2] = 0.0;
-                for (int j = 0; j < rowT.Length; j++) rowT[j] = freeze.TempHistoryC[kMid, j];
-                double coreZero = Channels.FrozenBirefringence(
-                    freeze.TimeGridS, rowT, PressureTraceS, devZero, p,
-                    freeze.FreezeTimeS[kMid]);
+                // TAIL SENSITIVITY, swept rather than asserted. The frozen-in
+                // birefringence of a stress that never returns to zero keeps the
+                // saturated coefficient, so the settled tail dominates the core
+                // and competes with the peak at depth. This prints what the
+                // answer does across the readable range instead of quoting one
+                // number off a scan.
                 say("");
-                say(string.Format(ci,
-                    "    TAIL CONTROL: core reads {0:E3} with the trace ending at {1:F2} MPa "
-                    + "deviatoric,", dnCore, devMPa[devMPa.Length - 1]));
-                say(string.Format(ci,
-                    "    and {0:E3} with it forced to zero - a factor of {1:F0}.",
-                    coreZero, Math.Abs(dnCore / Math.Max(Math.Abs(coreZero), 1e-30))));
-                say("    So THE FLAT CORE ABOVE IS MY TRUNCATION, not the mechanism. A stress");
-                say("    that never returns to zero keeps the fully saturated coefficient on");
-                say("    whatever residual is left, and 0.2 MPa of it is worth 1.1e-3 - half");
-                say("    the measured surface value. The core level is therefore NOT a");
-                say("    prediction here; it is a statement about where I stopped reading a");
-                say("    scanned figure.");
+                say("  TAIL SENSITIVITY - the dominant uncertainty in the digitisation:");
+                say("     tail MPa      core dn      surface dn    surface/core");
+                foreach (double tail in new[] { 0.0, 1.0, 2.0, 3.0, 4.0, 6.0 })
+                {
+                    var devT = new double[devMPa.Length];
+                    for (int j2 = 0; j2 < devT.Length; j2++) devT[j2] = devMPa[j2];
+                    // everything at or after 0.9 s settles to the swept value
+                    for (int j2 = 0; j2 < PressureTraceS.Length; j2++)
+                        if (PressureTraceS[j2] >= 0.90) devT[j2] = tail * devFac;
+
+                    for (int j2 = 0; j2 < rowT.Length; j2++)
+                        rowT[j2] = freeze.TempHistoryC[kMid, j2];
+                    double cCore = Channels.FrozenBirefringence(
+                        freeze.TimeGridS, rowT, PressureTraceS, devT, p,
+                        freeze.FreezeTimeS[kMid]);
+
+                    int kS = (int)Math.Round(kMid + (nz - 1 - kMid) * 0.8);
+                    for (int j2 = 0; j2 < rowT.Length; j2++)
+                        rowT[j2] = freeze.TempHistoryC[kS, j2];
+                    double cSurf = Channels.FrozenBirefringence(
+                        freeze.TimeGridS, rowT, PressureTraceS, devT, p,
+                        freeze.FreezeTimeS[kS]);
+
+                    say(string.Format(ci, "     {0,7:F1}   {1,11:E3}   {2,12:E3}   {3,12:F1}",
+                        tail, cCore, cSurf,
+                        Math.Abs(cCore) > 1e-20 ? cSurf / cCore : double.NaN));
+                }
+                say("    AND THE OUTERMOST LAYERS NOW READ EXACTLY ZERO, which is a result");
+                say("    rather than a rounding. z/d 0.90 vitrifies at 0.206 s and the");
+                say("    digitised trace shows no pressure until 0.25 s, so the skin freezes");
+                say("    BEFORE change-over and cannot carry a pressure contribution at all.");
+                say("    The measurement puts its maximum at z/d ~0.95. Three ways out, none");
+                say("    yet tested: the freeze solve is too fast at the wall; pressure");
+                say("    reaches this station earlier than the trace was read; or the skin is");
+                say("    material deposited at the front later in the fill, which is the");
+                say("    fountain transport the 1996 paper keeps while rejecting its stress.");
+                say("");
+                say("    The SHAPE survives the whole range - surface always above core -");
+                say("    but the core level does not: it is proportional to the tail and");
+                say("    spans four orders across a band the scan cannot resolve. So the");
+                say("    surface peak is a result and the core level is not.");
                 say("");
                 say(string.Format(ci,
                     "    surface/core ratio {0:F1} - the mechanism is surface-peaked without "
