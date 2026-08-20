@@ -378,7 +378,7 @@ Disable with `-fountain 0` to recover the shear-only model.
 
 #### MoldStress validation, and what currently fails
 
-Three published reference cases, each with a criterion registered BEFORE it was
+Four published reference cases, each with a criterion registered BEFORE it was
 first run. Numbers below are read from the binary, not carried in prose.
 
 | | what it tests | verdict |
@@ -386,6 +386,7 @@ first run. Numbers below are read from the binary, not carried in prose.
 | `-refcase` | moulded plate, flow + thermal | **criterion MET** |
 | `-refcase2` | moulded lens, curved, layer-removal depth data | NOT met - one clause |
 | `-refquench` | free quench, the THERMAL channel alone | **criterion MET** |
+| `-refplate` | moulded plate, flow and thermal SEPARATED by the author | NOT met - 6 of 8 |
 
 How each was arrived at, and every mechanism tried and rejected, is in
 [`VALIDATION-LOG.md`](extensions/MoldStress/VALIDATION-LOG.md). Candidate sources
@@ -495,6 +496,65 @@ moves it 0.645 -> 0.656 - right direction, span 51x too small. Printed as an
 unscored trend diagnostic rather than folded into the verdict, because
 registering a clause after seeing its result is moving the bar.
 
+#### Case 4 - moulded PC plate, with the channels separated by the author
+
+80 x 35 x 2 mm polycarbonate plate, melt 320 C, mould 30-120 C, 25.4 cm3/s, no
+packing stage. Wimberger-Friedl (1991) ch. 3.3 - the injection-moulding half of
+the same open-access thesis that supplies case 3.
+
+**This is the first case that can test the SPLIT between the two channels**, and
+it can because the author took the part apart: residual stress by layer removal
+(*not exceeding 1 MPa*, below 1e-4), frozen-in thermal orientation (5e-4 average,
+*more than twice* the flow contribution), and flow orientation at the surface,
+attributed to elongation at the melt front. This model has the first and the
+third and not the second, so its like-for-like counterpart is the 1 MPa bound and
+NOT the 5e-4 plateau.
+
+The fill time is sourced twice and the two agree: 5600 mm3 at 25.4 cm3/s is
+0.220 s, and the measured cavity-pressure trace peaks at about 0.35 s.
+
+| Clause | Result | Bar | |
+|---|---|---|---|
+| thermal stress bound | peak **7.44 MPa** (interior 2.83) | <= 3 MPa | **FAIL** |
+| thermal dn bound | peak **5.36e-4** | <= 3e-4 | **FAIL** |
+| total magnitude | 4.03e-4 against a measured 6.0e-4, ratio **0.67** | [0.15, 1.00] | PASS |
+| flow peak position | \|z/d\| **0.888** (published ~0.95) | >= 0.70 | PASS |
+| Tm trend, peak moves out | 0.875 -> 0.888 -> 0.888 at 30/60/90 C | must rise | PASS |
+| Tm trend, stress rises as Tm falls | 13.8 MPa at 30 C vs 4.98 at 90 C | must fall | PASS |
+| null | CTE=0 collapses the thermal stress to exactly 0 | must collapse | PASS |
+| control on the null | CTE restored gives 7.44 MPa | must not be dead | PASS |
+
+The total-magnitude clause is **one-sided on purpose**: over-predicting is a
+FAILURE here, which no other case in this project does. The model is missing the
+mechanism the source says supplies more than half of what the instrument sees, so
+reaching the measurement would mean compensating with the wrong physics rather
+than agreeing. 0.67 and below is the direction that makes sense.
+
+**The two failures are the result this case was built to get.** The thermal
+channel over-predicts residual stress in a moulding by three to eight times, and
+the mechanism is a boundary condition the source names: with wall adhesion
+*"stresses are not equilibrated within the polymer ... When the polymer is
+released, the tensile stresses will be relieved so that no residual stresses
+remain"*. This model imposes free-plate force and moment balance at every
+increment while the part is still adhered to the cavity. That reopens the
+constrained-then-released branch refuted earlier - it was refuted against the
+POST-vitrification increment, where zero is genuinely wrong, and was never tried
+on the during-solidification stage where this stress is built.
+
+Two numerical defects, handled differently and deliberately. **The boundary node
+is an artefact and is excluded**: it read -66 MPa, and refining the grid settles
+which it is - -25.4 / -53.1 / -66.0 MPa at nz 41 / 81 / 161 while the interior
+converges to 2.8. A physical stress converges. Case 3 already excludes the same
+node for the same stated reason. **The peak statistic is grid-noisy and is NOT
+fixed**: the clause reads 3.07 / 10.42 / 7.44 MPa across the same grids, and a
+grid-robust interior companion is printed beside it and explicitly not scored,
+because changing a clause after watching it fail is moving the bar.
+
+The plate is rectangular and this solver's cavity is a disc, so the case uses the
+equal-VOLUME disc: Q and the fill time come out at the sourced values exactly and
+the path length carries the error (59.7 mm against 80). `-semidia 40` runs the
+alternative that gets the length right and Q 1.8x too high.
+
 #### The thermal channel, as of 2026-08-18
 
 **Stress accumulates INCREMENTALLY** - a layer is stress-free above Tg, becomes
@@ -529,11 +589,20 @@ asserts the precondition instead, in both directions.
 
 #### Open
 
-- **Case 2's in-plane peak, 12.87x.** Every material and process input is sourced
-  or shown to be a safe borrowing, and the registered falsifier is dead: Inoue et
-  al. measure ~1700 Br for amorphous polyolefins, so 480R's melt coefficient is if
-  anything LARGER than the borrowed 1000 Br. But the clause rests on two unsourced
-  flow inputs, so it does not currently test the model.
+- **Case 2's in-plane peak, ~3.6x LOW.** ~~12.87x high~~ - **retracted
+  2026-08-18**: Fig. 7's y-axis in the source is mislabelled by 100x, and the
+  paper's own dn = lambda\*N/h settles it without circularity (the printed axis
+  needs a 79.6 mm sampling thickness on a 2 mm part; the corrected one needs
+  0.796 mm, its stated 0.80 mm gate land). The DIRECTION of the failure inverted,
+  so "the model over-predicts", melt-fracture shear stress as its cause, and
+  "case 2 over-retains orientation" are all withdrawn and must not be requoted.
+  Seven candidates were measured for the remainder and six refuted; the
+  normal-stress term worked and lifted the ceiling from 0.49 to 1.35 of the gate,
+  so for the first time the target is reachable. What is left is the retained
+  fraction being LOW exactly where tau is HIGH.
+- **The thermal channel's boundary condition in a moulding** - case 4 measures it
+  at three to eight times the published residual stress, and the constrained-
+  then-released branch is reopened for the during-solidification stage.
 - **Case 3's Ti trend** - the elastic stress is dominated by a Ti-independent
   term, so the dependence must live in frozen-in ORIENTATION above Tg, which is a
   second thermal channel rather than a correction to this one.
