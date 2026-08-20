@@ -185,7 +185,7 @@ namespace MoldStress
             "-file", "-filltime", "-fountain", "-frontmode", "-gateconfig",
             "-materials", "-melttemp", "-moldtemp", "-gatewidth", "-packfrac", "-nz", "-shape-nodes", "-shape-particles", "-shape-steps", "-ti", "-tc", "-nzexport",
             "-curvature", "-lambdascale", "-out", "-outdir", "-packpressure", "-packtime",
-            "-particles", "-station", "-semidia", "-gatethick", "-ejecttime",
+            "-particles", "-station", "-semidia", "-gatethick", "-ejecttime", "-changeover",
         };
 
         /// <summary>Flags that stand alone.</summary>

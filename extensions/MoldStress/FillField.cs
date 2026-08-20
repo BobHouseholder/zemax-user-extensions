@@ -413,6 +413,36 @@ namespace MoldStress
         /// </summary>
         public bool PressureVitrification = false;
 
+        /// <summary>
+        /// CAVITY PRESSURE AT CHANGE-OVER, MPa. NaN means unspecified, and the
+        /// field then carries only the filling pressure drop, as it always has.
+        ///
+        /// WHY THIS EXISTS. `FillField` integrates dp/ds back from a melt front
+        /// at zero gauge pressure, so `P` is the pressure needed to PUSH THE
+        /// FRONT - the Hele-Shaw filling drop, and nothing else. That is the
+        /// right quantity while the cavity is still filling and it is the wrong
+        /// one the instant the cavity is full: at change-over the machine
+        /// switches from speed control to pressure control and the whole cavity
+        /// is compressed, which the model had no representation of at all.
+        ///
+        /// Measured 2026-08-19 on reference case 4: the model's peak cavity
+        /// pressure reads 23.1 MPa where the source's own transducer trace peaks
+        /// near 80 MPa (Wimberger-Friedl 1991 thesis, ch. 3.3 Fig. 9), a factor
+        /// of 3.5 - and that was with NO packing stage, so the whole of it is
+        /// change-over compression.
+        ///
+        /// IT IS ADDED UNIFORMLY, AND THAT IS THE POINT. Compression of a full
+        /// cavity is hydrostatic, so it raises P everywhere and leaves dp/ds -
+        /// and therefore the wall shear stress and the whole flow channel -
+        /// untouched. Anything that changed tau here would be adding a flow that
+        /// is not happening.
+        ///
+        /// WHAT READS IT: the pressure-vitrification term, whose deviatoric
+        /// stress is p*(1-2nu)/(1-nu) and which was previously driven by a
+        /// pressure 3.5x too low.
+        /// </summary>
+        public double ChangeoverPressureMPa = double.NaN;
+
         public bool NormalStressDifference = true;
 
         public bool ChannelNarrowing = false;
@@ -459,6 +489,9 @@ namespace MoldStress
         /// a numerical fudge - or one node spacing, whichever is larger.
         /// </summary>
         public double RadiusFloorMm;
+        /// <summary>The uniform compression added at change-over, MPa; zero when
+        /// the field carries only the filling drop.</summary>
+        public double ChangeoverPressureMPa;
 
         public double PathLengthMm { get { return S[S.Length - 1]; } }
 
@@ -600,6 +633,15 @@ namespace MoldStress
             for (int i = nodes - 2; i >= 0; i--)
                 f.P[i] = f.P[i + 1] + 0.5 * (f.DpDs[i] + f.DpDs[i + 1]) * (f.S[i + 1] - f.S[i]);
 
+            // CHANGE-OVER COMPRESSION, added uniformly on top of the filling
+            // drop. Hydrostatic, so DpDs is deliberately untouched - the shear
+            // stress must not move, because no extra flow is happening.
+            if (!double.IsNaN(proc.ChangeoverPressureMPa) && proc.ChangeoverPressureMPa > 0.0)
+            {
+                f.ChangeoverPressureMPa = proc.ChangeoverPressureMPa;
+                for (int i = 0; i < nodes; i++) f.P[i] += proc.ChangeoverPressureMPa;
+            }
+
             return f;
         }
 
@@ -655,6 +697,43 @@ namespace MoldStress
             SelfTest.Near("shear vanishes at the mid-plane", f.ShearAt(mid, 0.0), 0.0, 1e-12);
             SelfTest.Near("shear is linear in z",
                 f.ShearAt(mid, 0.5), 0.5 * f.ShearAt(mid, 1.0), 1e-12);
+
+            // CHANGE-OVER COMPRESSION: it must raise P by exactly the amount
+            // asked, everywhere, and must NOT move the shear stress. Both arms,
+            // because a term that raised dp/ds would be inventing a flow.
+            {
+                // THE CONTROL MUST DIFFER IN THE VARIABLE AND NOTHING ELSE.
+                // First attempt built a FRESH Process for the control instead of
+                // reusing the one `f` was built from, so it also changed
+                // PackPressureMPa (60 -> 0) - and three of the four assertions
+                // failed on a difference that had nothing to do with change-over.
+                // The tell was the null failing too: "unspecified leaves the
+                // field identical" cannot fail unless the control is wrong.
+                double savedChange = proc.ChangeoverPressureMPa;
+                proc.ChangeoverPressureMPa = 40.0;
+                // `eta` is NOT optional here. f was built as
+                // Build(plate, pmma, proc, 2001, eta) with an explicit viscosity
+                // override; controls that omitted that fifth argument silently
+                // fell back to Cross-WLF and differed in dp/ds by 1.55x. The
+                // first repair guessed at the Process and changed nothing -
+                // identical failures across both attempts, which is the signal
+                // that the variable under suspicion was not the one differing.
+                var fc = Build(plate, pmma, proc, f.S.Length, eta);
+                proc.ChangeoverPressureMPa = savedChange;
+                var fn = Build(plate, pmma, proc, f.S.Length, eta);
+
+                int m2 = f.S.Length / 2;
+                SelfTest.Near("change-over raises cavity pressure by exactly its value",
+                    fc.P[m2] - f.P[m2], 40.0, 1e-9);
+                SelfTest.Near("change-over raises it at the FRONT too (hydrostatic)",
+                    fc.P[f.S.Length - 1] - f.P[f.S.Length - 1], 40.0, 1e-9);
+                SelfTest.Near("change-over leaves dp/ds untouched",
+                    fc.DpDs[m2], f.DpDs[m2], 1e-12);
+                SelfTest.Near("change-over leaves the wall shear stress untouched",
+                    fc.ShearAt(m2, 1.0), f.ShearAt(m2, 1.0), 1e-12);
+                SelfTest.Near("unspecified change-over leaves the field identical",
+                    fn.P[m2], f.P[m2], 1e-12);
+            }
 
             // Pressure must fall monotonically from gate to front.
             bool mono = true;

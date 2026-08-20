@@ -363,7 +363,7 @@ namespace MoldStress
             int badForMode = Program.RejectFlagsNotReadBy(
                 args, new[] { "-nz", "-moldtemp", "-station", "-semidia", "-filltime",
                               "-gatethick", "-snapshot", "-freeplate", "-ejecttime",
-                              "-fountain", "-pressure-vitrification" },
+                              "-fountain", "-pressure-vitrification", "-changeover" },
                 "-refplate");
             if (badForMode != 0) return badForMode;
 
@@ -386,6 +386,10 @@ namespace MoldStress
             // exited 64 on the flag guard. Wired 2026-08-19.
             double fountain = Program.Value(args, "-fountain", 1.0);
             bool pressVit = Program.Has(args, "-pressure-vitrification");
+            // SOURCED, not chosen: the thesis's own transducer trace (ch. 3.3
+            // Fig. 9) peaks near 80 MPa for this exact sample, with no packing
+            // stage - so all of it is change-over compression.
+            double changeover = Program.Value(args, "-changeover", 80.0);
 
             // GEOMETRY, DERIVED rather than typed. The equal-volume disc is
             // computed from the plate's own dimensions, so if those are ever
@@ -427,6 +431,8 @@ namespace MoldStress
                 + "front width {4:F0} mm", semiDia, fillS, modelVolMm3 / fillS,
                 InjectionRateMm3PerS, PlateWidthMm));
             say(string.Format(ci, "  grid: nz {0}, station {1:F2} of the path", nz, stationFrac));
+            say(string.Format(ci, "  change-over compression: {0:F1} MPa uniform "
+                + "(source Fig. 9 trace peaks near 80)", changeover));
             say(string.Format(ci, "  pressure-vitrification term (source Eqs 5-8): {0}",
                 pressVit ? "ON (-pressure-vitrification)" : "off - default"));
             say(string.Format(ci, "  fountain deposition: {0}",
@@ -453,6 +459,7 @@ namespace MoldStress
                 EjectionTimeS = ejectS,
                 FountainStrain = fountain,
                 PressureVitrification = pressVit,
+                ChangeoverPressureMPa = changeover,
             };
 
             var plate = BuildElement(semiDia, gateThick);
@@ -564,8 +571,18 @@ namespace MoldStress
                     ceilPress / PublishedSurfacePeakDn,
                     100.0 * PublishedSurfacePeakDn / Math.Max(ceilPress, 1e-30)));
                 say(string.Format(ci,
-                    "    model cavity pressure peak {0:F1} MPa (the source's Fig. 9 trace "
-                    + "peaks near 80 MPa at change-over, with NO packing stage)", pMaxMPa));
+                    "    model cavity pressure peak {0:F1} MPa = {1:F1} change-over + {2:F1} "
+                    + "fill drop", pMaxMPa, changeover, pMaxMPa - changeover));
+                say(string.Format(ci,
+                    "    THE TWO ARE NOT SIMULTANEOUS and adding them OVERSHOOTS: the "
+                    + "source's trace"));
+                say(string.Format(ci,
+                    "    peaks near 80 MPa, not {0:F1}. The fill gradient collapses as flow "
+                    + "stops at", pMaxMPa));
+                say("    change-over, so a layer vitrifying under compression sees the");
+                say("    change-over pressure ALONE. The pressure term reads fill.P and");
+                say("    therefore reads high by that fill drop - recorded, not yet fixed,");
+                say("    because it belongs with the term rather than with the pressure field.");
                 say("    EQUI-BIAXIAL by construction - sigma_x = sigma_y - which is the");
                 say("    source's decisive evidence and something this model cannot produce:");
                 say("    it carries one scalar dn per station and depth, slow axis along flow.");
@@ -698,7 +715,7 @@ namespace MoldStress
             {
                 double pz, ps, av;
                 Measure(tmSeries[j], nz, semiDia, gateThick, fillS, incremental, adhered,
-                        ejectS, fountain, pressVit, stationFrac, out pz, out ps, out av);
+                        ejectS, fountain, pressVit, changeover, stationFrac, out pz, out ps, out av);
                 peakZ[j] = pz; peakSig[j] = ps;
                 say(string.Format(ci, "    {0,3:F0} C       {1:F3}              {2:F3}"
                     + "               {3:E3}", tmSeries[j], pz, ps, av));
@@ -925,7 +942,8 @@ namespace MoldStress
 
         private static void Measure(double tm, int nz, double semiDia, double gateThick,
                                     double fillS, bool incremental, bool adhered, double ejectS,
-                                    double fountain, bool pressVit, double stationFrac,
+                                    double fountain, bool pressVit, double changeover,
+                                    double stationFrac,
                                     out double flowPeakZOverD, out double peakSigmaMPa,
                                     out double avgTotalDn)
         {
@@ -937,6 +955,7 @@ namespace MoldStress
                 MouldAdhesion = adhered, EjectionTimeS = ejectS,
                 FountainStrain = fountain,
                 PressureVitrification = pressVit,
+                ChangeoverPressureMPa = changeover,
             };
             var e = BuildElement(semiDia, gateThick);
             var fill = FillField.Build(e, p, proc, 101);
