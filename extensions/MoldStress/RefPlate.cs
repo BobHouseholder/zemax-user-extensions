@@ -455,6 +455,55 @@ namespace MoldStress
                         : "NOT reachable by the flow channel alone - which is what the "
                           + "source says, since it attributes more than half to a "
                           + "mechanism this model lacks"));
+
+                // THE PRESSURE CEILING, from the source's own Eqs (5)-(8).
+                //
+                // Wimberger-Friedl, Int. Polym. Process. 11(4) 373 (1996) - the
+                // paper that rules out fountain flow as the origin of the surface
+                // maximum - derives the OTHER mechanism in closed form. A layer
+                // vitrifying while adhered to the wall has its in-plane strain
+                // pinned, so with sigma_z = -p and eps_x = eps_y = 0,
+                //
+                //     sigma*_x = sigma_z * nu / (1 - nu)                    Eq (6)
+                //     0 <= (sigma_x - sigma_z) <= -sigma_z/2 = p/2          Eq (8)
+                //
+                // with equality at nu = 1/3. It is EQUI-BIAXIAL - sigma_x = sigma_y
+                // - which is the paper's decisive evidence, since a flow mechanism
+                // cannot produce a contribution equal transverse to the flow.
+                //
+                // Printed here because this project's rule is that a case states
+                // its own reachability rather than leaving a future session to
+                // sweep inside a box. And this ceiling says something unusual:
+                // it is enormous. The measured surface birefringence is ~20e-4
+                // and the ceiling is of order 0.1, so about 2% is retained. The
+                // paper reaches the same number independently - "otherwise the
+                // birefringence level would be of the order of 0.1" - which is a
+                // check on this model's PC constants, not just on the arithmetic.
+                //
+                // So a pressure channel here would be RETENTION-limited, not
+                // ceiling-limited. That is the opposite of reference case 2, whose
+                // flow ceiling sits at 1.35 of its gate, and it is why the source
+                // puts the physics in a memory function rather than a coefficient.
+                double pMaxMPa = 0.0;
+                for (int i = 0; i < fill.P.Length; i++)
+                    pMaxMPa = Math.Max(pMaxMPa, Math.Abs(fill.P[i]));
+                double devMax = 0.5 * pMaxMPa;                  // Eq (8), nu = 1/3
+                double ceilPress = Math.Abs(p.CMeltBrewster) * 1e-6 * devMax;
+                say(string.Format(ci,
+                    "  CEILING of a PRESSURE channel, source Eq (8): (sigma_x - sigma_z) "
+                    + "<= p/2 = {0:F2} MPa", devMax));
+                say(string.Format(ci,
+                    "    -> |C_melt|*p/2 = {0:E3}, against a measured surface {1:E3}: "
+                    + "ceiling/measured = {2:F0}x, i.e. {3:F2}% retained",
+                    ceilPress, PublishedSurfacePeakDn,
+                    ceilPress / PublishedSurfacePeakDn,
+                    100.0 * PublishedSurfacePeakDn / Math.Max(ceilPress, 1e-30)));
+                say(string.Format(ci,
+                    "    model cavity pressure peak {0:F1} MPa (the source's Fig. 9 trace "
+                    + "peaks near 80 MPa at change-over, with NO packing stage)", pMaxMPa));
+                say("    EQUI-BIAXIAL by construction - sigma_x = sigma_y - which is the");
+                say("    source's decisive evidence and something this model cannot produce:");
+                say("    it carries one scalar dn per station and depth, slow axis along flow.");
             }
             say("");
 
