@@ -676,6 +676,20 @@ figures. nz=21 was measured and is NOT converged - ratio 3.34 with the peak
 pinned at the wall - so 41 is a floor with something below it rather than the
 smallest grid that passed. The case runs in 15 s where nz=321 took 6m29.
 
+### Case 2 - ZEONEX 480R plano-convex lens
+
+32 mm diameter, 2 mm centre thickness, 0.8 mm edge gate, 275 C / 124 C,
+98.10 MPa. Chang, Yu, Chiu, Yang, Lai & Wang (CoreTech / NTHU). A better check
+than case 1 in three ways - it is a lens rather than a plate, the material is a
+cyclo-olefin, and its depth data comes from one self-consistent method
+(successive 0.1 mm layers turned off, fringe order recounted).
+
+| Clause | Result | Bar | |
+|---|---|---|---|
+| in-plane peak | 4.763e-4 against a published 3.7e-5 - **12.87x** | within a factor of 2 | **FAIL** |
+| in-plane shape | maximum at the gate, 14% of it at the far edge | must decay from the gate | PASS |
+| layer removal | 3 of 4 cumulative points within 10 points | 3 of 4 | PASS |
+
 ### Case 3 - free quench, and the first test of the THERMAL channel alone
 
 Bisphenol-A polycarbonate, 2 mm sheet, quenched 160 C -> 60 C. Wimberger-Friedl,
@@ -747,20 +761,6 @@ predicted in writing before the case was ever run.**
 Converged in shape, drifting at the surface node: crossing 0.581 / 0.575 / 0.572
 / 0.571 and ratio 1.50 / 1.67 / 1.76 / 1.81 at nz 41 / 81 / 161 / 321. Default is
 161; at nz=41 the ratio falls below the published range.
-
-### Case 2 - ZEONEX 480R plano-convex lens
-
-32 mm diameter, 2 mm centre thickness, 0.8 mm edge gate, 275 C / 124 C,
-98.10 MPa. Chang, Yu, Chiu, Yang, Lai & Wang (CoreTech / NTHU). A better check
-than case 1 in three ways - it is a lens rather than a plate, the material is a
-cyclo-olefin, and its depth data comes from one self-consistent method
-(successive 0.1 mm layers turned off, fringe order recounted).
-
-| Clause | Result | Bar | |
-|---|---|---|---|
-| in-plane peak | 4.763e-4 against a published 3.7e-5 - **12.87x** | within a factor of 2 | **FAIL** |
-| in-plane shape | maximum at the gate, 14% of it at the far edge | must decay from the gate | PASS |
-| layer removal | 3 of 4 cumulative points within 10 points | 3 of 4 | PASS |
 
 ### The two open failures, and what is known about each
 
