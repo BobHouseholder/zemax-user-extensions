@@ -37,10 +37,14 @@ namespace AthermalScan
             Program.LaunchLog("AthermalAnalysis Main: argc=" + (args == null ? 0 : args.Length) +
                               " argv=[" + string.Join(" ", args ?? new string[0]) + "]");
 
-            if (!ZemaxLocator.Initialize())
+            string zosError;
+            if (!ZemaxLocator.TryInitialize(out zosError))
             {
-                Program.LaunchLog("  FATAL: no OpticStudio installation found");
-                Console.WriteLine("FATAL: failed to locate an OpticStudio installation.");
+                Program.LaunchLog("  FATAL: no OpticStudio installation found"
+                                  + (zosError == null ? "" : " - " + zosError));
+                Console.WriteLine("FATAL: failed to locate an OpticStudio installation."
+                                  + (zosError == null ? "" : "  " + zosError));
+                Environment.ExitCode = 1;
                 return;
             }
             Program.LaunchLog("  ZOSAPI from " + (ZemaxLocator.ResolvedDirectory ?? "(unknown)"));

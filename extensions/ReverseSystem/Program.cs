@@ -112,13 +112,19 @@ namespace ReverseSystem
         {
             ParseArgs(args);
 
-            if (!ZemaxLocator.Initialize())
+            string zosError;
+            if (!ZemaxLocator.TryInitialize(out zosError))
             {
-                Console.WriteLine("FATAL: failed to locate an OpticStudio installation.");
+                Console.WriteLine("FATAL: failed to locate an OpticStudio installation."
+                                  + (zosError == null ? "" : "  " + zosError));
                 Environment.ExitCode = 1;
                 return;
             }
-            Console.WriteLine("Found OpticStudio at: " + ZOSAPI_NetHelper.ZOSAPI_Initializer.GetZemaxDirectory());
+            // ZemaxLocator.ResolvedDirectory, not ZOSAPI_Initializer directly: naming a
+            // ZOSAPI type in Main forces that assembly to load when Main is compiled,
+            // which is before the guard above can report anything. Same string, no
+            // reference.
+            Console.WriteLine("Found OpticStudio at: " + (ZemaxLocator.ResolvedDirectory ?? "(unknown)"));
 
             try { Run(); }
             catch (Exception ex)

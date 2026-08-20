@@ -50,9 +50,11 @@ namespace DetectorDump
         static void Main(string[] args)
         {
             ParseArgs(args);
-            if (!ZemaxLocator.Initialize())
+            string zosError;
+            if (!ZemaxLocator.TryInitialize(out zosError))
             {
-                Console.WriteLine("FATAL: failed to locate an OpticStudio installation.");
+                Console.WriteLine("FATAL: failed to locate an OpticStudio installation."
+                                  + (zosError == null ? "" : "  " + zosError));
                 Environment.ExitCode = 1;
                 return;
             }

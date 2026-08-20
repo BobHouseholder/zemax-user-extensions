@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -27,6 +28,39 @@ static class ZemaxLocator
 {
     public static string ResolvedDirectory { get; private set; }
 
+    // Call THIS from Main, not Initialize().
+    //
+    // Initialize() names ZOSAPI_NetHelper types, so the JIT must resolve that
+    // assembly to compile it. If the helper is missing - the .exe copied somewhere
+    // without it, or a damaged install - that throws FileNotFoundException at the
+    // moment Initialize() is compiled, which is BEFORE its first statement runs and
+    // outside any try block written inside it. Unhandled, the process does not exit,
+    // it parks on a Windows Error Reporting dialog: observed as exit code
+    // 0xE0434352 with a single line in the launch log and nothing else, and for a
+    // ribbon-launched add-in it leaves OpticStudio waiting on a process that will
+    // never finish.
+    //
+    // A try around the CALL works where a try inside the callee cannot, because the
+    // handler is already established when the callee is compiled. That only holds if
+    // the callee is not inlined into the caller - inlining would drag the ZOSAPI
+    // references back into this method and move the failure to ITS compilation, one
+    // frame further out and unprotected again. Hence NoInlining below; it is
+    // load-bearing, not decoration.
+    public static bool TryInitialize(out string error)
+    {
+        error = null;
+        try
+        {
+            return Initialize();
+        }
+        catch (Exception ex)
+        {
+            error = ex.GetType().Name + ": " + ex.Message;
+            return false;
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public static bool Initialize()
     {
         foreach (string dir in Candidates())
