@@ -149,24 +149,37 @@ These are compiled add-ins for Ansys Zemax OpticStudio, built against $osName.
 They are NOT signed, and Windows treats downloaded executables as untrusted - see
 UNBLOCK below, which you will probably need.
 
-1. Find your Zemax data folder. OpticStudio reports it under
-   Setup > Project Preferences > Folders. It is usually
+READ THIS FIRST IF YOU HAVE INSTALLED AN ANSYS EXTENSION BEFORE
+--------------------------------------------------------------
+Ansys's own extension zips - the CODE V Converter, for instance - are extracted
+INTO the Extensions folder. Do not do that with this one. This zip carries TWO
+destinations, because one of the nine is a User Analysis rather than an
+extension, so its top level is a ZOS-API folder rather than loose .exe files.
+Extracting it into Extensions would give you
+
+    ...\Zemax\ZOS-API\Extensions\ZOS-API\Extensions\*.exe
+
+which is nested one level too deep, and nothing would appear in any menu.
+Follow step 2 instead.
+
+1. Close OpticStudio, and find your Zemax data folder. OpticStudio reports it
+   under Setup > Project Preferences > Folders. It is usually
        C:\Users\<you>\Documents\Zemax
    If your Documents folder is redirected to OneDrive you may have two folders
    that look alike. Use the one OpticStudio names, not the one that looks right.
 
-2. Drag the ZOS-API folder out of this zip onto your Zemax data folder.
-   Windows asks to merge - say yes. Nothing of yours is replaced except an add-in
-   of the same name.
+2. Drag the ZOS-API folder out of this zip onto your Zemax data folder - onto
+   the folder ABOVE, not into Extensions. Windows asks to merge - say yes.
+   Nothing of yours is replaced except an add-in of the same name.
 
 3. Do NOT double-click these from Explorer. OpticStudio launches them, you do not.
    A double-click ends in a connection error - harmless, but some of them show a
    settings dialog first, which makes it look as though it worked.
 
-4. In OpticStudio press Programming > Refresh List. The extensions appear under
-   Programming > User Extensions. AthermalAnalysis is a User Analysis rather than
-   an extension: it needs an OpticStudio restart, and appears under
-   Analyze > User Analysis.
+4. Open OpticStudio. The extensions are under Programming > User Extensions, and
+   AthermalAnalysis - the one User Analysis - under Analyze > User Analysis.
+   If you left OpticStudio open at step 1, Programming > Refresh List picks up
+   new extensions without a restart; a new User Analysis still needs one.
 
 UNBLOCK
 -------

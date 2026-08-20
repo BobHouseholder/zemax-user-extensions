@@ -782,38 +782,50 @@ target empty, so the copy is manual by their design.
 
 ## Releases
 
-There are none, and that is the policy rather than a backlog item. No compiled
-binary is published anywhere — not committed under `extensions/`, not attached as
-a release asset. Build from source; the build deploys itself (see
-[Building](#building)).
+Nothing is published yet. `tools\pack.ps1` builds the zip that would be published,
+and what is still open is a licensing question, not a technical one.
 
-Three reasons, and the first is specific to ZOS-API rather than general dislike of
-binaries in git:
+**Ansys distributes a ZOS-API user extension exactly this way**, which settles the
+delivery pattern. Their CODE V Converter ships as a zip attached to a knowledge
+base article —
+[Importing CODE V designs into OpticStudio](https://optics.ansys.com/hc/en-us/articles/42661823280275-Importing-CODE-V-designs-into-OpticStudio):
 
-- **This cannot be built in CI.** `ZemaxPaths.props` requires `ZOSAPI.dll`, which
-  exists only inside a licensed OpticStudio installation. No hosted runner has
-  one. So every published binary would be hand-built on one machine and hand
-  uploaded, with nothing tying it to the tag it claims to come from — the worst
-  property a distributed executable can have.
-- **A compiled `.exe` is frozen to one OpticStudio release; the user's install is
-  not.** The ZOSAPI assemblies are referenced with `Private=false` and resolved at
-  runtime by `ZOSAPI_NetHelper` against whatever is installed, so a prebuilt
-  binary compiled against one release can meet a different one at load time.
-  Building locally re-resolves against the install actually present. This repo has
-  already been bitten by version drift once from the other direction: the
-  enumerated version list in `ZemaxPaths.props` named 2026 R1.01, R1.00 and
-  2025 R2.00, and failed on a machine carrying R1.03.
-- **Redistribution is an open question about Ansys's terms**, not this repository's
-  — see [Licence](#licence). Note also that `bin\Release\` contains
-  `ZOSAPI_NetHelper.dll`, an Ansys binary, so publishing a build folder
-  redistributes Ansys code outright even though the `.exe` beside it does not.
+> You can download the Converter as a ZIP folder attached to this article. To
+> install it, first close OpticStudio. Then simply extract the files in the
+> attached ZIP into your `Documents\Zemax\ZOS-API\Extensions` folder. Make sure
+> that the executable (`CODE V Converter.exe`) is at the top level of this folder.
 
-The only friction this policy imposes is installing the .NET SDK.
+So a compiled extension delivered as a zip and dropped into the Extensions folder
+is a normal, documented install path — not something a user would find strange.
+`tools\pack.ps1` produces that zip: mirrored `ZOS-API\` tree, a manifest naming
+the source commit and the OpticStudio build, SHA-256 per file, and guards that
+refuse to pack an Ansys binary or a dirty tree.
 
-If a tagged release is ever cut, it carries the bare `.exe` and its `.exe.config`
-and nothing else — never the `bin` folder — and it states the OpticStudio release
-it was compiled against and a SHA-256 for each file. A binary that does not say
-which OpticStudio it was built against is not shippable here.
+**One earlier objection here was wrong and is withdrawn.** This section used to
+say a prebuilt `.exe` could meet a different OpticStudio release "at load time",
+implying a binding failure. `ZOSAPI.dll` and `ZOSAPI_Interfaces.dll` are
+`AssemblyVersion 1.0.0.0` in every release — Ansys does not version the API
+assemblies at all — so cross-release binding always succeeds. The residual risk
+is only a member being withdrawn or resignatured, which is a much smaller surface.
+
+Three things do remain, and none of them are settled by the precedent:
+
+- **Redistribution terms.** Ansys shipping a build of their own extension says
+  nothing about a third party shipping one linked against their SDK. This is the
+  blocker, and it is a question for Ansys, not for this repository. See
+  [Licence](#licence).
+- **Signing.** Ansys's `CODE V Converter.exe` is Authenticode-signed by
+  `CN=ANSYS Inc.`; every binary here is unsigned. Same delivery mechanism, a
+  different trust proposition — an unsigned `.exe` out of a zip meets SmartScreen
+  and needs unblocking, which the packer's `INSTALL.txt` explains.
+- **No CI.** `ZemaxPaths.props` needs `ZOSAPI.dll`, which exists only inside a
+  licensed install, so no hosted runner can build this and any release is
+  hand-built. Partly mitigated: the packer refuses a dirty tree and stamps the
+  source commit into the manifest, so a zip can at least be tied to a revision.
+
+Until the first point is answered, build from source — it is one command, it
+compiles against *your* OpticStudio rather than someone else's, and it deploys
+itself. See [Building](#building).
 
 ## Licence
 
