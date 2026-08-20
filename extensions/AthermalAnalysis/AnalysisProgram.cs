@@ -44,7 +44,27 @@ namespace AthermalScan
                 return;
             }
             Program.LaunchLog("  ZOSAPI from " + (ZemaxLocator.ResolvedDirectory ?? "(unknown)"));
-            Begin();
+
+            // Begin() already logs what threw and rethrows, which is right for the
+            // log and wrong for the host: an exception that leaves Main unhandled
+            // does not end the process, it parks it on a Windows Error Reporting
+            // dialog, and OpticStudio waits for a user analysis to exit before it
+            // gives the GUI back. So the run would fail AND the application would
+            // sit there apparently hung, with the cause already written to a log
+            // nobody knows to open. Swallow it here - after Begin() has recorded
+            // the detail - so the process exits promptly and OpticStudio is
+            // released. A plain catch declares no ZOSAPI type, so it does not
+            // breach the type-confinement rule above.
+            try
+            {
+                Begin();
+            }
+            catch (Exception ex)
+            {
+                Program.LaunchLog("  EXIT after unhandled: " + ex.GetType().Name + ": " + ex.Message);
+                Console.WriteLine("FATAL: " + ex.Message);
+                Environment.ExitCode = 1;
+            }
         }
 
         // Every ZOSAPI type is confined below this line, in a method the JIT does not

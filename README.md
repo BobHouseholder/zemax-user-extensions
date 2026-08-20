@@ -8,10 +8,18 @@ also be run from a shell against a session waiting in
 **Programming > Interactive Extension** mode.
 
 Ribbon (GUI) runs report progress and results through OpticStudio's extension
-progress display, honor the **Terminate** button in their long-running loops,
-and auto-open their report/image outputs when finished, since the console
-window closes with the process (pass `-quiet` to disable the auto-open).
-Tools that modify the system show their edits live in the editors.
+progress display, and auto-open their report/image outputs when finished, since
+the console window closes with the process (pass `-quiet` to disable the
+auto-open). Tools that modify the system show their edits live in the editors.
+
+**Terminate is honoured by four of the nine.** AthermalScan, DetectorDump,
+EquivalentGlassFinder and LayoutRender poll `TerminateRequested` inside their
+loops, so Cancel stops the run at the next iteration. CryoGlass,
+DistortionTarget, MoldStress, ReverseSystem and the AthermalAnalysis window do
+not reference it at all — pressing Cancel there does nothing and the run goes to
+completion. That gap matters most on DistortionTarget and MoldStress, the two
+longest-running of the set. OpticStudio's own template checks the flag once,
+before your code runs, which is why checking it is not the same as honouring it.
 
 ## Extensions
 
