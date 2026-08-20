@@ -1050,6 +1050,54 @@ namespace MoldStress
                         tail, cCore, cSurf,
                         Math.Abs(cCore) > 1e-20 ? cSurf / cCore : double.NaN));
                 }
+                // ---- CANDIDATE 2: DOES THE PRESSURE ARRIVE EARLIER? -----------
+                //
+                // The skin reads zero because it vitrifies at 0.206 s and the
+                // digitised trace shows nothing until 0.25 s - a gap of 0.044 s,
+                // which is the same order as the read error on a rise that is
+                // nearly vertical on the page. So this shifts the whole trace
+                // earlier and asks how far it has to move before the skin lights
+                // up, then compares that against the uncertainty I actually
+                // stated: peak position 0.37 +- 0.02 s.
+                //
+                // The test is not "can a shift fix it" - any large enough shift
+                // will. It is whether the REQUIRED shift fits inside the error
+                // bar that was written down before this question was asked.
+                say("");
+                say("  CANDIDATE 2: trace shifted earlier, against a stated +-0.02 s:");
+                say("     shift s    onset s    dn at z/d 0.95    dn at z/d 0.90");
+                int k95 = (int)Math.Round(kMid + (nz - 1 - kMid) * 0.95);
+                int k90 = (int)Math.Round(kMid + (nz - 1 - kMid) * 0.90);
+                foreach (double shift in new[] { 0.00, -0.02, -0.04, -0.06, -0.10, -0.15 })
+                {
+                    var tShift = new double[PressureTraceS.Length];
+                    for (int j2 = 0; j2 < tShift.Length; j2++)
+                        tShift[j2] = Math.Max(PressureTraceS[j2] + shift, 0.0);
+                    // onset = first time carrying any pressure at all
+                    double onset = double.NaN;
+                    for (int j2 = 0; j2 < tShift.Length; j2++)
+                        if (PressureTraceMPa[j2] > 0.0) { onset = tShift[j2]; break; }
+
+                    for (int j2 = 0; j2 < rowT.Length; j2++)
+                        rowT[j2] = freeze.TempHistoryC[k95, j2];
+                    double d95 = Channels.FrozenBirefringence(
+                        freeze.TimeGridS, rowT, tShift, devMPa, p, freeze.FreezeTimeS[k95]);
+                    for (int j2 = 0; j2 < rowT.Length; j2++)
+                        rowT[j2] = freeze.TempHistoryC[k90, j2];
+                    double d90 = Channels.FrozenBirefringence(
+                        freeze.TimeGridS, rowT, tShift, devMPa, p, freeze.FreezeTimeS[k90]);
+                    say(string.Format(ci, "    {0,7:F2}   {1,8:F3}   {2,15:E3}   {3,15:E3}",
+                        shift, onset, d95, d90));
+                }
+                say(string.Format(ci,
+                    "    z/d 0.95 freezes at {0:F3} s, z/d 0.90 at {1:F3} s.",
+                    freeze.FreezeTimeS[k95], freeze.FreezeTimeS[k90]));
+                say("    A shift inside the stated +-0.02 s does NOT reach the 0.95 layer,");
+                say("    which freezes at 0.05 s - it would need about -0.20 s, ten times the");
+                say("    error bar and a quarter of the whole fill. So candidate 2 cannot");
+                say("    rescue the OUTERMOST layers within its own uncertainty. It does");
+                say("    move the 0.90 layer, which sits right at the edge of the read.");
+                say("");
                 say("    AND THE OUTERMOST LAYERS NOW READ EXACTLY ZERO, which is a result");
                 say("    rather than a rounding. z/d 0.90 vitrifies at 0.206 s and the");
                 say("    digitised trace shows no pressure until 0.25 s, so the skin freezes");
