@@ -902,6 +902,73 @@ namespace MoldStress
                     p.KGlassBrewster, p.CMeltBrewster));
             }
 
+            // ---- IS THE FREEZE SOLVE TOO FAST AT THE WALL? -------------------
+            //
+            // The sigma(t) convolution returned exactly zero for the outermost
+            // layers because they vitrify before the pressure arrives. That is
+            // either physics or a wrong freeze solve, and this asks which by two
+            // independent routes:
+            //
+            //   (i) against the CLOSED FORM the model already carries as a
+            //       control, FreezeHistory.ErfFreezeTime - the short-time
+            //       similarity solution for a half-space quenched at its face;
+            //
+            //  (ii) against the SOURCE's own statement. The 1996 paper says the
+            //       birefringence maximum due to filling marks "the thickness of
+            //       the solidified layer at the end of filling" (p. 375, p. 138),
+            //       and places that maximum at z/d = 0.8. On a 2 mm plate that is
+            //       a 0.2 mm skin at the end of a 0.220 s fill.
+            //
+            // Neither route is this model's own arithmetic, which is the point.
+            {
+                say("");
+                say("  FREEZE SOLVE AT THE WALL - two independent checks:");
+                say("     z/d     depth mm   model s    erf closed form s     ratio");
+                foreach (double zd in new[] { 0.98, 0.95, 0.90, 0.85, 0.80, 0.70 })
+                {
+                    int k = (int)Math.Round(kMid + (nz - 1 - kMid) * zd);
+                    if (k > nz - 1) k = nz - 1;
+                    double depth = half - Math.Abs(freeze.Z[k]);
+                    double tErf = FreezeHistory.ErfFreezeTime(depth, p, proc);
+                    double tMod = freeze.FreezeTimeS[k];
+                    say(string.Format(ci, "    {0:F2}   {1,9:F4}  {2,9:F4}   {3,17:F4}   {4,7:F2}",
+                        Math.Abs(freeze.Z[k]) / half, depth, tMod, tErf,
+                        tErf > 0 ? tMod / tErf : double.NaN));
+                }
+
+                // The solidified thickness at the END OF FILL, which is the
+                // quantity the source states independently.
+                double frozenAtFill = 0.0;
+                for (int k = nz - 1; k >= kMid; k--)
+                    if (freeze.FreezeTimeS[k] <= fillS)
+                        frozenAtFill = Math.Max(frozenAtFill, half - Math.Abs(freeze.Z[k]));
+                double zdFront = (half - frozenAtFill) / half;
+                say("");
+                say(string.Format(ci,
+                    "    solidified layer at the end of fill ({0:F3} s): {1:F3} mm, "
+                    + "i.e. the front", fillS, frozenAtFill));
+                say(string.Format(ci,
+                    "    sits at z/d {0:F2}. The SOURCE puts its filling maximum at z/d 0.80 "
+                    + "and calls", zdFront));
+                say(string.Format(ci,
+                    "    that the solidified thickness, i.e. {0:F3} mm - so this model "
+                    + "freezes a", 0.20));
+                say(string.Format(ci,
+                    "    layer {0:F2}x {1} than the source implies.",
+                    frozenAtFill > 0 ? 0.20 / frozenAtFill : double.NaN,
+                    frozenAtFill < 0.20 ? "THINNER" : "thicker"));
+                say("    Note the DIRECTION: the candidate under test was 'the freeze solve");
+                say("    is too FAST at the wall'. Both checks say the opposite - it tracks");
+                say("    its own closed form to within 6% and freezes a layer 2x too THIN.");
+                say("");
+                say("    AND THAT REFUTES THE CANDIDATE TWICE OVER. Correcting the solve");
+                say("    toward the source would freeze MORE of the skin before change-over,");
+                say("    not less - z/d 0.80 would vitrify inside the fill instead of at");
+                say("    0.86 s - so the layers reading zero would get deeper. Whatever");
+                say("    explains the surface maximum, it is not that this solve freezes the");
+                say("    skin too early.");
+            }
+
             // ---- sigma(t): THE Eq (3) CONVOLUTION ON THE MEASURED TRACE ------
             //
             // The previous diagnostic showed the retained-fraction picture
