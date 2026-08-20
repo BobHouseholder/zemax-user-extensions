@@ -18,21 +18,41 @@ namespace MoldStress
         public double FrontRadiusMm;        // 0 => plano
         public double BackRadiusMm;
 
+        /// <summary>
+        /// The REST of the surface shape, read from the LDE since 2026-08-20.
+        /// Before that only the base radii were read and every surface became a
+        /// pure sphere - which for a moulded optic is usually the wrong part,
+        /// since asphericity at no extra unit cost is the economic reason to
+        /// mould rather than grind.
+        ///
+        /// `Pars` are LDE parameter cells 1..8. An EVEN asphere reads them as
+        /// the coefficients of r^2, r^4, r^6 ...; an ODD asphere as r^1, r^2,
+        /// r^3 ... Those are the conventions the AthermalScan extension already
+        /// evaluates against this same API.
+        /// </summary>
+        public double FrontConic, BackConic;
+        public double[] FrontPars, BackPars;
+        public bool FrontIsEvenAsphere, BackIsEvenAsphere;
+        public bool FrontIsOddAsphere, BackIsOddAsphere;
+
         public GateSpec Gate;
         public double PartingLineZMm;       // local z of the parting plane, from the front vertex
 
         /// <summary>
-        /// How this element's surfaces depart from the spheres this solver can
-        /// represent, or null when they do not. Set by Session.FindElements and
-        /// refused by Runner unless -allow-nonspherical is passed.
+        /// How this element's surfaces depart from a plain sphere, or null when
+        /// they do not. INFORMATIONAL since 2026-08-20 - conics and even/odd
+        /// aspheric terms are now read and modelled, so this is reported rather
+        /// than refused. It is still worth printing: the cavity profile is the
+        /// whole geometry input, feeding the fill time, the wall thickness, the
+        /// freeze history and the z-coordinates written into STAR, so the user
+        /// should see which shape the run was built on.
         ///
-        /// THE CAVITY PROFILE IS THE WHOLE GEOMETRY INPUT. `ThicknessAt` is built
-        /// from `Sag`, which is the conic-free sphere, and it feeds the fill time,
-        /// the wall thickness, the freeze history and the z-coordinates written
-        /// into the STAR file. A conic or an aspheric term that is not read is not
-        /// a small error in one place; it is a different part.
+        /// `ShapeUnreadable` is the half that IS still refused: a surface type
+        /// whose parameters this solver cannot interpret at all, where the base
+        /// radius is the only thing it can fall back on.
         /// </summary>
         public string ShapeDeparture;
+        public string ShapeUnreadable;
 
         /// <summary>
         /// Thickness of the cavity at radius r, from the two surface sags. This
@@ -41,9 +61,53 @@ namespace MoldStress
         /// </summary>
         public double ThicknessAt(double r)
         {
-            return CentreThicknessMm - Sag(FrontRadiusMm, r) + Sag(BackRadiusMm, r);
+            return CentreThicknessMm - SagFrontAt(r) + SagBackAt(r);
         }
 
+        /// <summary>The two surface sags including conic and aspheric terms.
+        /// Exposed because StarFiles writes these same z-coordinates into the
+        /// export: a cavity solved on one shape and exported on another would be
+        /// worse than either one used consistently.</summary>
+        public double SagFrontAt(double r)
+        {
+            return Sag(FrontRadiusMm, FrontConic, FrontPars,
+                       FrontIsEvenAsphere, FrontIsOddAsphere, r);
+        }
+
+        public double SagBackAt(double r)
+        {
+            return Sag(BackRadiusMm, BackConic, BackPars,
+                       BackIsEvenAsphere, BackIsOddAsphere, r);
+        }
+
+        /// <summary>
+        /// The thinnest point of the cavity anywhere inside the clear aperture,
+        /// and where it is.
+        ///
+        /// FOR A SPHERE THIS IS ALWAYS AN END POINT - the thickness is monotonic
+        /// in r - which is why the centre and edge thicknesses were sufficient
+        /// while every surface was a sphere. An asphere has no such guarantee: a
+        /// steepening high-order term can pinch the wall in the middle of the
+        /// aperture, and that pinch is what sets the fill and the freeze time,
+        /// not either end. Scanned rather than solved, because the sag is a
+        /// polynomial of arbitrary order plus a square root.
+        /// </summary>
+        public double MinThicknessMm(out double atRadiusMm)
+        {
+            const int n = 129;
+            double best = double.MaxValue; atRadiusMm = 0.0;
+            for (int i = 0; i < n; i++)
+            {
+                double r = SemiDiameterMm * i / (n - 1.0);
+                double h = ThicknessAt(r);
+                if (h < best) { best = h; atRadiusMm = r; }
+            }
+            return best;
+        }
+
+        /// <summary>The sphere. Kept as the control: the full form below must
+        /// reproduce it bit-for-bit at zero conic with no terms, and the
+        /// self-test asserts exactly that.</summary>
         internal static double Sag(double radius, double r)
         {
             if (radius == 0 || double.IsInfinity(radius)) return 0.0;
@@ -51,6 +115,47 @@ namespace MoldStress
             double arg = 1.0 - c * c * r * r;
             if (arg <= 0) return radius;            // beyond the hemisphere: clamp
             return c * r * r / (1.0 + Math.Sqrt(arg));
+        }
+
+        /// <summary>
+        /// THE FULL SAG - conic plus even or odd aspheric terms:
+        ///
+        ///     z = c r^2 / (1 + sqrt(1 - (1+k) c^2 r^2))  +  SUM a_i r^p
+        ///
+        /// with p = 2i for an even asphere and p = i for an odd one.
+        ///
+        /// The conic sits in the DENOMINATOR, so it is not a small correction to
+        /// the leading term: k = -1 (parabola) removes the r-dependence of the
+        /// square root entirely, and an oblate surface (k > 0) runs out of real
+        /// surface at a SMALLER radius than the sphere of the same base radius.
+        ///
+        /// The clamp means what it meant in the spherical form - r is off the
+        /// end of the surface - but the value it returns is not the same. The
+        /// sphere's clamp returns `radius`, its pole; the conic's pole is at
+        /// r^2 = R^2/(1+k), where the sag is R/(1+k). At k = 0 that IS `radius`,
+        /// which is what keeps the sphere case bit-identical. k <= -1 can never
+        /// reach the clamp: 1+k <= 0 leaves the argument at or above 1.
+        /// </summary>
+        internal static double Sag(double radius, double conic, double[] pars,
+                                   bool evenAsphere, bool oddAsphere, double r)
+        {
+            double z = 0.0;
+            if (!(radius == 0 || double.IsInfinity(radius)))
+            {
+                double c = 1.0 / radius;
+                double arg = 1.0 - (1.0 + conic) * c * c * r * r;
+                z = arg <= 0
+                    ? radius / (1.0 + conic)               // the pole; see above
+                    : c * r * r / (1.0 + Math.Sqrt(arg));
+            }
+            if ((evenAsphere || oddAsphere) && pars != null)
+                for (int i = 0; i < pars.Length; i++)
+                {
+                    if (pars[i] == 0.0) continue;
+                    int power = evenAsphere ? 2 * (i + 1) : (i + 1);
+                    z += pars[i] * Math.Pow(r, power);
+                }
+            return z;
         }
     }
 
@@ -117,8 +222,8 @@ namespace MoldStress
         /// </summary>
         public static double DefaultPartingLineZ(MouldedElement e)
         {
-            double zFrontEdge = MouldedElement.Sag(e.FrontRadiusMm, e.SemiDiameterMm);
-            double zBackEdge = e.CentreThicknessMm + MouldedElement.Sag(e.BackRadiusMm, e.SemiDiameterMm);
+            double zFrontEdge = e.SagFrontAt(e.SemiDiameterMm);
+            double zBackEdge = e.CentreThicknessMm + e.SagBackAt(e.SemiDiameterMm);
             return 0.5 * (zFrontEdge + zBackEdge);
         }
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 
 namespace MoldStress
 {
@@ -60,6 +61,170 @@ namespace MoldStress
 
         private static void GeometryChecks()
         {
+            // --- THE FULL SAG: conic and aspheric terms, both arms ---------
+            //
+            // Every one of these has a control that must NOT move beside a case
+            // that must. A sag routine that ignored its new arguments entirely
+            // would pass the controls and fail nothing else, which is how the
+            // spherical-only version survived unnoticed for the life of the tool.
+            {
+                double[] none = null;
+
+                // (a) THE SPHERE IS UNCHANGED, BIT FOR BIT. Not "within a
+                // tolerance" - the general form must reduce to the identical
+                // floating-point expression, because all four reference cases
+                // are spherical or plano and any drift here moves published
+                // numbers for no physical reason.
+                bool identical = true;
+                foreach (double R in new[] { 12.5, -30.0, 200.0, -8.75 })
+                    for (int i = 0; i <= 20; i++)
+                    {
+                        double r = 5.0 * i / 20.0;
+                        if (MouldedElement.Sag(R, 0.0, none, false, false, r)
+                            != MouldedElement.Sag(R, r)) identical = false;
+                    }
+                SelfTest.Check("zero conic, no terms reproduces the sphere exactly",
+                    identical, "84 samples over 4 radii, bitwise ==");
+
+                // (b) A PARABOLA. k = -1 kills the r-dependence of the square
+                // root, leaving z = r^2 / 2R exactly - an identity, not a fit,
+                // so it is a reference the implementation cannot define away.
+                SelfTest.Near("conic -1 gives the exact parabola r^2/2R",
+                    MouldedElement.Sag(20.0, -1.0, none, false, false, 10.0),
+                    100.0 / 40.0, 1e-12);
+
+                // (c) A HYPERBOLA, hand-computed: c = 0.05, r = 10, so
+                // arg = 1 - (1-3)(0.0025)(100) = 1.5 and z = 5/(1+sqrt(1.5)).
+                SelfTest.Near("conic -3 matches the hand calculation",
+                    MouldedElement.Sag(20.0, -3.0, none, false, false, 10.0),
+                    2.24744871391589, 1e-12);
+
+                // ... and it must DIFFER from the sphere by a mould-relevant
+                // amount, or the test above would pass on a routine that quietly
+                // dropped the conic and returned the spherical value.
+                SelfTest.Check("the conic actually moves the sag",
+                    Math.Abs(MouldedElement.Sag(20.0, -3.0, none, false, false, 10.0)
+                             - MouldedElement.Sag(20.0, 10.0)) > 0.4,
+                    string.Format(CultureInfo.InvariantCulture, "{0:F4} vs {1:F4} mm",
+                        MouldedElement.Sag(20.0, -3.0, none, false, false, 10.0),
+                        MouldedElement.Sag(20.0, 10.0)));
+
+                // (d) THE CLAMP. At k = 0 the pole is the sphere's own clamp
+                // value, which is what keeps (a) true; at k = 1 the surface runs
+                // out at a SMALLER radius and the pole is R/(1+k).
+                SelfTest.Near("the oblate pole is R/(1+k)",
+                    MouldedElement.Sag(20.0, 1.0, none, false, false, 500.0),
+                    10.0, 1e-12);
+
+                // (e) EVEN ASPHERE. Par2 is the r^4 coefficient, so the whole
+                // difference from the same conic surface must be a*r^4 exactly.
+                var evens = new double[8]; evens[1] = -3.0e-5;
+                SelfTest.Near("an even aspheric term adds exactly a*r^4",
+                    MouldedElement.Sag(20.0, 0.0, evens, true, false, 6.0)
+                    - MouldedElement.Sag(20.0, 6.0),
+                    -3.0e-5 * Math.Pow(6.0, 4), 1e-12);
+
+                // (f) ODD ASPHERE. Par1 is r^1, not r^2 - the two conventions
+                // differ from the first cell, so reading an odd asphere with the
+                // even mapping is wrong at leading order rather than in the tail.
+                var odds = new double[8]; odds[0] = 1.0e-3;
+                SelfTest.Near("an odd aspheric term adds exactly a*r^1",
+                    MouldedElement.Sag(20.0, 0.0, odds, false, true, 6.0)
+                    - MouldedElement.Sag(20.0, 6.0),
+                    1.0e-3 * 6.0, 1e-12);
+
+                // ... and the two conventions must not agree, or nothing above
+                // would detect them being swapped.
+                SelfTest.Check("the even and odd conventions differ",
+                    MouldedElement.Sag(20.0, 0.0, odds, true, false, 6.0)
+                    != MouldedElement.Sag(20.0, 0.0, odds, false, true, 6.0),
+                    "same coefficients read as r^2 and as r^1");
+
+                // (g) TERMS ARE IGNORED UNLESS THE TYPE ASKS FOR THEM. A
+                // Standard surface can hold junk in its parameter cells.
+                SelfTest.Check("a Standard surface ignores its parameter cells",
+                    MouldedElement.Sag(20.0, 0.0, evens, false, false, 6.0)
+                    == MouldedElement.Sag(20.0, 6.0),
+                    "even coefficients present, neither flag set");
+            }
+
+            // --- THE SHAPE REACHES THE CAVITY, not just the sag ------------
+            //
+            // The sag being right is worth nothing if ThicknessAt still calls the
+            // spherical form. Same element twice, differing in the conic alone.
+            {
+                var sphere = new MouldedElement
+                {
+                    CentreThicknessMm = 4.0, SemiDiameterMm = 10.0,
+                    FrontRadiusMm = 20.0, BackRadiusMm = 0.0,
+                };
+                var hyper = new MouldedElement
+                {
+                    CentreThicknessMm = 4.0, SemiDiameterMm = 10.0,
+                    FrontRadiusMm = 20.0, BackRadiusMm = 0.0, FrontConic = -3.0,
+                };
+                SelfTest.Near("the spherical element is unchanged",
+                    sphere.ThicknessAt(10.0), 4.0 - 2.67949192431123, 1e-12);
+                SelfTest.Near("the conic reaches the cavity thickness",
+                    hyper.ThicknessAt(10.0), 4.0 - 2.24744871391589, 1e-12);
+
+                // (h) THE INTERIOR PINCH. For a sphere the wall is monotonic in
+                // r, so the thinnest point is always an end and MinThicknessMm
+                // says nothing new. An asphere can pinch in the middle, and that
+                // pinch - not either end - sets the fill and the freeze.
+                //
+                // Front plano with 0.01 r^2 - 1e-4 r^4: the sag returns to zero
+                // at r = 10, so BOTH ends read 3.000 mm and the true minimum is
+                // at r^2 = -a2/2a4 = 50, r = 7.0711, where the sag is
+                // 0.01(50) - 1e-4(2500) = 0.25 and the wall is 2.750 mm.
+                var pinched = new MouldedElement
+                {
+                    CentreThicknessMm = 3.0, SemiDiameterMm = 10.0,
+                    FrontRadiusMm = 0.0, BackRadiusMm = 0.0,
+                    FrontIsEvenAsphere = true,
+                    FrontPars = new double[] { 0.01, -1.0e-4, 0, 0, 0, 0, 0, 0 },
+                };
+                double rPinch, rEnd;
+                double hPinch = pinched.MinThicknessMm(out rPinch);
+                SelfTest.Check("both ends of the pinched element read the same",
+                    Math.Abs(pinched.ThicknessAt(0.0) - pinched.ThicknessAt(10.0)) < 1e-12,
+                    string.Format(CultureInfo.InvariantCulture, "{0:F4} and {1:F4} mm",
+                        pinched.ThicknessAt(0.0), pinched.ThicknessAt(10.0)));
+                SelfTest.Near("the interior pinch is found, and its depth",
+                    hPinch, 2.75, 2e-4);
+                SelfTest.Check("the pinch is located inside the aperture",
+                    Math.Abs(rPinch - 7.0711) < 0.08,
+                    string.Format(CultureInfo.InvariantCulture, "r = {0:F4} mm", rPinch));
+
+                // ... and the CONTROL: on a sphere the same scan must land on an
+                // end, or the scan is finding minima that are not there.
+                double hEnd = sphere.MinThicknessMm(out rEnd);
+                SelfTest.Check("on a sphere the thinnest wall is at an end",
+                    rEnd == 10.0 && hEnd == sphere.ThicknessAt(10.0),
+                    string.Format(CultureInfo.InvariantCulture,
+                        "r = {0:F3} mm, {1:F4} mm", rEnd, hEnd));
+            }
+
+            // --- WHAT IS STILL REFUSED, and what is no longer --------------
+            //
+            // The guard went in hours before the sag did, and it refused conics
+            // and aspheres because nothing could model them. Now something can,
+            // so the refusal must have NARROWED - and a relaxation that quietly
+            // went too far would look exactly like a guard that works.
+            {
+                SelfTest.Check("a conic is no longer refused",
+                    Session.UnreadableShape("Standard") == null, "Standard");
+                SelfTest.Check("an even asphere is no longer refused",
+                    Session.UnreadableShape("EvenAspheric") == null, "EvenAspheric");
+                SelfTest.Check("an odd asphere is no longer refused",
+                    Session.UnreadableShape("OddAsphere") == null, "OddAsphere");
+
+                foreach (string t in new[] { "Toroidal", "Biconic", "ZernikeStandardSag", null })
+                    SelfTest.Check("an unreadable surface type IS still refused: " + (t ?? "(null)"),
+                        Session.UnreadableShape(t) != null,
+                        Session.UnreadableShape(t) ?? "(null)");
+            }
+
             // --- THE NON-SPHERICAL GUARD, both arms ------------------------
             //
             // A guard that never fires and a guard that always fires look

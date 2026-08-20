@@ -341,10 +341,15 @@ namespace MoldStress
             Console.WriteLine("  -run [-file <lens.zmx>] [-gateconfig <f>] [-outdir <d>]");
             Console.WriteLine("       [-filltime s] [-packpressure MPa] [-packtime s]");
             Console.WriteLine("       [-melttemp C] [-moldtemp C]");
+            Console.WriteLine("       [-nt n] [-allow-nonspherical]");
             Console.WriteLine("        The whole chain: gate, fill field, freeze history, the three");
             Console.WriteLine("        channels, STAR stress and index files, loaded and applied,");
             Console.WriteLine("        with the performance change against a baseline measured");
             Console.WriteLine("        before anything was imported.");
+            Console.WriteLine("        The cavity profile is the real sag - base radius, conic,");
+            Console.WriteLine("        and even or odd aspheric terms. A surface type whose shape");
+            Console.WriteLine("        cannot be read at all is REFUSED; -allow-nonspherical");
+            Console.WriteLine("        substitutes its base radius and says so.");
             Console.WriteLine();
             Console.WriteLine("  -selftest");
             Console.WriteLine("        Run every stage against its closed form. Exits non-zero on");

@@ -107,7 +107,10 @@ namespace MoldStress
                     int iS = NearestNode(fill.S, s);
 
                     double h = e.ThicknessAt(r);
-                    double zFront = MouldedElement.Sag(e.FrontRadiusMm, r);
+                    // The SAME shape the cavity was solved on, conic and
+                    // aspheric terms included. A sphere here against an asphere
+                    // there would put the stress field on the wrong surface.
+                    double zFront = e.SagFrontAt(r);
 
                     for (int kk = 0; kk < nz; kk++)
                     {

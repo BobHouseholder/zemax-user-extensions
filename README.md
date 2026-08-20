@@ -271,7 +271,9 @@ STAR and no mould-flow seat.
 Nothing is asked that the design does not already contain: the cavity profile comes
 from the surface sag, so the fill solve needs no mesh, and a single edge gate at +Y
 (ring gate above 12 mm semi-diameter) with a parting plane at the rim are defaults,
-overridable per element. **Only base radius is read — aspheres get a spherical proxy.**
+overridable per element. The sag reads the base radius, the conic, and even or odd
+aspheric terms; surface types whose parameters it cannot interpret are refused rather
+than silently flattened to a sphere.
 
 Four stages, each held against a closed form by `-selftest` before the next depends
 on it:
@@ -343,9 +345,8 @@ with a known gate and a mould temperature safely below Tg — and then as an
 order-of-magnitude estimate of stress birefringence, not a number to set a tolerance
 against.
 
-**Not** worth acting on for: an **aspheric or toroidal** surface, where only the base
-radius is read and a spherical proxy is silently substituted; a **non-circular
-outline**, approximated as a disc; a material whose photoelastic constants are
+**Not** worth acting on for: a **toroidal, biconic or Zernike** surface, whose shape
+this solver cannot read at all; a **non-circular outline**, approximated as a disc; a material whose photoelastic constants are
 catalogue-generic (four of the five are); a part whose dominant moulding risk is
 **warpage or sink**, which is not modelled at all; or on the strength of the final RMS
 wavefront delta rather than the per-element **peak retardance** — on the one real lens
@@ -353,16 +354,22 @@ tested those differ by 585x.
 
 #### Open
 
-- **`nt = 240` is fixed and does not refine with `nz`**, so a convergence sweep in
-  `nz` alone proves nothing. This is the root cause of case 1's grid-dependent
-  verdict and it invalidates most convergence claims until re-taken in the
-  (`nz`, `nt`) plane.
-- **Only base radius is read** — no conic, no aspheric terms, so every surface is
-  modelled as a pure sphere. **No longer silent as of 2026-08-20**: a run REFUSES
-  when either bounding surface carries a conic, an aspheric term, or a surface type
-  this solver cannot read, naming what it found. `-allow-nonspherical` proceeds
-  anyway and prints what is being approximated. Reading the real sag is the fix and
-  is not done.
+- **The sag is read in full as of 2026-08-20** — base radius, conic, and even or odd
+  aspheric terms, in the standard form and the same one the sibling `AthermalScan`
+  evaluates against this API. It reaches the cavity thickness, the parting line and
+  the z-coordinates written into STAR, so the shape solved and the shape exported are
+  the same one. All four reference cases are byte-identical across the change, which
+  is the point: they are spherical or plano, so nothing there could have caught this.
+  What is still refused is a surface **type** whose parameter cells this solver cannot
+  interpret — toroidal, biconic, Zernike — where only the base radius would survive;
+  `-allow-nonspherical` proceeds anyway and prints what is being approximated.
+  **What remains open is that no reference case is aspheric.** The sag is held against
+  closed forms (an exact parabola at k = -1, a hand-computed hyperbola, the r^4 and
+  r^1 term identities) and against two deliberate sabotages, but nothing measures a
+  moulded asphere's birefringence against a published one. An asphere can also pinch
+  the wall in the middle of the aperture, where a sphere never can; that pinch is now
+  scanned for, reported, and refused when it closes, but it is the regime the
+  Hele-Shaw gapwise assumption is least happy in.
 - **`RejectFlagsNotReadBy` is wired into only two of the four reference modes**, so
   `-refcase` and `-refcase2` still absorb flags they never read — `-filltime` and
   now `-allow-nonspherical` among them. The guard exists; it is not connected.

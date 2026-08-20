@@ -138,17 +138,27 @@ namespace MoldStress
                 };
                 // The cavity is bounded by the smaller of the two apertures.
                 e.SemiDiameterMm = Math.Min(s.SemiDiameter, next.SemiDiameter);
-                e.EdgeThicknessMm = e.ThicknessAt(e.SemiDiameterMm);
                 // Both bounding surfaces, because the cavity is the gap between
-                // them and either one being non-spherical makes the profile wrong.
-                string dFront = ShapeDeparture(SurfaceTypeName(s), ConicOf(s), ParsOf(s));
-                string dBack = ShapeDeparture(SurfaceTypeName(next), ConicOf(next), ParsOf(next));
-                if (dFront != null || dBack != null)
-                    e.ShapeDeparture = string.Join(" | ", new[]
-                    {
-                        dFront == null ? null : "surface " + i + ": " + dFront,
-                        dBack == null ? null : "surface " + (i + 1) + ": " + dBack,
-                    }.Where(x => x != null).ToArray());
+                // them and either one's shape sets the profile.
+                string tFront = SurfaceTypeName(s), tBack = SurfaceTypeName(next);
+                e.FrontConic = ConicOf(s);
+                e.BackConic = ConicOf(next);
+                e.FrontPars = ParsOf(s);
+                e.BackPars = ParsOf(next);
+                e.FrontIsEvenAsphere = IsEvenAsphere(tFront);
+                e.BackIsEvenAsphere = IsEvenAsphere(tBack);
+                e.FrontIsOddAsphere = IsOddAsphere(tFront);
+                e.BackIsOddAsphere = IsOddAsphere(tBack);
+
+                // The aperture is the smaller of the two, but the EDGE thickness
+                // has to be recomputed once the shape is known - it was seeded
+                // above from the base radii alone.
+                e.EdgeThicknessMm = e.ThicknessAt(e.SemiDiameterMm);
+
+                string dFront = ShapeDeparture(tFront, e.FrontConic, e.FrontPars);
+                string dBack = ShapeDeparture(tBack, e.BackConic, e.BackPars);
+                e.ShapeDeparture = Join(i, dFront, dBack);
+                e.ShapeUnreadable = Join(i, UnreadableShape(tFront), UnreadableShape(tBack));
 
                 e.Gate = Gating.DefaultGate(e);
                 e.PartingLineZMm = Gating.DefaultPartingLineZ(e);
@@ -158,22 +168,21 @@ namespace MoldStress
         }
 
         /// <summary>
-        /// Names how a surface departs from a sphere, or returns null if it does
-        /// not. PURE, so it can be tested without OpticStudio running - which is
-        /// the whole reason it takes loose values rather than an ILDERow.
+        /// Names how a surface departs from a plain sphere, or returns null if
+        /// it does not. PURE, so it can be tested without OpticStudio running -
+        /// which is the whole reason it takes loose values rather than an ILDERow.
         ///
-        /// WHY THIS EXISTS. This tool reads only the base radius, and every
-        /// surface therefore becomes a pure sphere. That substitution was SILENT
-        /// until 2026-08-20: an aspheric lens produced a full, plausible run built
-        /// on a geometry it does not have. Moulded optics are asphere-heavy almost
-        /// by definition - asphericity for free is the economic reason to mould
-        /// rather than grind - so the silently-wrong case is the likely case, and
-        /// the tool's own validation suite never tests one: its only per-lens
-        /// reference case is plano-convex.
+        /// WHY THIS EXISTS. Until 2026-08-20 this tool read only the base radius,
+        /// so every surface became a pure sphere, SILENTLY: an aspheric lens
+        /// produced a full, plausible run built on a geometry it does not have.
+        /// Moulded optics are asphere-heavy almost by definition, and the tool's
+        /// own validation suite tests none of it - its only per-lens reference
+        /// case is plano-convex - so the silently-wrong case was also the likely
+        /// case. A guard went in first; the sag itself went in the same day.
         ///
-        /// Surface types other than Standard/EvenAspheric/OddAsphere are refused
-        /// outright rather than inspected, because this function cannot know what
-        /// their parameters mean.
+        /// The conic and the aspheric terms are now MODELLED, so what this
+        /// function returns is a description to print, not a reason to stop.
+        /// `UnreadableShape` is the reason to stop.
         /// </summary>
         public static string ShapeDeparture(string typeName, double conic, double[] pars)
         {
@@ -199,6 +208,50 @@ namespace MoldStress
                     why.Add("aspheric terms " + string.Join(", ", terms.ToArray()));
             }
             return why.Count == 0 ? null : string.Join("; ", why.ToArray());
+        }
+
+        /// <summary>
+        /// The half of a shape this solver still cannot represent: a surface type
+        /// whose parameter cells it cannot interpret. For those the base radius is
+        /// the only thing left to fall back on, which is the silent substitution
+        /// the 2026-08-20 guard exists to prevent, so they are refused unless
+        /// -allow-nonspherical is passed.
+        ///
+        /// Note what is NOT here. A conic on a Standard surface, and even or odd
+        /// aspheric terms, are read and evaluated - the sag handles them - so they
+        /// do not appear in this function at all. Keeping the two apart is the
+        /// point: the descriptive function tells the user what shape the run used,
+        /// this one decides whether there is a run to be had.
+        /// </summary>
+        public static string UnreadableShape(string typeName)
+        {
+            if (IsEvenAsphere(typeName) || IsOddAsphere(typeName) ||
+                string.Equals(typeName, "Standard", StringComparison.OrdinalIgnoreCase))
+                return null;
+            return "surface type " + (typeName ?? "?") +
+                   " is not one this solver can read; only its base radius would be used";
+        }
+
+        internal static bool IsEvenAsphere(string typeName)
+        {
+            return string.Equals(typeName, "EvenAspheric", StringComparison.OrdinalIgnoreCase);
+        }
+
+        internal static bool IsOddAsphere(string typeName)
+        {
+            return string.Equals(typeName, "OddAsphere", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>Labels a front/back pair of findings with their surface
+        /// numbers, or returns null when there is nothing to say.</summary>
+        private static string Join(int frontSurface, string front, string back)
+        {
+            if (front == null && back == null) return null;
+            return string.Join(" | ", new[]
+            {
+                front == null ? null : "surface " + frontSurface + ": " + front,
+                back == null ? null : "surface " + (frontSurface + 1) + ": " + back,
+            }.Where(x => x != null).ToArray());
         }
 
         /// <summary>The three LDE reads the detector needs, each guarded - some
@@ -240,9 +293,21 @@ namespace MoldStress
             Console.WriteLine(string.Format(
                 "      parting  z = {0:F4} mm from the front vertex", e.PartingLineZMm));
             if (e.ShapeDeparture != null)
-                Console.WriteLine("      NOT SPHERICAL: " + e.ShapeDeparture);
-            if (e.EdgeThicknessMm <= 0)
-                Console.WriteLine("      WARNING: edge thickness is not positive - " +
+                Console.WriteLine("      shape    " + e.ShapeDeparture);
+
+            // For a sphere the thinnest wall is always at one end, so this only
+            // ever says something new on an asphere - which is exactly when the
+            // fill and the freeze are set by a point neither CT nor ET reports.
+            double rMin;
+            double hMin = e.MinThicknessMm(out rMin);
+            double hEnds = Math.Min(e.CentreThicknessMm, e.EdgeThicknessMm);
+            if (hMin < hEnds * 0.999)
+                Console.WriteLine(string.Format(CultureInfo.InvariantCulture,
+                    "      pinch    thinnest wall {0:F4} mm at r = {1:F3} mm, " +
+                    "inside the aperture - not at either end", hMin, rMin));
+
+            if (hMin <= 0)
+                Console.WriteLine("      WARNING: wall thickness is not positive - " +
                                   "the surfaces interpenetrate inside the clear aperture");
         }
     }

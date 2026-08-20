@@ -79,27 +79,43 @@ namespace MoldStress
                 // escape hatch exists for the case where the departure is known to
                 // be negligible, and it prints what is being approximated rather
                 // than going quiet.
-                var odd = els.Where(x => x.ShapeDeparture != null).ToList();
+                var odd = els.Where(x => x.ShapeUnreadable != null).ToList();
                 if (odd.Count > 0)
                 {
                     bool allow = Program.Has(args, "-allow-nonspherical");
                     say(allow
-                        ? "  NON-SPHERICAL SURFACES, APPROXIMATED AS SPHERES (-allow-nonspherical):"
-                        : "  REFUSED: non-spherical surfaces, which this solver cannot represent.");
+                        ? "  UNREADABLE SURFACE TYPES, APPROXIMATED AS SPHERES (-allow-nonspherical):"
+                        : "  REFUSED: surface types whose shape this solver cannot read.");
                     foreach (var x in odd)
                         say(string.Format("    surfaces {0}-{1}  {2}",
-                            x.FrontSurface, x.BackSurface, x.ShapeDeparture));
+                            x.FrontSurface, x.BackSurface, x.ShapeUnreadable));
                     if (!allow)
                     {
                         say("");
-                        say("  Only the base radius is read, so each of these would be modelled");
-                        say("  as a pure sphere - a different cavity profile, feeding the fill");
-                        say("  time, the wall thickness, the freeze history and the geometry");
-                        say("  written into STAR. Pass -allow-nonspherical to proceed anyway if");
-                        say("  you know the departure is negligible for your part.");
+                        say("  Conics and even/odd aspheric terms ARE read and modelled. These");
+                        say("  types are not, so only the base radius would survive - a different");
+                        say("  cavity profile, feeding the fill time, the wall thickness, the");
+                        say("  freeze history and the geometry written into STAR. Pass");
+                        say("  -allow-nonspherical to proceed anyway if you know the departure");
+                        say("  is negligible for your part.");
                         return Program.UsageError;
                     }
                     say("");
+                }
+
+                // A pinched wall is refused outright and has no escape hatch: the
+                // gapwise solver divides by the local thickness, and a cavity that
+                // closes inside the aperture is not a moulding, it is a geometry
+                // error upstream in the prescription.
+                foreach (var x in els)
+                {
+                    double rMin;
+                    double hMin = x.MinThicknessMm(out rMin);
+                    if (hMin > 0) continue;
+                    say(string.Format(CultureInfo.InvariantCulture,
+                        "  REFUSED: surfaces {0}-{1} leave no wall - thickness {2:F4} mm " +
+                        "at r = {3:F3} mm.", x.FrontSurface, x.BackSurface, hMin, rMin));
+                    return Program.UsageError;
                 }
 
                 // --- baseline, measured before anything is loaded --------------
