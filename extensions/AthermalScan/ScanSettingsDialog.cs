@@ -280,7 +280,7 @@ namespace AthermalScan
                     {
                         case "tmin": if (isNum) o.TMin = d; break;
                         case "tmax": if (isNum) o.TMax = d; break;
-                        case "steps": if (int.TryParse(v, out i)) o.Steps = i; break;
+                        case "steps": if (int.TryParse(v, NumberStyles.Integer, CultureInfo.InvariantCulture, out i)) o.Steps = i; break;
                         case "track": if (isNum) o.Track = d; break;
                         case "temp0": if (isNum) o.Temp0 = d; break;
                         case "press0": if (isNum) o.Press0 = d; break;
@@ -301,7 +301,8 @@ namespace AthermalScan
                 Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));
                 var lines = new System.Collections.Generic.List<string>
                 {
-                    F("tmin", o.TMin), F("tmax", o.TMax), "steps=" + o.Steps,
+                    F("tmin", o.TMin), F("tmax", o.TMax),
+                    "steps=" + o.Steps.ToString(CultureInfo.InvariantCulture),
                     F("track", o.Track), "freeze=" + (o.FreezeSolves ? "1" : "0"),
                 };
                 if (!string.IsNullOrWhiteSpace(o.OutDir)) lines.Add("outdir=" + o.OutDir);
