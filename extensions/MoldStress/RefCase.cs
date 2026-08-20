@@ -244,6 +244,37 @@ namespace MoldStress
             // less of the cooling at every refinement. Fixed by dynamic
             // decimation; the answer is now flat to three figures over an 8x grid
             // range, and nz=41 suffices
+            //
+            // ** THAT CLAIM IS RETRACTED, 2026-08-20. IT NO LONGER REPRODUCES. **
+            //
+            // Measured on the shipped binary:
+            //
+            //     nz            41      81     161
+            //     depth ratio  3.43    2.24    2.80
+            //     VERDICT      MET     MET     NOT MET
+            //
+            // The registered criterion for THIS CASE FAILS at nz=161. It was true
+            // when written; commit b39d786 changed the thermal boundary condition
+            // to the adhered-then-released construction on 2026-08-20 and nobody
+            // re-ran the grid sweep afterwards. A convergence claim is a property
+            // of a model-and-instrument PAIR, and changing either voids it - which
+            // is the rule this project wrote into new-goal step 1(b) the same day
+            // and then did not apply to its own oldest case.
+            //
+            // THE CAUSE IS NOT THE SPACE GRID. FreezeHistory.cs holds
+            // `const int nt = 240`, a recorded time grid that does NOT refine with
+            // nz, so an 8x refinement of nz refines the time axis by 0%. Every
+            // layer's vitrification instant is snapped to the nearest of ~150
+            // recorded times (Channels.cs, `solid[k] = tempHistoryC[k,j] <= tgC`),
+            // and the comment there calling that error "far below the read
+            // accuracy of the source" is also wrong: it is worth a sign flip in the
+            // near-wall thermal stress and +-25% in this ratio. Refining nt to 960
+            // makes the ratio flat again (3.42 / 3.33 / 3.38) and the nz=161
+            // failure disappears - so nz=41 was getting the right answer by luck.
+            //
+            // Do not quote 3.43 to three figures. The honest statement is
+            // 3.4 +- 0.6 across the grid, or 3.38 +- 0.05 once the time grid is
+            // converged. Found by an audit on 2026-08-20; not yet fixed.
             say(string.Format(ci, "  process: fill {0:F1} s, pack {1:F0} MPa for {2:F0} s, " +
                 "melt {3:F0} C, mould {4:F0} C",
                 proc.FillTimeS, proc.PackPressureMPa, proc.PackTimeS, p.MeltTempC, p.MoldTempC));
