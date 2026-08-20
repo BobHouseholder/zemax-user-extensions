@@ -41,7 +41,43 @@ namespace MoldStress
         // unit, and defines K = K12 - K11 (they are the additive inverses of the
         // photoelastic coefficients). See OpticStudio User Manual p.1410.
         public double KGlassBrewster;
-        public double K11Brewster;          // parallel to stress
+        /// <summary>
+        /// K11, PARALLEL TO STRESS — AND IT IS ASSUMED FOR EVERY POLYMER IN THIS
+        /// TABLE, INCLUDING THE ONE MARKED MEASURED.
+        ///
+        /// What the literature measures is the DIFFERENCE, K12 - K11, because that
+        /// is what a polariscope sees. The individual values are not measured for
+        /// any grade here; they are split in N-BK7's proportion. That note has sat
+        /// inside the TOPAS entry - the only `Provisional = false` row - since it
+        /// was written, and an external review in 2026-08 correctly flagged that
+        /// the tool's headline output rides on an optical-glass ratio borrowed
+        /// onto a plastic.
+        ///
+        /// MEASURED 2026-08-20, AND IT IS HALF TRUE, WHICH IS THE USEFUL PART.
+        /// StarFiles forms two coefficients from the pair:
+        ///
+        ///     kDiff = K11 - K12          the retardance / birefringence term
+        ///     kIso  = K11 + 2*K12        the isotropic index-shift term
+        ///
+        /// kDiff is identically -KGlassBrewster, so the split CANCELS out of it.
+        /// Sweeping K11 across every plausible value at fixed measured difference:
+        ///
+        ///     K11      K12      kDiff      kIso
+        ///     5.00    -3.50       8.50     -2.00
+        ///     2.43    -6.07       8.50     -9.71   <- shipped
+        ///     0.00    -8.50       8.50    -17.00
+        ///    -8.50   -17.00       8.50    -42.50
+        ///
+        /// So RETARDANCE IS SAFE - it rides only on the measured difference, and
+        /// no choice of split moves it. THE ISOTROPIC INDEX SHIFT IS NOT: it spans
+        /// a FACTOR OF 21 across that sweep, and it is the term the density
+        /// channel is delivered through.
+        ///
+        /// Both halves are asserted in StarFiles.SelfCheck so neither has to be
+        /// re-derived, and so a future edit that makes retardance depend on the
+        /// split fails loudly.
+        /// </summary>
+        public double K11Brewster;          // parallel to stress; see above
         public string KSource;
         public bool Provisional;            // true => not measured for this grade
 

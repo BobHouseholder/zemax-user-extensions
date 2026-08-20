@@ -359,6 +359,13 @@ tested those differ by 585x.
   (`nz`, `nt`) plane.
 - **Only base radius is read** — no conic, no aspheric terms. Aspheres get a
   spherical proxy, silently.
+- **The K11/K12 split is assumed for every polymer, including the measured one.**
+  What the literature measures is the DIFFERENCE, because that is what a polariscope
+  sees; the individual values are split in N-BK7's proportion. Measured consequence:
+  **retardance is unaffected** — it rides only on the difference and no choice of
+  split moves it — but the **isotropic index shift spans a factor of 21** across
+  plausible splits, and that is the term the density channel is delivered through.
+  Both halves are asserted in `-selftest`.
 - **Case 2 is ~3.6x low on its in-plane peak** and not grid-converged.
 - **No frozen-in thermal ORIENTATION channel.** Two independent cases implicate it;
   it is the largest known physics gap. The optical-memory machinery for it is built

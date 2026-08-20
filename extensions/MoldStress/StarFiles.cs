@@ -226,6 +226,37 @@ namespace MoldStress
             double sigEq = dnWanted / kDiff;
             double dnBack = kDiff * sigEq;
             SelfTest.Near("equivalent-stress inversion round-trips", dnBack, dnWanted, 1e-12);
+
+            // THE K11/K12 SPLIT IS ASSUMED FOR EVERY POLYMER HERE, so what depends
+            // on it and what does not is worth asserting rather than reasoning
+            // about. Sweep K11 at FIXED measured difference and check both arms.
+            {
+                double kglass = p.KGlassBrewster;        // the measured quantity
+                double diffFirst = double.NaN, isoMin = double.MaxValue,
+                       isoMax = double.MinValue;
+                bool diffInvariant = true;
+                foreach (double k11 in new[] { 5.0, 2.43, 0.0, -4.25, -8.5 })
+                {
+                    double k12 = k11 + kglass;
+                    double kd = k11 - k12, ki = k11 + 2.0 * k12;
+                    if (double.IsNaN(diffFirst)) diffFirst = kd;
+                    if (Math.Abs(kd - diffFirst) > 1e-12) diffInvariant = false;
+                    isoMin = Math.Min(isoMin, Math.Abs(ki));
+                    isoMax = Math.Max(isoMax, Math.Abs(ki));
+                }
+                // ARM 1: retardance must be immune to the split. If this ever
+                // fails, the headline output has started depending on a number
+                // nobody measured.
+                SelfTest.Check("retardance term is INVARIANT under the K11/K12 split",
+                    diffInvariant,
+                    string.Format("kDiff = {0:F2} Br at every split", diffFirst));
+                // ARM 2: and the isotropic term must be shown to MOVE, or arm 1
+                // is passing on a sweep that does nothing.
+                SelfTest.Check("isotropic index term DOES depend on the split",
+                    isoMax / Math.Max(isoMin, 1e-12) > 5.0,
+                    string.Format("kIso spans {0:F2} to {1:F2} Br, a factor of {2:F0}",
+                        isoMin, isoMax, isoMax / Math.Max(isoMin, 1e-12)));
+            }
             Console.WriteLine(string.Format(
                 "        {0:E2} of birefringence needs {1:F1} N/mm^2 of equivalent stress",
                 dnWanted, sigEq));
