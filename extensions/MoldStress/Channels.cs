@@ -1350,6 +1350,76 @@ namespace MoldStress
         /// The in-plane isotropy that identifies the mechanism is exactly what is
         /// lost. Stated here so nobody reads a passing magnitude as agreement.
         /// </summary>
+        /// <summary>
+        /// OPTICAL REDUCED TIME, xi = INT dt / tau_optical(T(t)), accumulated
+        /// along a layer's own cooling curve up to its freeze.
+        ///
+        /// The twin of ReducedTimeToFreeze, and deliberately a separate routine
+        /// rather than a parameter on it: that one integrates against the MELT
+        /// relaxation time lambda = eta0/G, this one against the measured OPTICAL
+        /// retardation time. They differ by a factor of 7.9e6 at 145 C, so
+        /// sharing a routine would invite exactly the substitution that is wrong.
+        ///
+        /// Dimensionless by construction, so it feeds C(xi) directly.
+        /// </summary>
+        public static double OpticalReducedTime(double[] grid, double[] tempC,
+                                                Polymer p, double tFreezeLocal)
+        {
+            if (grid == null || tempC == null || grid.Length < 2) return 0.0;
+            if (!p.HasOpticalMemory || tFreezeLocal <= 0) return 0.0;
+            double xi = 0.0;
+            int n = Math.Min(grid.Length, tempC.Length);
+            for (int j = 1; j < n; j++)
+            {
+                if (grid[j - 1] >= tFreezeLocal) break;
+                double tHi = Math.Min(grid[j], tFreezeLocal);
+                double dt = tHi - grid[j - 1];
+                if (dt <= 0) continue;
+                double tau = p.OpticalTauS(0.5 * (tempC[j] + tempC[j - 1]));
+                if (double.IsInfinity(tau) || double.IsNaN(tau) || tau <= 0) continue;
+                xi += dt / tau;
+            }
+            return xi;
+        }
+
+        /// <summary>
+        /// THE GENERALIZED STRESS-OPTICAL COEFFICIENT, in Brewster.
+        ///
+        ///     C(xi) = C_g + C_m * [1 - exp(-xi^beta)]
+        ///
+        /// Wimberger-Friedl, Int. Polym. Process. 11(4) 373 (1996) Eq (4), with
+        /// beta, C_g and C_m measured in Rheol. Acta 30 (1991) = thesis ch. 2.2.
+        ///
+        /// WHAT IT REPLACES. This model chooses between two constants at Tg -
+        /// C_melt above, K_glass below - so a stress is either fully credited
+        /// with the rubbery response or reduced to the photoelastic one, with
+        /// nothing in between. The measurement says the crossover is a KWW
+        /// build-up in reduced time, and that a stress acting for reduced time xi
+        /// retains exactly 1 - exp(-xi^beta) of the rubbery part.
+        ///
+        /// The two limits are the old behaviour and are asserted as such: xi -> 0
+        /// gives C_g exactly, xi -> infinity gives C_g + C_m exactly. So this is
+        /// a generalisation of the switch, not a competing model.
+        /// </summary>
+        public static double OpticalCoefficientBrewster(double xi, Polymer p)
+        {
+            if (!p.HasOpticalMemory) return double.NaN;
+            if (!(xi > 0.0)) return p.OpticalCgBrewster;
+            double g = Math.Pow(xi, p.OpticalBeta);
+            if (g > 700.0) return p.OpticalCgBrewster + p.OpticalCmBrewster;
+            return p.OpticalCgBrewster + p.OpticalCmBrewster * (1.0 - Math.Exp(-g));
+        }
+
+        /// <summary>The retained fraction of the RUBBERY response alone - the
+        /// quantity the reachability check inverted, exposed so a diagnostic and
+        /// the channel cannot disagree about it.</summary>
+        public static double OpticalRetainedFraction(double xi, Polymer p)
+        {
+            if (!p.HasOpticalMemory || !(xi > 0.0)) return 0.0;
+            double g = Math.Pow(xi, p.OpticalBeta);
+            return g > 700.0 ? 1.0 : 1.0 - Math.Exp(-g);
+        }
+
         public static double PressureDeviatoricMPa(double pressureMPa, double poissonRatio)
         {
             double nu = poissonRatio;
@@ -1469,6 +1539,56 @@ namespace MoldStress
                 double deep = DnAtDepthFraction(dd, zz, 0, half, 0.47);
                 SelfTest.Near("depth extraction returns a known ratio of 5.0",
                     surf / deep, 5.0, 0.01);
+            }
+
+            // --- OPTICAL MEMORY, against the source's own numbers -------------
+            {
+                var pc = Polymers.ByName("MS_POLYCARB");
+                SelfTest.Check("PC carries a measured optical-memory block",
+                    pc.HasOpticalMemory, "beta=" + pc.OpticalBeta.ToString("F2"));
+
+                // tau(T0) must be tau0 by construction, and the WLF must
+                // reproduce the value quoted in the reachability analysis.
+                SelfTest.Near("tau at the reference temperature is tau0",
+                    pc.OpticalTauS(140.0), 166.0, 1e-12);
+                SelfTest.Near("tau(145 C) matches the measured WLF shift",
+                    pc.OpticalTauS(145.0), 9.484, 2e-3);
+                SelfTest.Check("tau falls with temperature",
+                    pc.OpticalTauS(150.0) < pc.OpticalTauS(145.0)
+                        && pc.OpticalTauS(145.0) < pc.OpticalTauS(140.0),
+                    string.Format("{0:F3} < {1:F3} < {2:F1} s",
+                        pc.OpticalTauS(150.0), pc.OpticalTauS(145.0), pc.OpticalTauS(140.0)));
+
+                // THE TWO LIMITS ARE THE OLD BEHAVIOUR. Both arms, because a
+                // generalisation that did not reduce to what it replaces would be
+                // a different model wearing the same name.
+                SelfTest.Near("xi -> 0 gives the GLASSY coefficient exactly",
+                    OpticalCoefficientBrewster(0.0, pc), pc.OpticalCgBrewster, 1e-12);
+                SelfTest.Near("xi -> infinity gives glassy + rubbery exactly",
+                    OpticalCoefficientBrewster(1e6, pc),
+                    pc.OpticalCgBrewster + pc.OpticalCmBrewster, 1e-12);
+                SelfTest.Near("xi = 1 retains 1 - 1/e of the rubbery part",
+                    OpticalRetainedFraction(1.0, pc), 1.0 - Math.Exp(-1.0), 1e-12);
+
+                // Monotone, and bounded - a retained FRACTION cannot exceed 1.
+                bool mono = true;
+                double prev = -1.0;
+                for (double x = 0.01; x <= 100.0; x *= 1.6)
+                {
+                    double f = OpticalRetainedFraction(x, pc);
+                    if (f < prev || f > 1.0) mono = false;
+                    prev = f;
+                }
+                SelfTest.Check("retained fraction is monotone in xi and never exceeds 1",
+                    mono, "swept xi 0.01 to 100");
+
+                // AND THE NULL: a grade with no measured block must refuse, not
+                // borrow. PMMA has none.
+                var noneP = Polymers.ByName("MS_PMMA");
+                SelfTest.Check("an unmeasured grade reports no optical memory",
+                    !noneP.HasOpticalMemory, "MS_PMMA");
+                SelfTest.Check("and its coefficient is NaN rather than a borrowed number",
+                    double.IsNaN(OpticalCoefficientBrewster(1.0, noneP)), "NaN");
             }
 
             // --- PRESSURE-INDUCED DEVIATORIC, source Eqs (5)-(8) --------------

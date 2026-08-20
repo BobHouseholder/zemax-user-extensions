@@ -767,6 +767,88 @@ namespace MoldStress
                 "  (g) control on the null: CTE restored gives {0:E3} MPa  =>  {1}",
                 sigMax, gOk ? "PASS" : "FAIL"));
 
+            // ---- OPTICAL MEMORY: the reachability RE-CHECK, on measured tau --
+            //
+            // The earlier check (ct-reachability.py, 1b309de) assumed ONE tau per
+            // target and inverted the retention for it. That was a bound, not a
+            // calculation, and the measured tau(T) overturned it: retention runs
+            // 0.12 at 140 C to 0.99 at 150 C, so it is set by WHERE IN THE
+            // TRANSITION a layer sits while the stress acts, not by a single
+            // number. This computes it properly, along each layer's own cooling
+            // curve, with the measured constants.
+            //
+            // Printed rather than wired into a channel. The primitives are tested
+            // against the source's own numbers, but nothing here has been shown
+            // to reproduce a measurement yet, and a channel switched on before
+            // that is a fit waiting to happen.
+            if (p.HasOpticalMemory)
+            {
+                say("");
+                say("  OPTICAL MEMORY re-check, on MEASURED tau(T) - not yet a channel:");
+                say(string.Format(ci,
+                    "    beta {0:F2}, tau({1:F0} C) {2:F0} s, WLF C1 {3:F1} / C2 {4:F1}, "
+                    + "C_g {5:F0} Br, C_m {6:F0} Br",
+                    p.OpticalBeta, p.OpticalTau0TempC, p.OpticalTau0S,
+                    p.OpticalWlfC1, p.OpticalWlfC2K,
+                    p.OpticalCgBrewster, p.OpticalCmBrewster));
+                say("     z/d    freeze s     tau(T_frz) s        xi     retained    C(xi) Br");
+                var row = new double[freeze.TimeGridS.Length];
+                for (int f = 0; f <= 10; f++)
+                {
+                    int k = kMid + (int)Math.Round((nz - 1 - kMid) * f / 10.0);
+                    if (k > nz - 1) k = nz - 1;
+                    for (int j = 0; j < row.Length; j++) row[j] = ch.Z != null
+                        ? freeze.TempHistoryC[k, j] : 0.0;
+                    double xi = Channels.OpticalReducedTime(
+                        freeze.TimeGridS, row, p, freeze.FreezeTimeS[k]);
+                    double frac = Channels.OpticalRetainedFraction(xi, p);
+                    double cxi = Channels.OpticalCoefficientBrewster(xi, p);
+                    say(string.Format(ci,
+                        "    {0:F2}  {1,10:F3}  {2,15:E3}  {3,9:E2}  {4,9:F4}  {5,10:F0}",
+                        Math.Abs(freeze.Z[k]) / half, freeze.FreezeTimeS[k],
+                        p.OpticalTauS(freeze.TrefC[k]), xi, frac, cxi));
+                }
+                say("");
+                say("    READ THIS BEFORE USING THE COLUMN ABOVE. Retention saturates at");
+                say("    1.0000 for every layer, and that is an ARTEFACT of two things,");
+                say("    both of which the naive integral gets wrong:");
+                say("");
+                say(string.Format(ci,
+                    "    (1) tau(T) IS FITTED OVER {0:F0}-150 C AND THIS INTEGRATES FROM "
+                    + "{1:F0} C.", 135.0, p.MeltTempC));
+                say("        xi = INT dt/tau is dominated by the hot phase, where the WLF");
+                say("        extrapolation returns a vanishing tau far outside its range -");
+                say("        so xi reaches 1e4-1e5 and the exponential saturates. The");
+                say("        source's own stated floor is the mirror of this: below 148 C");
+                say("        it over-estimates tau. Neither end of the fit is safe here.");
+                say("");
+                say("    (2) C(xi) IS A BUILD-UP, NOT A RETENTION. It answers how much");
+                say("        birefringence DEVELOPS under a stress that persists, which is");
+                say("        only half of Eq (3). The frozen-in part needs the full");
+                say("        convolution over a stress history that RISES AND FALLS -");
+                say("        negative increments contribute negatively - and this model");
+                say("        carries cavity pressure as a single number, not as sigma(t).");
+                say("        The author is explicit: the polymer 'will creep under the high");
+                say("        stresses so that PART of the momentary birefringence will be");
+                say("        frozen in', and puts the residual at C_g times a residual");
+                say("        stress below 10 MPa - about 10e-4, against a measured 20e-4.");
+                say("");
+                say(string.Format(ci,
+                    "    Taken literally the saturated column would give the pressure term "
+                    + "{0:F0}x", (p.OpticalCgBrewster + p.OpticalCmBrewster) * 1e-6 * 33.0
+                        / PublishedSurfacePeakDn));
+                say("    the measured surface value, which is the same over-prediction the");
+                say("    pressure channel already shows and NOT a fix for it.");
+                say("");
+                say("    A layer retains 1 - exp(-xi^beta) of the RUBBERY response and the");
+                say("    glassy part always. Compare C(xi) against this table's two limits:");
+                say(string.Format(ci,
+                    "      C_g alone = {0:F0} Br   C_g + C_m = {1:F0} Br   "
+                    + "(the model currently switches between {2:F0} and {3:F0})",
+                    p.OpticalCgBrewster, p.OpticalCgBrewster + p.OpticalCmBrewster,
+                    p.KGlassBrewster, p.CMeltBrewster));
+            }
+
             // ---- RELEASE-TIME SWEEP: can the adhered channel respond at all? --
             //
             // THIS IS THE CONTROL ON A ZERO. Under adhesion this part's residual

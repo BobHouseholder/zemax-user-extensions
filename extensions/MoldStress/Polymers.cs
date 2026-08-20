@@ -90,6 +90,70 @@ namespace MoldStress
         /// </summary>
         public double MeltModulusPa = 2.0e5;
 
+        // ---- OPTICAL MEMORY, the generalized stress-optical rule ------------
+        //
+        // The stress-optical coefficient is NOT one number per phase. It is a
+        // function of how long the stress has acted, running from the glassy
+        // value at short times to glassy-plus-rubbery at long ones:
+        //
+        //     C(xi) = C_g + C_m * [1 - exp(-xi^beta)],  xi = INT dt / tau(T)
+        //
+        // Wimberger-Friedl & de Bruin, Rheol. Acta 30 (1991) - which is chapter
+        // 2.2 of the same open-access thesis that supplies reference cases 3 and
+        // 4, so this is measured data and not a borrowing.
+        //
+        // WHY IT MATTERS HERE. This model splits the coefficient at Tg: melt
+        // above, glassy below, with a hard switch. That switch is what makes a
+        // transient stress either fully retained or fully lost, when the truth is
+        // that a stress acting for a reduced time xi retains exactly the fraction
+        // 1 - exp(-xi^beta) of the rubbery response. Everything the model
+        // currently calls "memory" is an approximation to this.
+        //
+        // NaN means UNMEASURED for that grade, and the feature refuses to run
+        // rather than borrowing a number across materials.
+        public double OpticalBeta = double.NaN;         // KWW exponent, T-independent
+        public double OpticalTau0S = double.NaN;        // retardation time at T0
+        public double OpticalTau0TempC = double.NaN;    // T0 for tau0 and the WLF fit
+        public double OpticalWlfC1 = double.NaN;        // log10 shift, C1
+        public double OpticalWlfC2K = double.NaN;       // C2, degC
+        public double OpticalWlfFloorC = double.NaN;    // stated validity floor
+        public double OpticalCgBrewster = double.NaN;   // short-time (glassy)
+        public double OpticalCmBrewster = double.NaN;   // long-time (rubbery)
+        public string OpticalSource;
+
+        public bool HasOpticalMemory
+        {
+            get
+            {
+                return !double.IsNaN(OpticalBeta) && !double.IsNaN(OpticalTau0S)
+                    && !double.IsNaN(OpticalWlfC1) && !double.IsNaN(OpticalWlfC2K);
+            }
+        }
+
+        /// <summary>
+        /// Retardation time at a temperature, from the MEASURED WLF shift:
+        /// tau(T) = tau0 * 10^(-C1 (T-T0) / (C2 + T-T0)).
+        ///
+        /// This is NOT the model's lambda = eta0/G. Measured 2026-08-19, the two
+        /// differ by 7.9e6 at 145 C - lambda is a melt viscosity extrapolated far
+        /// below the range it was fitted in, and this is an optical retardation
+        /// time measured in the transition itself.
+        ///
+        /// The source states a validity floor: below about 148 C the measured
+        /// shift factors fall BELOW the WLF line, because the volumetric glass
+        /// transition has been passed and the excess free volume gives SHORTER
+        /// times than equilibrium WLF predicts. So this OVER-estimates tau below
+        /// the floor, which is the conservative direction - it under-retains.
+        /// </summary>
+        public double OpticalTauS(double tempC)
+        {
+            if (!HasOpticalMemory) return double.NaN;
+            double dT = tempC - OpticalTau0TempC;
+            double denom = OpticalWlfC2K + dT;
+            if (denom <= 1e-9) return double.PositiveInfinity;   // below Vogel: frozen
+            return OpticalTau0S * Math.Pow(10.0, -OpticalWlfC1 * dT / denom);
+        }
+
         /// <summary>
         /// Shallow copy with the processing temperatures overridden.
         ///
@@ -181,6 +245,19 @@ namespace MoldStress
                 DensityGPerCm3 = 1.20,
                 CrossN = 0.18, CrossTauStarPa = 1.5e5,
                 WlfD1PaS = 1.5e13, WlfD2K = 418.15, WlfD3KPerPa = 0.0, WlfA1 = 26.0, WlfA2K = 51.6,
+                // MEASURED optical memory. Wimberger-Friedl & de Bruin, Rheol.
+                // Acta 30 (1991) = thesis ch. 2.2, pp. 41-66. beta from a KWW fit
+                // to shear-creep stress-optical curves at 135/140/145/150 C and
+                // found temperature-INDEPENDENT; tau0 and the WLF constants from
+                // the shift factors in its Fig. 5.
+                OpticalBeta = 0.72,             // +- 0.01, p.52
+                OpticalTau0S = 166.0,           // at 140 C, p.53
+                OpticalTau0TempC = 140.0,
+                OpticalWlfC1 = 9.0, OpticalWlfC2K = 31.2,      // p.51 Fig.5, p.52
+                OpticalWlfFloorC = 148.0,       // below this WLF over-estimates tau
+                OpticalCgBrewster = 100.0,      // 1.0e-10 /Pa, p.52
+                OpticalCmBrewster = 5150.0,     // 4.8-5.5e-9 /Pa shear creep, p.54
+                OpticalSource = "MEASURED: Wimberger-Friedl & de Bruin, Rheol. Acta 30 (1991), reprinted as ch. 2.2 of the TU Eindhoven thesis. NOTE C_m here is the SHEAR-CREEP value 4.8-5.5e-9 /Pa; the flow-birefringence route gives 4-4.5e-9 and CMeltBrewster above carries 4000 Br from that route. The author flags the discrepancy as unexplained, so the two are deliberately NOT reconciled here",
             },
             new Polymer {
                 Name = "MS_POLYSTYR", Description = "Polystyrene, optical grade",
