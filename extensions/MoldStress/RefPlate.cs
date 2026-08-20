@@ -363,7 +363,7 @@ namespace MoldStress
             int badForMode = Program.RejectFlagsNotReadBy(
                 args, new[] { "-nz", "-moldtemp", "-station", "-semidia", "-filltime",
                               "-gatethick", "-snapshot", "-freeplate", "-ejecttime",
-                              "-fountain" },
+                              "-fountain", "-pressure-vitrification" },
                 "-refplate");
             if (badForMode != 0) return badForMode;
 
@@ -385,6 +385,7 @@ namespace MoldStress
             // case that could not be run without the term. `-refplate -fountain 0`
             // exited 64 on the flag guard. Wired 2026-08-19.
             double fountain = Program.Value(args, "-fountain", 1.0);
+            bool pressVit = Program.Has(args, "-pressure-vitrification");
 
             // GEOMETRY, DERIVED rather than typed. The equal-volume disc is
             // computed from the plate's own dimensions, so if those are ever
@@ -426,6 +427,8 @@ namespace MoldStress
                 + "front width {4:F0} mm", semiDia, fillS, modelVolMm3 / fillS,
                 InjectionRateMm3PerS, PlateWidthMm));
             say(string.Format(ci, "  grid: nz {0}, station {1:F2} of the path", nz, stationFrac));
+            say(string.Format(ci, "  pressure-vitrification term (source Eqs 5-8): {0}",
+                pressVit ? "ON (-pressure-vitrification)" : "off - default"));
             say(string.Format(ci, "  fountain deposition: {0}",
                 fountain > 0.0
                     ? string.Format(ci, "ON, strain scale {0:F2} - NOTE the source refutes "
@@ -449,6 +452,7 @@ namespace MoldStress
                 MouldAdhesion = adhered,
                 EjectionTimeS = ejectS,
                 FountainStrain = fountain,
+                PressureVitrification = pressVit,
             };
 
             var plate = BuildElement(semiDia, gateThick);
@@ -694,7 +698,7 @@ namespace MoldStress
             {
                 double pz, ps, av;
                 Measure(tmSeries[j], nz, semiDia, gateThick, fillS, incremental, adhered,
-                        ejectS, fountain, stationFrac, out pz, out ps, out av);
+                        ejectS, fountain, pressVit, stationFrac, out pz, out ps, out av);
                 peakZ[j] = pz; peakSig[j] = ps;
                 say(string.Format(ci, "    {0,3:F0} C       {1:F3}              {2:F3}"
                     + "               {3:E3}", tmSeries[j], pz, ps, av));
@@ -921,7 +925,7 @@ namespace MoldStress
 
         private static void Measure(double tm, int nz, double semiDia, double gateThick,
                                     double fillS, bool incremental, bool adhered, double ejectS,
-                                    double fountain, double stationFrac,
+                                    double fountain, bool pressVit, double stationFrac,
                                     out double flowPeakZOverD, out double peakSigmaMPa,
                                     out double avgTotalDn)
         {
@@ -932,6 +936,7 @@ namespace MoldStress
                 IncrementalThermal = incremental,
                 MouldAdhesion = adhered, EjectionTimeS = ejectS,
                 FountainStrain = fountain,
+                PressureVitrification = pressVit,
             };
             var e = BuildElement(semiDia, gateThick);
             var fill = FillField.Build(e, p, proc, 101);

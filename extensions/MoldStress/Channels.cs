@@ -521,7 +521,19 @@ namespace MoldStress
                         dnPack = 2.0 * p.CMeltBrewster * 1e-6 * sigPack;
                     }
 
-                    c.DnFlow[i, k] = dnShear + dnFountain + dnPack;
+                    // PRESSURE-INDUCED DEVIATORIC, source Eqs (5)-(8). Driven by
+                    // the local cavity pressure and retained by the SAME memory
+                    // factor the flow channels use - this model's existing stand-in
+                    // for the source's optical-memory function C_t, which is a
+                    // separate and larger change deliberately not made here.
+                    double dnPressure = 0.0;
+                    if (proc.PressureVitrification)
+                    {
+                        double devMPa = PressureDeviatoricMPa(fill.P[i], p.PoissonRatio);
+                        dnPressure = p.CMeltBrewster * 1e-6 * devMPa * memory;
+                    }
+
+                    c.DnFlow[i, k] = dnShear + dnFountain + dnPack + dnPressure;
 
                     c.SigmaThermalMPa[i, k] = sigma[k];
 
@@ -1304,6 +1316,47 @@ namespace MoldStress
         /// it predicts the classic free-quench profile in the limit of ejecting at
         /// the freeze front. Both are testable and neither is tuned.
         /// </summary>
+        /// <summary>
+        /// THE PRESSURE-INDUCED DEVIATORIC STRESS in a layer vitrifying against
+        /// the cavity wall - the mechanism Wimberger-Friedl puts in place of
+        /// fountain flow as the origin of the surface birefringence maximum.
+        /// Int. Polym. Process. 11(4) 373 (1996), Eqs (5) to (8).
+        ///
+        /// THE POINT, and it is not obvious: a HYDROSTATIC cavity pressure
+        /// produces an ANISOTROPIC stress state in a layer that cannot contract
+        /// in-plane. With perfect adhesion the in-plane strains are zero and the
+        /// through-thickness stress is the pressure, so
+        ///
+        ///     eps_x = eps_y = 0,  sigma*_z = -p
+        ///     sigma*_x = sigma_z * nu / (1 - nu)                        Eq (6)
+        ///
+        /// and the deviatoric difference that the stress-optical rule acts on is
+        ///
+        ///     sigma_x - sigma_z = p * (1 - 2*nu) / (1 - nu)
+        ///
+        /// which is this routine. Two checks the source states and the self-test
+        /// asserts: at nu = 1/3 it equals p/2, the bound in Eq (8); and at
+        /// nu = 1/2 it is exactly zero, because an incompressible layer develops
+        /// no deviatoric stress however hard it is squeezed.
+        ///
+        /// IT IS EQUI-BIAXIAL - sigma_x = sigma_y - and that is the whole reason
+        /// the source prefers it to fountain flow: the measured surface
+        /// birefringence is equal in the flow direction and transverse to it, and
+        /// independent of gate distance, which no flow mechanism produces.
+        ///
+        /// WHAT THIS MODEL STILL CANNOT DO WITH IT. MoldStress carries one scalar
+        /// dn per station and depth with the slow axis along the flow, so it can
+        /// add this term's MAGNITUDE but cannot represent its equi-biaxiality.
+        /// The in-plane isotropy that identifies the mechanism is exactly what is
+        /// lost. Stated here so nobody reads a passing magnitude as agreement.
+        /// </summary>
+        public static double PressureDeviatoricMPa(double pressureMPa, double poissonRatio)
+        {
+            double nu = poissonRatio;
+            if (!(nu > 0.0) || nu >= 0.5) return 0.0;   // incompressible: no deviator
+            return Math.Abs(pressureMPa) * (1.0 - 2.0 * nu) / (1.0 - nu);
+        }
+
         public static double[] ThermalProfileAdhered(
             double[] z, double[] tempAtReleaseC, double tgC,
             double alphaPerK, double eOver1MinusNu)
@@ -1416,6 +1469,26 @@ namespace MoldStress
                 double deep = DnAtDepthFraction(dd, zz, 0, half, 0.47);
                 SelfTest.Near("depth extraction returns a known ratio of 5.0",
                     surf / deep, 5.0, 0.01);
+            }
+
+            // --- PRESSURE-INDUCED DEVIATORIC, source Eqs (5)-(8) --------------
+            {
+                // The two values the SOURCE states, so these are its arithmetic
+                // and not mine: p/2 at nu = 1/3, and exactly zero at nu = 1/2.
+                SelfTest.Near("pressure deviator is p/2 at nu = 1/3",
+                    PressureDeviatoricMPa(50.0, 1.0 / 3.0), 25.0, 1e-12);
+                SelfTest.Near("pressure deviator vanishes at nu = 1/2 (incompressible)",
+                    PressureDeviatoricMPa(50.0, 0.5), 0.0, 1e-12);
+                // Linear in p, and never above the Eq (8) bound.
+                SelfTest.Near("pressure deviator is linear in p",
+                    PressureDeviatoricMPa(80.0, 0.37) / PressureDeviatoricMPa(40.0, 0.37),
+                    2.0, 1e-12);
+                double dev = PressureDeviatoricMPa(50.0, 0.37);
+                SelfTest.Check("pressure deviator respects the Eq (8) bound p/2",
+                    dev <= 25.0 + 1e-12, string.Format("{0:F3} MPa vs bound 25.000", dev));
+                // A pressure of zero must give exactly nothing - the null.
+                SelfTest.Near("pressure deviator is zero at zero pressure",
+                    PressureDeviatoricMPa(0.0, 0.37), 0.0, 1e-12);
             }
 
             // --- THE ADHERED CONSTRUCTION, both arms --------------------------

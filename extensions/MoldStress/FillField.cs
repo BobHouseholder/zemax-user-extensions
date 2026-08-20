@@ -378,6 +378,41 @@ namespace MoldStress
         /// </summary>
         public double EjectionTimeS = double.NaN;
 
+        /// <summary>
+        /// The PRESSURE-INDUCED DEVIATORIC term - a layer that vitrifies while
+        /// adhered to the cavity is compressed with its in-plane strain pinned,
+        /// which is an ANISOTROPIC stress state even though the pressure is
+        /// hydrostatic. Wimberger-Friedl, Int. Polym. Process. 11(4) 373 (1996),
+        /// Eqs (5)-(8); see Channels.PressureDeviatoricMPa.
+        ///
+        /// OFF BY DEFAULT. It is new physics with no registered clause of its own
+        /// yet, and unlike the channels beside it, its ceiling is enormous - about
+        /// 23x the measured surface birefringence at this model's own cavity
+        /// pressure - so it is retention-limited and would be easy to tune into
+        /// agreement. It ships behind -pressure-vitrification until a criterion
+        /// exists that it can fail.
+        ///
+        /// MEASURED ON CASE 4, 2026-08-19, and the result localises the remaining
+        /// work. With this term on, the gapwise average goes 3.43e-4 -> 2.39e-3,
+        /// i.e. 3.98x the measured 6.0e-4, and clause (c) FAILS. That clause is
+        /// one-sided precisely to catch "reaching the measurement with the wrong
+        /// physics", and it was registered before this case was first run and
+        /// before this term existed - so it caught a mechanism added days later,
+        /// which is what a criterion registered in advance is for.
+        ///
+        /// The algebra is not what is wrong: the deviatoric stress is exact
+        /// against the source's Eqs (5)-(8) and the self-tests reproduce its own
+        /// stated values. What is wrong is the RETENTION. The term is driven here
+        /// by the flow channel's Maxwell memory factor, and the source is explicit
+        /// that the retention of a transient pressure stress is governed by the
+        /// optical-memory function C_t = C_g + C_m[1 - exp(-(t/tau)^beta)], its
+        /// Eq (4), with beta = 0.72 for PC. Adopting that is a separate and larger
+        /// change - it replaces this model's melt/glassy coefficient SPLIT with a
+        /// single time-dependent coefficient - and was deliberately left out of
+        /// the batch that added this term.
+        /// </summary>
+        public bool PressureVitrification = false;
+
         public bool NormalStressDifference = true;
 
         public bool ChannelNarrowing = false;
