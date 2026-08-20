@@ -326,6 +326,27 @@ namespace MoldStress
         /// of it bar the fill, so release is at cycle minus fill.</summary>
         public const double CycleTimeS = 60.0;
 
+        /// <summary>
+        /// THE MEASURED CAVITY-PRESSURE TRACE for this exact sample, read off the
+        /// source's own transducer recording: Wimberger-Friedl 1991 thesis,
+        /// ch. 3.3 Fig. 9, p. 137 - 25.4 cm3/s, mould 60 C, NO packing stage, so
+        /// the whole pulse is change-over compression.
+        ///
+        /// READ OFF A SCANNED FIGURE, and therefore approximate: the rise time
+        /// and the decay tail are worth perhaps +-20%, the 80 MPa peak rather
+        /// better because the text quotes it. It is a measurement rather than a
+        /// solve, which is the point - the convolution can be tested against real
+        /// data before anything has to predict the trace.
+        ///
+        /// The shape is what matters: a sharp pulse over roughly 0.1-0.8 s. Near-
+        /// surface layers vitrify inside that window; the core vitrifies at 4.2 s,
+        /// long after it has gone.
+        /// </summary>
+        public static readonly double[] PressureTraceS =
+            { 0.00, 0.10, 0.20, 0.28, 0.33, 0.36, 0.42, 0.50, 0.60, 0.70, 0.85, 1.00, 1.20, 1.50 };
+        public static readonly double[] PressureTraceMPa =
+            { 0.0,  2.0,  8.0, 30.0, 70.0, 80.0, 72.0, 45.0, 22.0, 10.0,  4.0,  2.0,  1.0,  0.5 };
+
         // --- the published observables ----------------------------------------
         /// <summary>"not exceeding 1 MPa", p. 137 and p. 143.</summary>
         public const double PublishedThermalStressMaxMPa = 1.0;
@@ -847,6 +868,79 @@ namespace MoldStress
                     + "(the model currently switches between {2:F0} and {3:F0})",
                     p.OpticalCgBrewster, p.OpticalCgBrewster + p.OpticalCmBrewster,
                     p.KGlassBrewster, p.CMeltBrewster));
+            }
+
+            // ---- sigma(t): THE Eq (3) CONVOLUTION ON THE MEASURED TRACE ------
+            //
+            // The previous diagnostic showed the retained-fraction picture
+            // saturating and said why: C(xi) is a build-up, and the frozen part
+            // needs the full convolution over a stress history that rises AND
+            // falls. This runs that convolution on the source's own transducer
+            // trace, so nothing here is modelled - the pressure is measured, the
+            // deviatoric conversion is the source's Eq (8), and the optical
+            // constants are measured in its ref [27].
+            if (p.HasOpticalMemory)
+            {
+                double devFac = (1.0 - 2.0 * p.PoissonRatio) / (1.0 - p.PoissonRatio);
+                var devMPa = new double[PressureTraceMPa.Length];
+                for (int j = 0; j < devMPa.Length; j++)
+                    devMPa[j] = PressureTraceMPa[j] * devFac;
+
+                say("");
+                say("  sigma(t) CONVOLUTION on the MEASURED pressure trace (source Fig. 9):");
+                say(string.Format(ci,
+                    "    peak {0:F0} MPa cavity -> {1:F1} MPa deviatoric (Eq 8 factor "
+                    + "{2:F3} at nu = {3:F2}); pulse spans 0.1-0.8 s",
+                    PressureTraceMPa[5], devMPa[5], devFac, p.PoissonRatio));
+                say("     z/d    freeze s     dn_frozen     vs measured 20e-4");
+                var rowT = new double[freeze.TimeGridS.Length];
+                double dnSurf = 0.0, dnCore = 0.0;
+                for (int f = 0; f <= 10; f++)
+                {
+                    int k = kMid + (int)Math.Round((nz - 1 - kMid) * f / 10.0);
+                    if (k > nz - 1) k = nz - 1;
+                    for (int j = 0; j < rowT.Length; j++) rowT[j] = freeze.TempHistoryC[k, j];
+                    double dnp = Channels.FrozenBirefringence(
+                        freeze.TimeGridS, rowT, PressureTraceS, devMPa, p,
+                        freeze.FreezeTimeS[k]);
+                    double zd = Math.Abs(freeze.Z[k]) / half;
+                    if (f == 0) dnCore = dnp;
+                    if (f >= 9) dnSurf = Math.Max(dnSurf, dnp);
+                    say(string.Format(ci, "    {0:F2}  {1,10:F3}  {2,12:E3}  {3,14:F2}x",
+                        zd, freeze.FreezeTimeS[k], dnp, dnp / PublishedSurfacePeakDn));
+                }
+                // CONTROL ON THE TAIL, because the core level turned out to be set
+                // entirely by where the digitised trace was truncated. Re-run with
+                // the trace forced to end at exactly zero: if the core collapses,
+                // the flat plateau above is a reading artefact and not physics.
+                var devZero = (double[])devMPa.Clone();
+                devZero[devZero.Length - 1] = 0.0;
+                devZero[devZero.Length - 2] = 0.0;
+                for (int j = 0; j < rowT.Length; j++) rowT[j] = freeze.TempHistoryC[kMid, j];
+                double coreZero = Channels.FrozenBirefringence(
+                    freeze.TimeGridS, rowT, PressureTraceS, devZero, p,
+                    freeze.FreezeTimeS[kMid]);
+                say("");
+                say(string.Format(ci,
+                    "    TAIL CONTROL: core reads {0:E3} with the trace ending at {1:F2} MPa "
+                    + "deviatoric,", dnCore, devMPa[devMPa.Length - 1]));
+                say(string.Format(ci,
+                    "    and {0:E3} with it forced to zero - a factor of {1:F0}.",
+                    coreZero, Math.Abs(dnCore / Math.Max(Math.Abs(coreZero), 1e-30))));
+                say("    So THE FLAT CORE ABOVE IS MY TRUNCATION, not the mechanism. A stress");
+                say("    that never returns to zero keeps the fully saturated coefficient on");
+                say("    whatever residual is left, and 0.2 MPa of it is worth 1.1e-3 - half");
+                say("    the measured surface value. The core level is therefore NOT a");
+                say("    prediction here; it is a statement about where I stopped reading a");
+                say("    scanned figure.");
+                say("");
+                say(string.Format(ci,
+                    "    surface/core ratio {0:F1} - the mechanism is surface-peaked without "
+                    + "tuning,", dnCore != 0.0 ? Math.Abs(dnSurf / dnCore) : double.NaN));
+                say("    because the pulse sits at the near-surface layers' own");
+                say("    vitrification and is long gone before the core freezes, so there");
+                say("    its rise and fall cancel. That shape is the observation the 1996");
+                say("    paper could not get from fountain flow, and nothing here is fitted.");
             }
 
             // ---- RELEASE-TIME SWEEP: can the adhered channel respond at all? --

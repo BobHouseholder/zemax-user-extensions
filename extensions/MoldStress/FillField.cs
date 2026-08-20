@@ -443,6 +443,37 @@ namespace MoldStress
         /// </summary>
         public double ChangeoverPressureMPa = double.NaN;
 
+        /// <summary>
+        /// CAVITY PRESSURE AS A FUNCTION OF TIME - the input that every previous
+        /// attempt at the pressure mechanism was missing.
+        ///
+        /// Null means unavailable, and the convolution then refuses rather than
+        /// inventing a shape. Paired arrays: PressureHistoryS is seconds from the
+        /// start of filling, PressureHistoryMPa the cavity pressure there.
+        ///
+        /// WHY A HISTORY AND NOT A PEAK. The generalized stress-optical rule
+        /// integrates over stress INCREMENTS - Eq (3) of Wimberger-Friedl,
+        /// Int. Polym. Process. 11(4) 373 (1996) - so what a layer freezes in
+        /// depends on when the stress arrived relative to its own vitrification,
+        /// and on whether it went away again before then. A peak value cannot
+        /// express either. Concretely: the same 80 MPa leaves a large frozen
+        /// birefringence in a layer that vitrifies while it acts, and NOTHING in
+        /// a layer that vitrifies after it has decayed, because the rise and the
+        /// fall cancel.
+        /// </summary>
+        public double[] PressureHistoryS;
+        public double[] PressureHistoryMPa;
+
+        public bool HasPressureHistory
+        {
+            get
+            {
+                return PressureHistoryS != null && PressureHistoryMPa != null
+                    && PressureHistoryS.Length >= 2
+                    && PressureHistoryS.Length == PressureHistoryMPa.Length;
+            }
+        }
+
         public bool NormalStressDifference = true;
 
         public bool ChannelNarrowing = false;

@@ -1420,6 +1420,76 @@ namespace MoldStress
             return g > 700.0 ? 1.0 : 1.0 - Math.Exp(-g);
         }
 
+        /// <summary>
+        /// THE FROZEN-IN BIREFRINGENCE OF A TRANSIENT STRESS, by the source's own
+        /// Eq (3) - the convolution that every earlier attempt here approximated.
+        ///
+        ///     dn(t) = INT C(xi(t) - xi(s)) * (d sigma / ds) ds
+        ///
+        /// evaluated at the layer's freeze, after which nothing changes.
+        /// Wimberger-Friedl, Int. Polym. Process. 11(4) 373 (1996) Eq (3), with
+        /// C(xi) from Eq (4) and constants measured in Rheol. Acta 30 (1991).
+        ///
+        /// WHAT THE CONVOLUTION DOES THAT A RETAINED FRACTION CANNOT. Increments
+        /// carry the coefficient at their OWN elapsed time. A stress that rises
+        /// and then falls contributes a positive increment with a long elapsed
+        /// time and a negative one with a short elapsed time, so:
+        ///
+        ///   - THE GLASSY PARTS CANCEL EXACTLY for any stress that returns to
+        ///     zero. C_g is instantaneous and reversible, which is what
+        ///     photoelasticity is, and it should leave nothing behind. It falls
+        ///     out of the algebra rather than being special-cased.
+        ///   - WHAT SURVIVES IS THE MEMORY TERM, C_m times the difference between
+        ///     two stretched exponentials - large when the stress acted for a
+        ///     long reduced time before freezing, zero when it came and went in
+        ///     an instant.
+        ///   - IF A RESIDUAL STRESS REMAINS, C_g rides on that residual alone.
+        ///     Which is exactly the author's own reading: "the residual
+        ///     birefringence level at the surface is in the right order of
+        ///     magnitude if we take the stress-optical coefficient in the glassy
+        ///     state" applied to a residual stress below 10 MPa.
+        ///
+        /// So the two contributions the paper describes in prose both come out of
+        /// one integral, and neither is put in by hand.
+        ///
+        /// Returns birefringence directly (dimensionless), or NaN when the grade
+        /// carries no measured optical memory.
+        /// </summary>
+        public static double FrozenBirefringence(
+            double[] timeGridS, double[] tempC, double[] stressTimeS,
+            double[] stressMPa, Polymer p, double tFreezeS)
+        {
+            if (!p.HasOpticalMemory) return double.NaN;
+            if (timeGridS == null || tempC == null || stressTimeS == null
+                || stressMPa == null || stressTimeS.Length < 2) return 0.0;
+
+            // Reduced time at the freeze, and a helper for reduced time at any
+            // earlier instant. Both walk the SAME cooling curve, so the
+            // difference xi_f - xi(s) is exactly the elapsed reduced time.
+            double xiF = OpticalReducedTime(timeGridS, tempC, p, tFreezeS);
+
+            double dn = 0.0;
+            double sigPrev = 0.0;
+            for (int i = 0; i < stressTimeS.Length; i++)
+            {
+                double tS = stressTimeS[i];
+                double sig = stressMPa[i];
+                double dSig = sig - sigPrev;
+                sigPrev = sig;
+                if (dSig == 0.0) continue;
+                // An increment arriving after the layer has frozen changes
+                // nothing - the layer is glassy and this model has no sub-Tg
+                // mechanism, which is the same assumption the thermal channel
+                // makes and is stated there too.
+                if (tS >= tFreezeS) continue;
+                double xiS = OpticalReducedTime(timeGridS, tempC, p, tS);
+                double elapsed = xiF - xiS;
+                if (elapsed < 0.0) elapsed = 0.0;
+                dn += OpticalCoefficientBrewster(elapsed, p) * 1e-12 * dSig * 1e6;
+            }
+            return dn;
+        }
+
         public static double PressureDeviatoricMPa(double pressureMPa, double poissonRatio)
         {
             double nu = poissonRatio;
@@ -1539,6 +1609,97 @@ namespace MoldStress
                 double deep = DnAtDepthFraction(dd, zz, 0, half, 0.47);
                 SelfTest.Near("depth extraction returns a known ratio of 5.0",
                     surf / deep, 5.0, 0.01);
+            }
+
+            // --- THE Eq (3) CONVOLUTION, three limits it must satisfy ---------
+            {
+                var pc = Polymers.ByName("MS_POLYCARB");
+                // An isothermal cooling curve at 145 C, so xi is just t/tau and
+                // every limit below can be checked by hand.
+                int nG = 2001;
+                var grid = new double[nG];
+                var temp = new double[nG];
+                for (int j = 0; j < nG; j++) { grid[j] = 20.0 * j / (nG - 1.0); temp[j] = 145.0; }
+                double tFrz = 20.0;
+                double tau145 = pc.OpticalTauS(145.0);
+
+                // (i) A stress applied at t=0 and HELD to the freeze: the pure
+                //     build-up, dn = sigma * C(xi_f).
+                var tHold = new double[] { 0.0, tFrz };
+                var sHold = new double[] { 10.0, 10.0 };
+                double xiF = Channels.OpticalReducedTime(grid, temp, pc, tFrz);
+                double want = OpticalCoefficientBrewster(xiF, pc) * 1e-12 * 10.0e6;
+                SelfTest.Near("held stress reproduces the pure build-up",
+                    FrozenBirefringence(grid, temp, tHold, sHold, pc, tFrz), want, 1e-9);
+
+                // (ii) THE NULL, and it is exact: a stress applied and removed at
+                //      the SAME instant must leave precisely nothing. This is the
+                //      arm that proves the glassy parts cancel rather than being
+                //      subtracted approximately.
+                var tSpike = new double[] { 1.0, 1.0 };
+                var sSpike = new double[] { 50.0, 0.0 };
+                SelfTest.Near("an instantaneous spike leaves exactly zero",
+                    FrozenBirefringence(grid, temp, tSpike, sSpike, pc, tFrz), 0.0, 1e-15);
+
+                // (iii) A pulse that RETURNS TO ZERO leaves only the memory term,
+                //       so its value must be independent of C_g. Same pulse, same
+                //       everything, with C_g moved by 10x.
+                var tPulse = new double[] { 0.5, 6.0 };
+                var sPulse = new double[] { 40.0, 0.0 };
+                double withCg = FrozenBirefringence(grid, temp, tPulse, sPulse, pc, tFrz);
+                var pc2 = pc.WithProcessTemps(pc.MeltTempC, pc.MoldTempC);
+                pc2.OpticalCgBrewster = pc.OpticalCgBrewster * 10.0;
+                double withBigCg = FrozenBirefringence(grid, temp, tPulse, sPulse, pc2, tFrz);
+                SelfTest.Near("a pulse returning to zero is independent of C_g",
+                    withBigCg, withCg, 1e-12);
+                SelfTest.Check("and that pulse still leaves a real memory term",
+                    withCg > 1e-6, string.Format("dn = {0:E3}", withCg));
+
+                // (iv) A RESIDUAL stress keeps its glassy contribution, which is
+                //      the author's own reading of the surface level.
+                var tRes = new double[] { 0.5, 6.0 };
+                var sRes = new double[] { 40.0, 5.0 };
+                double resid = FrozenBirefringence(grid, temp, tRes, sRes, pc, tFrz);
+                SelfTest.Check("a residual stress adds a glassy contribution on top",
+                    resid > withCg, string.Format("{0:E3} > {1:E3}", resid, withCg));
+
+                // (v) LATER IS BIGGER, and this assertion is the reverse of the
+                //     one first written here. That test read "the same pulse
+                //     later in the cycle freezes in LESS" and failed; working it
+                //     by hand showed the CODE was right and the EXPECTATION was
+                //     backwards, so the expectation is what changed.
+                //
+                //     C(xi) is concave and saturating, so a pulse whose two
+                //     endpoints both sit far out on the plateau leaves a small
+                //     DIFFERENCE, while one sitting on the steep part near the
+                //     freeze leaves a large one. Isothermal at 145 C with a
+                //     20 s freeze, a 40 MPa pulse gives:
+                //
+                //         0.5 -> 6.0 s   elapsed xi 2.056 -> 1.476   dn 0.0164
+                //          15 -> 19  s   elapsed xi 0.527 -> 0.105   dn 0.0594
+                //
+                //     Physically that is the whole meaning of frozen-in
+                //     orientation: stress applied early relaxes away, stress
+                //     applied just before vitrification is trapped.
+                //
+                //     AND IT IS THE PREDICTION THAT MATTERS FOR THE SURFACE
+                //     MAXIMUM. Case 4's pressure pulse acts over 0.1-0.8 s.
+                //     Near-surface layers freeze at 0.2-0.9 s, so the pulse sits
+                //     right at their vitrification and is largely trapped; the
+                //     core freezes at 4.2 s, long after the pulse has gone, so
+                //     its rise and fall very nearly cancel. A surface-peaked,
+                //     equi-biaxial profile falls out of the mechanism with
+                //     nothing tuned - which is the observation the 1996 paper
+                //     could not explain with fountain flow.
+                var tLate = new double[] { 15.0, 19.0 };
+                var sLate = new double[] { 40.0, 0.0 };
+                SelfTest.Check("a pulse NEARER the freeze freezes in MORE",
+                    FrozenBirefringence(grid, temp, tLate, sLate, pc, tFrz) > withCg,
+                    string.Format("late {0:E3} > early {1:E3}",
+                        FrozenBirefringence(grid, temp, tLate, sLate, pc, tFrz), withCg));
+                SelfTest.Near("and the late pulse matches the hand calculation",
+                    FrozenBirefringence(grid, temp, tLate, sLate, pc, tFrz), 0.05937, 2e-3);
+                if (tau145 <= 0) SelfTest.Check("tau positive", false, "guard");
             }
 
             // --- OPTICAL MEMORY, against the source's own numbers -------------
