@@ -78,9 +78,23 @@ namespace MoldStress
     ///      5e-4, which is MORE THAN TWICE that of the flow-induced orientation
     ///      (averaged over the thickness)" (p. 140).
     ///
-    ///   3. FLOW ORIENTATION, the surface spikes. "The maximum at the surface is
-    ///      due to the elongation of the melt at the flow front" (p. 136) - which
-    ///      is this model's fountain deposition term, named by the source.
+    ///   3. FLOW ORIENTATION, the surface spikes. The 1991 thesis says "The
+    ///      maximum at the surface is due to the elongation of the melt at the
+    ///      flow front" (p. 136) - this model's fountain deposition term.
+    ///
+    ///      ** THAT ATTRIBUTION IS WITHDRAWN BY ITS OWN AUTHOR. ** Wimberger-
+    ///      Friedl, Int. Polym. Process. 11(4) 373 (1996), same mould, same
+    ///      machine, same Makrolon CD 2000: "The observed behaviour rules out the
+    ///      fountain flow induced elongational stresses as the origin for the
+    ///      birefringence maximum at the surface." The surface birefringence is
+    ///      EQUI-BIAXIAL and independent of gate distance, and scales with cavity
+    ///      pressure - none of which a flow mechanism gives. The 1996 paper puts
+    ///      transient pressure-induced deviatoric stress in the vitrifying layer
+    ///      there instead (its Eqs 5-8; the ceiling is printed by this case).
+    ///
+    ///      The fountain term is KEPT because removing it breaks case 1 and this
+    ///      case, on evidence that covers neither - see Process.FountainStrain.
+    ///      What is withdrawn is the CLAIM, not the term.
     ///
     /// THIS MODEL HAS (1) AND (3) AND DOES NOT HAVE (2). The thermal channel here
     /// computes an ELASTIC residual stress and multiplies it by the photoelastic
@@ -314,7 +328,8 @@ namespace MoldStress
 
             int badForMode = Program.RejectFlagsNotReadBy(
                 args, new[] { "-nz", "-moldtemp", "-station", "-semidia", "-filltime",
-                              "-gatethick", "-snapshot", "-freeplate", "-ejecttime" },
+                              "-gatethick", "-snapshot", "-freeplate", "-ejecttime",
+                              "-fountain" },
                 "-refplate");
             if (badForMode != 0) return badForMode;
 
@@ -330,6 +345,12 @@ namespace MoldStress
             // than argued about.
             bool adhered = !Program.Has(args, "-freeplate");
             double ejectS = Program.Value(args, "-ejecttime", double.NaN);
+            // -fountain WAS NOT READ BY THIS MODE, which is a defect and not a
+            // preference: reference case 4 is the case whose source REFUTES the
+            // fountain explanation of the surface maximum, and it was the one
+            // case that could not be run without the term. `-refplate -fountain 0`
+            // exited 64 on the flag guard. Wired 2026-08-19.
+            double fountain = Program.Value(args, "-fountain", 1.0);
 
             // GEOMETRY, DERIVED rather than typed. The equal-volume disc is
             // computed from the plate's own dimensions, so if those are ever
@@ -371,6 +392,11 @@ namespace MoldStress
                 + "front width {4:F0} mm", semiDia, fillS, modelVolMm3 / fillS,
                 InjectionRateMm3PerS, PlateWidthMm));
             say(string.Format(ci, "  grid: nz {0}, station {1:F2} of the path", nz, stationFrac));
+            say(string.Format(ci, "  fountain deposition: {0}",
+                fountain > 0.0
+                    ? string.Format(ci, "ON, strain scale {0:F2} - NOTE the source refutes "
+                        + "this as the origin of the surface maximum", fountain)
+                    : "OFF (-fountain 0)"));
             say(string.Format(ci, "  thermal boundary condition: {0}",
                 adhered
                     ? string.Format(ci, "ADHERED to the cavity, released at {0:F1} s "
@@ -388,6 +414,7 @@ namespace MoldStress
                 IncrementalThermal = incremental,
                 MouldAdhesion = adhered,
                 EjectionTimeS = ejectS,
+                FountainStrain = fountain,
             };
 
             var plate = BuildElement(semiDia, gateThick);
@@ -627,7 +654,7 @@ namespace MoldStress
             {
                 double pz, ps, av;
                 Measure(tmSeries[j], nz, semiDia, gateThick, fillS, incremental, adhered,
-                        ejectS, stationFrac, out pz, out ps, out av);
+                        ejectS, fountain, stationFrac, out pz, out ps, out av);
                 peakZ[j] = pz; peakSig[j] = ps;
                 say(string.Format(ci, "    {0,3:F0} C       {1:F3}              {2:F3}"
                     + "               {3:E3}", tmSeries[j], pz, ps, av));
@@ -854,7 +881,7 @@ namespace MoldStress
 
         private static void Measure(double tm, int nz, double semiDia, double gateThick,
                                     double fillS, bool incremental, bool adhered, double ejectS,
-                                    double stationFrac,
+                                    double fountain, double stationFrac,
                                     out double flowPeakZOverD, out double peakSigmaMPa,
                                     out double avgTotalDn)
         {
@@ -864,6 +891,7 @@ namespace MoldStress
                 FillTimeS = fillS, PackPressureMPa = 0.0, PackTimeS = 0.0,
                 IncrementalThermal = incremental,
                 MouldAdhesion = adhered, EjectionTimeS = ejectS,
+                FountainStrain = fountain,
             };
             var e = BuildElement(semiDia, gateThick);
             var fill = FillField.Build(e, p, proc, 101);

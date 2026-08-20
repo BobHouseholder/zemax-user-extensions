@@ -41,6 +41,46 @@ namespace MoldStress
         /// is lifted rather than quietly kept.
         ///
         /// Disable with -fountain 0 to recover the shear-only model.
+        ///
+        /// REFUTED AS THE ORIGIN OF THE SURFACE MAXIMUM, 2026-08-19, and KEPT
+        /// ANYWAY - both halves matter.
+        ///
+        /// Wimberger-Friedl, Int. Polym. Process. 11(4) 373 (1996), on the same
+        /// mould, machine and PC grade as reference case 4, concludes verbatim:
+        /// "The observed behaviour rules out the fountain flow induced
+        /// elongational stresses as the origin for the birefringence maximum at
+        /// the surface." His evidence is that the surface birefringence is
+        /// EQUI-BIAXIAL - equal in the flow direction and transverse to it, and
+        /// independent of gate distance - which no flow mechanism produces, and
+        /// that its height scales with CAVITY PRESSURE rather than with injection
+        /// rate. He replaces it with transient pressure-induced deviatoric
+        /// stresses in the vitrifying layer (his Eqs 5-8).
+        ///
+        /// WHY THE DEFAULT DID NOT FLIP. The refutation is specific: one feature
+        /// (the surface maximum), one polymer (PC). Measured 2026-08-19, turning
+        /// this term off costs:
+        ///
+        ///     case 1 (TOPAS COC)  MET  -> NOT met
+        ///     case 4 (PC plate)   MET  -> NOT met, on clause (e1)
+        ///
+        /// and the paper itself says the balance is material-specific - PS is
+        /// "dominated to a much greater extent by flow-induced molecular
+        /// orientation" than PC. Flipping a global default on one polymer's
+        /// evidence would break two registered criteria and swap one unearned
+        /// attribution for another.
+        ///
+        /// WHAT DID CHANGE IS THE CLAIM. This term is no longer described
+        /// anywhere as the explanation for the surface maximum. It is a
+        /// deposition term that empirically improves two cases, and the mechanism
+        /// the source names for the surface maximum is not implemented.
+        ///
+        /// AND IT EXPOSED A REAL DEFECT. With this term off, case 4's clause (e1)
+        /// reads 0.847 at ALL THREE mould temperatures - the peak stops moving
+        /// entirely. So the mould-temperature trend this model reproduces comes
+        /// from the FOUNTAIN term, not from the thinning solidified layer the
+        /// source credits ("an increase in mold temperature leads to a decrease in
+        /// thickness of the solidified layer at the end of filling"). The model
+        /// gets the published trend for the wrong reason. Recorded, not patched.
         public double FountainStrain = 1.0;
 
         /// <summary>
