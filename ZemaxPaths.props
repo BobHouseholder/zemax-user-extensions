@@ -31,6 +31,29 @@
     <ZEMAX_ROOT Condition="'$(ZEMAX_ROOT)' == '' And '$(_ZosFound)' != ''">$(_ZosFound.Split(';')[0])</ZEMAX_ROOT>
   </PropertyGroup>
 
+  <!--
+    Release output is shipped, so it must not carry the build machine in it.
+
+    A .NET assembly stamps the ABSOLUTE path of its .pdb into the PE debug
+    directory. A default Release build of this repo therefore embedded
+    <drive>\Users\<name>\...\obj\Release\<Project>.pdb in every .exe - drive,
+    account name and folder layout - and that travels inside any zip, into any
+    repository the zip is committed to, and into the history of both. Unlike a
+    line in a text file it cannot be edited out afterwards.
+
+    DebugType none drops the PDB and the stamp with it. The cost is line numbers
+    in exception stack traces; the error paths here log exception type and
+    message rather than traces, so it is close to free. Debug builds are
+    untouched and still produce full symbols.
+
+    tools\pack.ps1 re-checks the staged binaries and refuses to build a zip if a
+    path reappears, so this cannot silently regress.
+  -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
+
   <Target Name="_CheckZemaxRoot" BeforeTargets="ResolveAssemblyReferences"
           Condition="!Exists('$(ZEMAX_ROOT)ZOSAPI.dll')">
     <Error Text="ZOSAPI.dll not found under ZEMAX_ROOT='$(ZEMAX_ROOT)'. Add your install directory to ZemaxPaths.props, or build with -p:ZEMAX_ROOT=&quot;C:\Path\To\OpticStudio\&quot;." />

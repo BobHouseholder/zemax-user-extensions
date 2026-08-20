@@ -81,11 +81,11 @@ $osVer  = (Get-Item (Join-Path $install.FullName "OpticStudio.exe")).VersionInfo
 $osName = $install.Name -replace '^Ansys Zemax OpticStudio ',''
 
 # --- stage --------------------------------------------------------------------
-# Staged OUTSIDE the repo, deliberately. This repository lives in a Dropbox
-# folder, and staging under dist\ meant Dropbox opened each .exe to index it the
-# moment it appeared - Compress-Archive then died on "being used by another
-# process", intermittently and with a message that points at nothing you did.
-# Only the finished .zip is written back into the synced tree.
+# Staged OUTSIDE the repo, deliberately. A checkout sitting in a file-sync folder
+# - Dropbox, OneDrive, Drive - gets each .exe opened for indexing the moment it
+# appears, and staging under dist\ then killed Compress-Archive with "being used
+# by another process": intermittent, and pointing at nothing the caller did.
+# Only the finished .zip is written back into the working tree.
 $stage = Join-Path ([IO.Path]::GetTempPath()) ("zue-pack-" + [Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Path $stage -Force | Out-Null
 New-Item -ItemType Directory -Path $OutDir -Force | Out-Null
@@ -118,6 +118,20 @@ $stray = Get-ChildItem $stage -Recurse -File | Where-Object { $_.Extension -noti
 if ($stray) { throw "non-shippable files staged: $($stray.Name -join ', ')" }
 $ansys = Get-ChildItem $stage -Recurse -File -Filter "ZOSAPI*"
 if ($ansys) { throw "Ansys binary staged: $($ansys.Name -join ', ')" }
+
+# A shipped .exe must not name the machine that built it. .NET stamps the
+# absolute .pdb path into the PE debug directory unless DebugType is none, which
+# ZemaxPaths.props sets for Release - this re-checks the actual bytes rather than
+# trusting that setting, because the leak is invisible in any file listing and
+# permanent once published.
+foreach ($f in (Get-ChildItem $stage -Recurse -File -Filter *.exe)) {
+  $text = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($f.FullName))
+  $found = [regex]::Matches($text, '[A-Za-z]:\\Users\\[!-~]{0,120}|[!-~]{0,120}\.pdb')
+  if ($found.Count -gt 0) {
+    throw ("$($f.Name) carries a build-machine path: '" + $found[0].Value + "'. " +
+           "Build Release with DebugType=none (see ZemaxPaths.props) and re-run.")
+  }
+}
 
 # --- manifest -----------------------------------------------------------------
 $m = @(
