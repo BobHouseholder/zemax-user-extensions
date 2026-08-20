@@ -137,9 +137,35 @@ namespace MoldStress
     ///       wrong physics. Registering the ceiling at 1.00 makes over-prediction
     ///       a FAILURE here, which no other case in this project does.
     ///
-    ///   (d) FLOW PEAK NEAR THE SURFACE. The flow channel's gapwise maximum must
-    ///       sit at |z/d| >= 0.70. Published about 0.95, and attributed to
-    ///       elongation at the front.
+    ///   (d) FLOW PEAK POSITION. RE-REGISTERED 2026-08-19 - see below. The flow
+    ///       channel's gapwise maximum must sit in |z/d| = [0.70, 0.90], against
+    ///       a published FILLING maximum at 0.80.
+    ///
+    ///       ORIGINALLY REGISTERED AS: "must sit at |z/d| >= 0.70; published
+    ///       about 0.95, attributed to elongation at the front." That compared
+    ///       two DIFFERENT FEATURES. The published profile carries three maxima,
+    ///       not one (IPP 11(4) 373, p. 375): a surface maximum at z ~ 0.95-1.0,
+    ///       "a second maximum at z = 0.8 due to shear flow during filling", and
+    ///       "a small maximum at z = 0.5 induced during the packing stage". This
+    ///       model's flow channel produces the FILLING maximum. The 0.95 I
+    ///       registered against is the SURFACE maximum, which the same paper
+    ///       attributes to transient pressure in the vitrifying layer - a
+    ///       mechanism this model does not have at all. The clause passed on a
+    ///       mismatched comparison.
+    ///
+    ///       THE NEW BAND IS DERIVED FROM THE SOURCE, NOT FROM THE MODEL. The
+    ///       paper states z = 0.8 explicitly for its reference condition, and
+    ///       says the filling maximum "shifts towards the surface with increasing
+    ///       mold temperature", reaching the surface itself by Tm = 120 C. The
+    ///       scored series here runs Tm = 30-90 C, so +-0.10 about 0.80 covers
+    ///       that migration plus a figure read.
+    ///
+    ///       This is a correction of a mis-registration, not a relaxation: the
+    ///       band is TIGHTER than the one it replaces (two-sided [0.70, 0.90]
+    ///       against a one-sided >= 0.70), and it can now fail from above. The
+    ///       model reads 0.883, which sits near the TOP of the band - it peaks
+    ///       further out than the source does, and that is a real observation
+    ///       rather than a pass to be pleased about.
     ///
     ///   (e) MOULD-TEMPERATURE TRENDS, over Tm = 30, 60, 90 C. Both are stated by
     ///       the source as directions, so both are scored as directions:
@@ -313,13 +339,21 @@ namespace MoldStress
         /// </summary>
         public const double PublishedGapAverageDn = 6.0e-4;
         public const double PublishedCorePlateauDn = 5.0e-4;
+        /// <summary>The SURFACE maximum - pressure-induced per IPP 11(4) 373,
+        /// not reproduced by this model. Used by the Eq (8) ceiling, NOT by
+        /// clause (d).</summary>
         public const double PublishedSurfacePeakDn = 20.0e-4;
         public const double PublishedSurfacePeakZOverD = 0.95;
+
+        /// <summary>The FILLING maximum - shear during fill, which IS what this
+        /// model's flow channel produces. "a second maximum at z = 0.8 due to
+        /// shear flow during filling", IPP 11(4) 373 p. 375.</summary>
+        public const double PublishedFillingPeakZOverD = 0.80;
 
         // --- the registered bands ---------------------------------------------
         public const double StressBoundFactor = 3.0;
         public const double TotalLoFraction = 0.15, TotalHiFraction = 1.00;
-        public const double FlowPeakZOverDMin = 0.70;
+        public const double FlowPeakZOverDLo = 0.70, FlowPeakZOverDHi = 0.90;
 
         public static int Run(string[] args)
         {
@@ -632,12 +666,18 @@ namespace MoldStress
             for (int k = kMid; k <= nz - 2; k++)   // nz-1 is the boundary node
                 flowPeak = Math.Max(flowPeak, Math.Abs(ch.DnFlow[iSta, k]));
             double flowPeakZ = FlowPeakZOverD(ch.DnFlow, freeze.Z, iSta, nz, half);
-            bool dOk = flowPeakZ >= FlowPeakZOverDMin;
+            bool dOk = flowPeakZ >= FlowPeakZOverDLo && flowPeakZ <= FlowPeakZOverDHi;
             say(string.Format(ci,
-                "  (d) flow-channel peak {0:E3} at |z/d| {1:F3}, published ~{2:F2}, "
-                + "gate >= {3:F2}  =>  {4}",
-                flowPeak, flowPeakZ, PublishedSurfacePeakZOverD, FlowPeakZOverDMin,
-                dOk ? "PASS" : "FAIL"));
+                "  (d) flow-channel peak {0:E3} at |z/d| {1:F3}, against the published "
+                + "FILLING maximum {2:F2}, band [{3:F2}, {4:F2}]  =>  {5}",
+                flowPeak, flowPeakZ, PublishedFillingPeakZOverD,
+                FlowPeakZOverDLo, FlowPeakZOverDHi, dOk ? "PASS" : "FAIL"));
+            say(string.Format(ci,
+                "      NOT compared against the SURFACE maximum at {0:F2} - that is a "
+                + "different feature", PublishedSurfacePeakZOverD));
+            say("      from a different mechanism (transient pressure in the vitrifying");
+            say("      layer), which this model does not carry. Re-registered 2026-08-19");
+            say("      after IPP 11(4) 373 showed the old comparison crossed features.");
 
             // ---- (e) the mould-temperature trends -----------------------------
             //
