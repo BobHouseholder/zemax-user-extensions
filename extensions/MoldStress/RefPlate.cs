@@ -1098,6 +1098,83 @@ namespace MoldStress
                 say("    rescue the OUTERMOST layers within its own uncertainty. It does");
                 say("    move the 0.90 layer, which sits right at the edge of the read.");
                 say("");
+                // ---- CANDIDATE 3: FOUNTAIN TRANSPORT, NOT FOUNTAIN STRESS -----
+                //
+                // Candidates 1 and 2 both failed for the same underlying reason:
+                // the outermost skin vitrifies at 0.051 s, a quarter of the way
+                // into the fill, so at that station the cavity is not yet full
+                // and there is no cavity pressure to reach it at any shift.
+                //
+                // But that assumed the skin has been sitting at the wall since
+                // t = 0, and in fountain flow it has not. The material at the
+                // wall at station s was carried there from the core of the melt
+                // when the FRONT passed s, so its clock starts at t_arrive(s),
+                // not at zero. The model already computes that arrival time -
+                // tFill * s / pathLength - for the fountain deposition term.
+                //
+                // THE DECISIVE TEST IS NOT WHETHER THIS HELPS. It is whether it
+                // produces a GATE-DISTANCE DEPENDENCE, because the 1996 paper
+                // reports the surface birefringence "equal for both distances
+                // from the gate" and used exactly that independence to rule out
+                // fountain flow as the stress source. If transport reintroduces a
+                // strong dependence, it is refuted by the same observation.
+                say("");
+                say("  CANDIDATE 3: fountain TRANSPORT - the skin's clock starts when the");
+                say("  front passes, not at t = 0. Tested against the source's own");
+                say("  gate-distance independence:");
+                say("     s/L    t_arrive s   skin freeze s   vs onset 0.25 s      dn");
+                double zSkin = 0.95;
+                int kSk = (int)Math.Round(kMid + (nz - 1 - kMid) * zSkin);
+                double tFrzLocal = freeze.FreezeTimeS[kSk];
+                for (int j2 = 0; j2 < rowT.Length; j2++)
+                    rowT[j2] = freeze.TempHistoryC[kSk, j2];
+                double first = double.NaN, last = double.NaN;
+                foreach (double sFrac in new[] { 0.1, 0.3, 0.5, 0.7, 0.9, 1.0 })
+                {
+                    double tArr = fillS * sFrac;
+                    // The layer's own history is unchanged - it still takes
+                    // tFrzLocal to vitrify after being laid down - but the whole
+                    // clock is offset, so the pressure trace must be shifted the
+                    // other way to stay in the layer's frame.
+                    var tRel = new double[PressureTraceS.Length];
+                    for (int q = 0; q < tRel.Length; q++)
+                        tRel[q] = PressureTraceS[q] - tArr;
+                    double dnT = Channels.FrozenBirefringence(
+                        freeze.TimeGridS, rowT, tRel, devMPa, p, tFrzLocal);
+                    if (double.IsNaN(first)) first = dnT;
+                    last = dnT;
+                    say(string.Format(ci,
+                        "    {0:F1}   {1,10:F3}   {2,13:F3}   {3,15}   {4,9:E3}",
+                        sFrac, tArr, tArr + tFrzLocal,
+                        (tArr + tFrzLocal) > 0.25 ? "AFTER onset" : "before onset", dnT));
+                }
+                say(string.Format(ci,
+                    "    span {0:E3} -> {1:E3} across the flow path.", first, last));
+                say("    The source measures the surface value EQUAL at both its distances");
+                say("    from the gate, and used that independence to rule fountain flow out");
+                say("    as the stress source. This produces the MOST EXTREME possible");
+                say("    dependence - identically zero across 90% of the plate and nonzero");
+                say("    only at the very last station - so it is refuted by the same");
+                say("    observation, and refuted harder than the mechanism it replaced.");
+                say("");
+                say("  ALL THREE CANDIDATES REFUTED, and together they say something the");
+                say("  individual refutations do not:");
+                say("");
+                say("    The outermost skin vitrifies at 0.051 s, before the cavity at its");
+                say("    own station is full. No pressure history can act on it, because at");
+                say("    that instant there is no cavity pressure anywhere near it - and");
+                say("    that holds however the trace is read, however the clock is offset,");
+                say("    and MORE strongly if the freeze solve is corrected toward the");
+                say("    source, since that freezes the skin sooner still.");
+                say("");
+                say("    So a pressure mechanism cannot produce a maximum in the OUTERMOST");
+                say("    material. Either the measured maximum sits deeper than z/d 0.95 -");
+                say("    the layer-removal steps are 50 um, one grid step in z/d here, so");
+                say("    the two are not distinguishable in the source - or the outermost");
+                say("    material carries orientation from something that acted before the");
+                say("    cavity was full, which is the filling flow, which is where this");
+                say("    model already puts it.");
+                say("");
                 say("    AND THE OUTERMOST LAYERS NOW READ EXACTLY ZERO, which is a result");
                 say("    rather than a rounding. z/d 0.90 vitrifies at 0.206 s and the");
                 say("    digitised trace shows no pressure until 0.25 s, so the skin freezes");
