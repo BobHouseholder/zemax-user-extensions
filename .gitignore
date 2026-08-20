@@ -9,5 +9,8 @@ logs/
 **/bin/
 **/obj/
 
+# tools/pack.ps1 output - build artefacts, never committed
+dist/
+
 # local-only session settings
 .claude/settings.local.json
