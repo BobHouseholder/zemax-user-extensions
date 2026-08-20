@@ -22,6 +22,19 @@ namespace MoldStress
         public double PartingLineZMm;       // local z of the parting plane, from the front vertex
 
         /// <summary>
+        /// How this element's surfaces depart from the spheres this solver can
+        /// represent, or null when they do not. Set by Session.FindElements and
+        /// refused by Runner unless -allow-nonspherical is passed.
+        ///
+        /// THE CAVITY PROFILE IS THE WHOLE GEOMETRY INPUT. `ThicknessAt` is built
+        /// from `Sag`, which is the conic-free sphere, and it feeds the fill time,
+        /// the wall thickness, the freeze history and the z-coordinates written
+        /// into the STAR file. A conic or an aspheric term that is not read is not
+        /// a small error in one place; it is a different part.
+        /// </summary>
+        public string ShapeDeparture;
+
+        /// <summary>
         /// Thickness of the cavity at radius r, from the two surface sags. This
         /// is the whole reason the estimator needs no mesh: OpticStudio already
         /// holds the cavity profile exactly.

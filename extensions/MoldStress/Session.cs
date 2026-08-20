@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Globalization;
 
 namespace MoldStress
 {
@@ -138,11 +139,95 @@ namespace MoldStress
                 // The cavity is bounded by the smaller of the two apertures.
                 e.SemiDiameterMm = Math.Min(s.SemiDiameter, next.SemiDiameter);
                 e.EdgeThicknessMm = e.ThicknessAt(e.SemiDiameterMm);
+                // Both bounding surfaces, because the cavity is the gap between
+                // them and either one being non-spherical makes the profile wrong.
+                string dFront = ShapeDeparture(SurfaceTypeName(s), ConicOf(s), ParsOf(s));
+                string dBack = ShapeDeparture(SurfaceTypeName(next), ConicOf(next), ParsOf(next));
+                if (dFront != null || dBack != null)
+                    e.ShapeDeparture = string.Join(" | ", new[]
+                    {
+                        dFront == null ? null : "surface " + i + ": " + dFront,
+                        dBack == null ? null : "surface " + (i + 1) + ": " + dBack,
+                    }.Where(x => x != null).ToArray());
+
                 e.Gate = Gating.DefaultGate(e);
                 e.PartingLineZMm = Gating.DefaultPartingLineZ(e);
                 found.Add(e);
             }
             return found;
+        }
+
+        /// <summary>
+        /// Names how a surface departs from a sphere, or returns null if it does
+        /// not. PURE, so it can be tested without OpticStudio running - which is
+        /// the whole reason it takes loose values rather than an ILDERow.
+        ///
+        /// WHY THIS EXISTS. This tool reads only the base radius, and every
+        /// surface therefore becomes a pure sphere. That substitution was SILENT
+        /// until 2026-08-20: an aspheric lens produced a full, plausible run built
+        /// on a geometry it does not have. Moulded optics are asphere-heavy almost
+        /// by definition - asphericity for free is the economic reason to mould
+        /// rather than grind - so the silently-wrong case is the likely case, and
+        /// the tool's own validation suite never tests one: its only per-lens
+        /// reference case is plano-convex.
+        ///
+        /// Surface types other than Standard/EvenAspheric/OddAsphere are refused
+        /// outright rather than inspected, because this function cannot know what
+        /// their parameters mean.
+        /// </summary>
+        public static string ShapeDeparture(string typeName, double conic, double[] pars)
+        {
+            var why = new List<string>();
+            bool even = string.Equals(typeName, "EvenAspheric", StringComparison.OrdinalIgnoreCase);
+            bool odd = string.Equals(typeName, "OddAsphere", StringComparison.OrdinalIgnoreCase);
+            bool standard = string.Equals(typeName, "Standard", StringComparison.OrdinalIgnoreCase);
+
+            if (!standard && !even && !odd)
+                why.Add("surface type " + (typeName ?? "?") + " is not one this solver can read");
+
+            if (Math.Abs(conic) > 1e-12)
+                why.Add(string.Format(CultureInfo.InvariantCulture, "conic {0:F6}", conic));
+
+            if ((even || odd) && pars != null)
+            {
+                var terms = new List<string>();
+                for (int i = 0; i < pars.Length; i++)
+                    if (Math.Abs(pars[i]) > 0.0)
+                        terms.Add(string.Format(CultureInfo.InvariantCulture,
+                            "r^{0} {1:E2}", even ? 2 * (i + 1) : (i + 1), pars[i]));
+                if (terms.Count > 0)
+                    why.Add("aspheric terms " + string.Join(", ", terms.ToArray()));
+            }
+            return why.Count == 0 ? null : string.Join("; ", why.ToArray());
+        }
+
+        /// <summary>The three LDE reads the detector needs, each guarded - some
+        /// surface types throw on these rather than returning a default, which is
+        /// why the sibling extension wraps every one of them too.</summary>
+        private static string SurfaceTypeName(ZOSAPI.Editors.LDE.ILDERow row)
+        {
+            try { return row.Type.ToString(); } catch { return null; }
+        }
+
+        private static double ConicOf(ZOSAPI.Editors.LDE.ILDERow row)
+        {
+            try { return row.Conic; } catch { return 0.0; }
+        }
+
+        private static double[] ParsOf(ZOSAPI.Editors.LDE.ILDERow row)
+        {
+            var v = new double[8];
+            for (int k = 1; k <= 8; k++)
+            {
+                try
+                {
+                    var col = (ZOSAPI.Editors.LDE.SurfaceColumn)Enum.Parse(
+                        typeof(ZOSAPI.Editors.LDE.SurfaceColumn), "Par" + k);
+                    v[k - 1] = row.GetSurfaceCell(col).DoubleValue;
+                }
+                catch { v[k - 1] = 0.0; }
+            }
+            return v;
         }
 
         public static void Describe(MouldedElement e)
@@ -154,6 +239,8 @@ namespace MoldStress
             Console.WriteLine("      gate     " + e.Gate);
             Console.WriteLine(string.Format(
                 "      parting  z = {0:F4} mm from the front vertex", e.PartingLineZMm));
+            if (e.ShapeDeparture != null)
+                Console.WriteLine("      NOT SPHERICAL: " + e.ShapeDeparture);
             if (e.EdgeThicknessMm <= 0)
                 Console.WriteLine("      WARNING: edge thickness is not positive - " +
                                   "the surfaces interpenetrate inside the clear aperture");

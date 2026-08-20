@@ -65,6 +65,43 @@ namespace MoldStress
                 say("");
                 if (els.Count == 0) { say("  no mouldable element found."); return 0; }
 
+                // --- NON-SPHERICAL SURFACES ARE REFUSED -----------------------
+                //
+                // This solver reads only the base radius, so every surface it
+                // models is a pure sphere. Until 2026-08-20 that substitution was
+                // SILENT: an aspheric lens produced a complete, plausible run on a
+                // geometry it does not have, and the tool's own validation suite
+                // could never have caught it - its one per-lens reference case is
+                // plano-convex.
+                //
+                // Refusing is the right default rather than warning, because the
+                // output is not uncertain here, it is about a different part. The
+                // escape hatch exists for the case where the departure is known to
+                // be negligible, and it prints what is being approximated rather
+                // than going quiet.
+                var odd = els.Where(x => x.ShapeDeparture != null).ToList();
+                if (odd.Count > 0)
+                {
+                    bool allow = Program.Has(args, "-allow-nonspherical");
+                    say(allow
+                        ? "  NON-SPHERICAL SURFACES, APPROXIMATED AS SPHERES (-allow-nonspherical):"
+                        : "  REFUSED: non-spherical surfaces, which this solver cannot represent.");
+                    foreach (var x in odd)
+                        say(string.Format("    surfaces {0}-{1}  {2}",
+                            x.FrontSurface, x.BackSurface, x.ShapeDeparture));
+                    if (!allow)
+                    {
+                        say("");
+                        say("  Only the base radius is read, so each of these would be modelled");
+                        say("  as a pure sphere - a different cavity profile, feeding the fill");
+                        say("  time, the wall thickness, the freeze history and the geometry");
+                        say("  written into STAR. Pass -allow-nonspherical to proceed anyway if");
+                        say("  you know the departure is negligible for your part.");
+                        return Program.UsageError;
+                    }
+                    say("");
+                }
+
                 // --- baseline, measured before anything is loaded --------------
                 double baseWfe = Metric(sys);
                 say(string.Format(CultureInfo.InvariantCulture,

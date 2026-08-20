@@ -60,6 +60,41 @@ namespace MoldStress
 
         private static void GeometryChecks()
         {
+            // --- THE NON-SPHERICAL GUARD, both arms ------------------------
+            //
+            // A guard that never fires and a guard that always fires look
+            // identical from a passing suite, so a sphere must go through and
+            // each departure must be caught, separately.
+            {
+                var none = new double[8];
+                SelfTest.Check("a plain sphere is NOT flagged",
+                    Session.ShapeDeparture("Standard", 0.0, none) == null, "Standard, conic 0");
+
+                string c = Session.ShapeDeparture("Standard", -1.0, none);
+                SelfTest.Check("a conic IS flagged", c != null && c.Contains("conic"),
+                    c ?? "(null)");
+
+                var p4 = new double[8]; p4[1] = -3.2e-6;      // Par2 -> r^4
+                string a4 = Session.ShapeDeparture("EvenAspheric", 0.0, p4);
+                SelfTest.Check("an aspheric term IS flagged, with its power",
+                    a4 != null && a4.Contains("r^4"), a4 ?? "(null)");
+
+                SelfTest.Check("an even-asphere row with NO terms is not flagged",
+                    Session.ShapeDeparture("EvenAspheric", 0.0, none) == null,
+                    "EvenAspheric, all parameters zero");
+
+                string t = Session.ShapeDeparture("Toroidal", 0.0, none);
+                SelfTest.Check("an unreadable surface type IS flagged",
+                    t != null && t.Contains("Toroidal"), t ?? "(null)");
+
+                // and a conic on a type this solver cannot read must report BOTH,
+                // or the first finding masks the second.
+                string both = Session.ShapeDeparture("Biconic", 0.5, none);
+                SelfTest.Check("type and conic are reported together",
+                    both != null && both.Contains("Biconic") && both.Contains("conic"),
+                    both ?? "(null)");
+            }
+
             Console.WriteLine("  geometry, gate and parting line");
 
             // A plane-parallel plate: thickness must be its centre thickness

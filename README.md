@@ -357,8 +357,15 @@ tested those differ by 585x.
   `nz` alone proves nothing. This is the root cause of case 1's grid-dependent
   verdict and it invalidates most convergence claims until re-taken in the
   (`nz`, `nt`) plane.
-- **Only base radius is read** — no conic, no aspheric terms. Aspheres get a
-  spherical proxy, silently.
+- **Only base radius is read** — no conic, no aspheric terms, so every surface is
+  modelled as a pure sphere. **No longer silent as of 2026-08-20**: a run REFUSES
+  when either bounding surface carries a conic, an aspheric term, or a surface type
+  this solver cannot read, naming what it found. `-allow-nonspherical` proceeds
+  anyway and prints what is being approximated. Reading the real sag is the fix and
+  is not done.
+- **`RejectFlagsNotReadBy` is wired into only two of the four reference modes**, so
+  `-refcase` and `-refcase2` still absorb flags they never read — `-filltime` and
+  now `-allow-nonspherical` among them. The guard exists; it is not connected.
 - **The K11/K12 split is assumed for every polymer, including the measured one.**
   What the literature measures is the DIFFERENCE, because that is what a polariscope
   sees; the individual values are split in N-BK7's proportion. Measured consequence:
