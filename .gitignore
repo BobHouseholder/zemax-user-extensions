@@ -9,8 +9,10 @@ logs/
 **/bin/
 **/obj/
 
-# tools/pack.ps1 output - build artefacts, never committed
-dist/
+# tools/pack.ps1 output. The published zip IS tracked - see the Releases section
+# of the README. Anything else the packer leaves in there is not.
+dist/*
+!dist/zemax-user-extensions-*.zip
 
 # local-only session settings
 .claude/settings.local.json
