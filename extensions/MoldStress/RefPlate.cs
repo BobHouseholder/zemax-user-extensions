@@ -552,12 +552,10 @@ namespace MoldStress
                     + "carrying the mechanism the source says supplies most of it.");
 
             // ---- (d) flow peak near the surface -------------------------------
-            double flowPeak = 0.0, flowPeakZ = 0.0;
+            double flowPeak = 0.0;
             for (int k = kMid; k <= nz - 2; k++)   // nz-1 is the boundary node
-            {
-                double v = Math.Abs(ch.DnFlow[iSta, k]);
-                if (v > flowPeak) { flowPeak = v; flowPeakZ = Math.Abs(freeze.Z[k]) / half; }
-            }
+                flowPeak = Math.Max(flowPeak, Math.Abs(ch.DnFlow[iSta, k]));
+            double flowPeakZ = FlowPeakZOverD(ch.DnFlow, freeze.Z, iSta, nz, half);
             bool dOk = flowPeakZ >= FlowPeakZOverDMin;
             say(string.Format(ci,
                 "  (d) flow-channel peak {0:E3} at |z/d| {1:F3}, published ~{2:F2}, "
@@ -725,6 +723,59 @@ namespace MoldStress
         /// series and the reference condition cannot drift apart - which is
         /// exactly how RefCase2's depth table once disagreed with the dn beside it.
         /// </summary>
+        /// <summary>
+        /// Where the gapwise flow peak actually sits, to SUB-NODE accuracy.
+        ///
+        /// WHY: the peak used to be reported as a node index, so its resolution
+        /// was the grid spacing - 0.05 in z/d at nz=41. The published shift with
+        /// mould temperature is smaller than that, so at nz=41 all three arms of
+        /// clause (e1) returned exactly 0.900 and the clause FAILED for want of
+        /// resolution rather than for want of the effect. At nz=161 it passed but
+        /// with two arms tied on the same node, which is the same defect wearing
+        /// a pass. An instrument whose arms cannot differ is not weak evidence,
+        /// it is none.
+        ///
+        /// A parabola through the peak node and its two neighbours puts the
+        /// vertex between nodes, which is a strictly better estimator of the same
+        /// quantity - it does not move the bar, it stops quantising the reading.
+        /// Falls back to the node itself when the three points are not concave,
+        /// which is the honest answer rather than an extrapolation.
+        ///
+        /// Used by the reported clause AND by the trend series, from one place,
+        /// because a diagnostic that recomputes what the clause computed is how
+        /// this project has previously ended up with two disagreeing columns.
+        /// </summary>
+        private static double FlowPeakZOverD(double[,] dnFlow, double[] z, int station,
+                                             int nz, double half)
+        {
+            int kMid = nz / 2, kBest = kMid;
+            double best = -1.0;
+            for (int k = kMid; k <= nz - 2; k++)      // nz-1 is the boundary node
+            {
+                double v = Math.Abs(dnFlow[station, k]);
+                if (v > best) { best = v; kBest = k; }
+            }
+            double zPeak = Math.Abs(z[kBest]) / half;
+            if (kBest > 0 && kBest < nz - 1)
+            {
+                double y0 = Math.Abs(dnFlow[station, kBest - 1]);
+                double y1 = Math.Abs(dnFlow[station, kBest]);
+                double y2 = Math.Abs(dnFlow[station, kBest + 1]);
+                double denom = y0 - 2.0 * y1 + y2;
+                if (denom < 0.0)                       // concave: a real maximum
+                {
+                    double delta = 0.5 * (y0 - y2) / denom;
+                    if (Math.Abs(delta) <= 1.0)
+                    {
+                        double dz = Math.Abs(z[kBest + 1] - z[kBest]) / half;
+                        zPeak += delta * dz * Math.Sign(z[kBest] == 0 ? 1 : z[kBest]);
+                        zPeak = Math.Abs(zPeak);
+                    }
+                }
+            }
+            return zPeak;
+        }
+
         private static double eOver1MinusNuOf(Polymer p)
         {
             return p.ModulusMPa / (1.0 - p.PoissonRatio);
@@ -772,15 +823,10 @@ namespace MoldStress
 
             int ns = ch.S.Length;
             int i = Math.Max(0, Math.Min(ns - 1, (int)Math.Round(stationFrac * (ns - 1))));
-            int kMid = nz / 2;
             double half = 0.5 * ThicknessMm;
 
-            double best = 0.0, bestZ = 0.0, sig = 0.0, tot = 0.0;
-            for (int k = kMid; k <= nz - 2; k++)   // nz-1 is the boundary node
-            {
-                double v = Math.Abs(ch.DnFlow[i, k]);
-                if (v > best) { best = v; bestZ = Math.Abs(freeze.Z[k]) / half; }
-            }
+            double sig = 0.0, tot = 0.0;
+            double bestZ = FlowPeakZOverD(ch.DnFlow, freeze.Z, i, nz, half);
             for (int k = 1; k < nz - 1; k++)
             {
                 sig = Math.Max(sig, Math.Abs(ch.SigmaThermalMPa[i, k]));

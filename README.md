@@ -518,8 +518,8 @@ The fill time is sourced twice and the two agree: 5600 mm3 at 25.4 cm3/s is
 | thermal stress bound | peak **0.000 MPa** (was 7.44 before the fix below) | <= 3 MPa | PASS |
 | thermal dn bound | peak **1.7e-11** (was 5.36e-4) | <= 3e-4 | PASS |
 | total magnitude | 3.43e-4 against a measured 6.0e-4, ratio **0.57** | [0.15, 1.00] | PASS |
-| flow peak position | \|z/d\| **0.888** (published ~0.95) | >= 0.70 | PASS |
-| Tm trend, peak moves out | 0.875 -> 0.888 -> 0.888 at 30/60/90 C | must rise | PASS |
+| flow peak position | \|z/d\| **0.883** (published ~0.95) | >= 0.70 | PASS |
+| Tm trend, peak moves out | 0.878 -> 0.883 -> 0.888 at 30/60/90 C | must rise | PASS |
 | Tm trend, stress rises as Tm falls | both arms below 1e-6 MPa - **vacuous** | must fall | PASS |
 | null | CTE=0 collapses the thermal stress to exactly 0 | must collapse | PASS |
 | control on the null | CTE restored gives 2.4e-7 MPa | must not be dead | PASS |
@@ -671,6 +671,13 @@ asserts the precondition instead, in both directions.
   its thermal-materiality control then fails, because that control was registered
   under the old construction. Re-register it - against the orientational channel,
   once that exists - then make adhesion the default for every moulding.
+- **Case 4's verdict used to depend on the grid** - NOT met at nz=41, MET at 81
+  and 161 - because the flow-peak position was reported as a node index and the
+  published shift with mould temperature is smaller than one node at nz=41, so
+  all three arms of the trend clause returned the same number. Fixed 2026-08-19
+  with a sub-node parabolic peak estimator, which is a better reading of the same
+  quantity rather than a different bar: the verdict is now MET at nz 41, 81 and
+  161 and the peak reads 0.891 / 0.881 / 0.883.
 - **Three of case 4's eight clauses pass without discriminating anything** - two
   bounds against a model that predicts zero, and a trend clause resolving on
   floating-point noise. The release-time sweep carries the evidence instead. A
