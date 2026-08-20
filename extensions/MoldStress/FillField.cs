@@ -400,6 +400,20 @@ namespace MoldStress
         /// before this term existed - so it caught a mechanism added days later,
         /// which is what a criterion registered in advance is for.
         ///
+        /// AND A SECOND, INDEPENDENT REASON IT OVER-PREDICTS, from the literature
+        /// rather than from this model. The stress-optical rule has a measured
+        /// validity ceiling: Luap, Karlina, Schweizer & Venerus, Rheol. Acta
+        /// (2005), find it holds for monodisperse PS melts up to a critical
+        /// stress of about 2.7 MPa and fails above it, with polydispersity
+        /// LOWERING that ceiling. This term applies the rule at a deviatoric
+        /// stress of ~33 MPa - about 12x beyond where anyone has shown it valid.
+        ///
+        /// So even with a correct retention model the conversion itself would be
+        /// extrapolated far outside its measured range here. That is a separate
+        /// defect from the retention one and it is not fixed by the C_t work.
+        /// (The 2.7 MPa is measured on PS, not PC, so treat it as an order of
+        /// magnitude rather than a threshold for this material.)
+        ///
         /// The algebra is not what is wrong: the deviatoric stress is exact
         /// against the source's Eqs (5)-(8) and the self-tests reproduce its own
         /// stated values. What is wrong is the RETENTION. The term is driven here

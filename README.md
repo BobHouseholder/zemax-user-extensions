@@ -247,6 +247,21 @@ Estimates the refractive-index change and stress birefringence that injection mo
 leaves in the plastic elements of a sequential system, and applies both through
 OpticStudio's STAR module so the change in optical performance can be read directly.
 
+**REQUIRES AN OPTICSTUDIO ENTERPRISE LICENCE.** Ansys's own help states it plainly:
+"To use the tools inside the STAR tab, you must have an Ansys Zemax OpticStudio
+Enterprise-level license." STAR is how this tool delivers its result, so without
+Enterprise it computes but cannot apply anything. That prerequisite went
+undocumented here until 2026-08-20 and it narrows the audience considerably — the
+tier below Enterprise cannot use this at all.
+
+It also qualifies the premise below. An Enterprise seat is the top tier, quote-only,
+well above the ~$5k–15k of Standard/Professional/Premium — so the user this was
+written for has already bought Zemax's most expensive licence. And Moldex3D now
+states it "allows users to directly export injection molding results to Ansys
+Zemax" (Moldex3D 2025), so the mould-flow-to-Zemax path is no longer absent. The
+real gap is narrower than "no mould-flow seat": an Enterprise owner, at concept
+stage, before a moulder is engaged.
+
 **ESTIMATE — not a mould-flow simulation, and not validated against a moulded part.**
 That label is on every artifact it writes. It is held against four published reference
 cases and does not clear all of them. Moldex3D's Optics add-on and Autodesk Moldflow
