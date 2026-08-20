@@ -90,10 +90,11 @@ namespace MoldStress
             // build without being CALLED anywhere - a guard that cannot fire,
             // which is the same defect it was written to prevent.
             int badForMode = Program.RejectFlagsNotReadBy(
-                args, new[] { "-nz", "-ti", "-tc", "-snapshot" }, "-refquench");
+                args, new[] { "-nz", "-ti", "-tc", "-snapshot", "-nt" }, "-refquench");
             if (badForMode != 0) return badForMode;
 
             int nz = (int)Program.Value(args, "-nz", 161.0);
+            int ntSamples = (int)Program.Value(args, "-nt", 960.0);
             if (nz % 2 == 0) nz++;
 
             // Ti and Tc are exposed because the SOURCE reports a trend in them -
@@ -106,7 +107,8 @@ namespace MoldStress
             double ti = Program.Value(args, "-ti", InitialTempC);
             double tc = Program.Value(args, "-tc", BathTempC);
             var p = Polymers.ByName("MS_POLYCARB").WithProcessTemps(ti, tc);
-            var proc = new Process { FillTimeS = 1.0, PackPressureMPa = 0.0, PackTimeS = 0.0 };
+            var proc = new Process { FillTimeS = 1.0, PackPressureMPa = 0.0, PackTimeS = 0.0,
+                                     TimeSamples = ntSamples };
 
             say("MoldStress - third reference case: FREE QUENCH (thermal channel alone)");
             say("  " + Program.ScopeLabel);

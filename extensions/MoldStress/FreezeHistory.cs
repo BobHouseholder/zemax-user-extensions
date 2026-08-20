@@ -105,9 +105,11 @@ namespace MoldStress
             int centre = n / 2;
             double[] snapshot = null;
 
-            // Sample the cooling curve on a fixed local-time grid so the
-            // relaxation time can be integrated along it later.
-            const int nt = 240;
+            // Sample the cooling curve on a local-time grid so the relaxation
+            // time can be integrated along it later. NOT a constant since
+            // 2026-08-20 - see Process.TimeSamples for why that mattered.
+            int nt = Math.Max(proc.TimeSamples, 16);
+            if (nt % 2 != 0) nt++;              // the decimation halves it
             f.TimeGridS = new double[nt];
             var histFine = new double[n, nt];
             double tGridMax = 0.0;

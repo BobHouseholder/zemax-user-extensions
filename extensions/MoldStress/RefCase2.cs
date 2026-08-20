@@ -275,9 +275,11 @@ namespace MoldStress
             double fillDerived = Math.Max(lensVolMm3 / Math.Max(screwRate, 1e-9), 1e-4);
             double fillUsed = Program.Value(args, "-filltime", SourcedFillTimeS);
 
+            int ntSamples = (int)Program.Value(args, "-nt", 960.0);
             var proc = new Process
             {
                 FillTimeS = fillUsed, PackPressureMPa = 98.10, PackTimeS = 3.0,
+                TimeSamples = ntSamples,
             };
 
 

@@ -416,7 +416,7 @@ namespace MoldStress
             int badForMode = Program.RejectFlagsNotReadBy(
                 args, new[] { "-nz", "-moldtemp", "-station", "-semidia", "-filltime",
                               "-gatethick", "-snapshot", "-freeplate", "-ejecttime",
-                              "-fountain", "-pressure-vitrification", "-changeover" },
+                              "-fountain", "-pressure-vitrification", "-changeover", "-nt" },
                 "-refplate");
             if (badForMode != 0) return badForMode;
 
@@ -439,6 +439,7 @@ namespace MoldStress
             // exited 64 on the flag guard. Wired 2026-08-19.
             double fountain = Program.Value(args, "-fountain", 1.0);
             bool pressVit = Program.Has(args, "-pressure-vitrification");
+            int ntSamples = (int)Program.Value(args, "-nt", 960.0);
             // SOURCED, not chosen: the thesis's own transducer trace (ch. 3.3
             // Fig. 9) peaks near 80 MPa for this exact sample, with no packing
             // stage - so all of it is change-over compression.
@@ -513,6 +514,7 @@ namespace MoldStress
                 FountainStrain = fountain,
                 PressureVitrification = pressVit,
                 ChangeoverPressureMPa = changeover,
+                TimeSamples = ntSamples,
             };
 
             var plate = BuildElement(semiDia, gateThick);
@@ -768,7 +770,7 @@ namespace MoldStress
             {
                 double pz, ps, av;
                 Measure(tmSeries[j], nz, semiDia, gateThick, fillS, incremental, adhered,
-                        ejectS, fountain, pressVit, changeover, stationFrac, out pz, out ps, out av);
+                        ejectS, fountain, pressVit, changeover, ntSamples, stationFrac, out pz, out ps, out av);
                 peakZ[j] = pz; peakSig[j] = ps;
                 say(string.Format(ci, "    {0,3:F0} C       {1:F3}              {2:F3}"
                     + "               {3:E3}", tmSeries[j], pz, ps, av));
@@ -1374,7 +1376,7 @@ namespace MoldStress
 
         private static void Measure(double tm, int nz, double semiDia, double gateThick,
                                     double fillS, bool incremental, bool adhered, double ejectS,
-                                    double fountain, bool pressVit, double changeover,
+                                    double fountain, bool pressVit, double changeover, int ntSamples,
                                     double stationFrac,
                                     out double flowPeakZOverD, out double peakSigmaMPa,
                                     out double avgTotalDn)
@@ -1388,6 +1390,7 @@ namespace MoldStress
                 FountainStrain = fountain,
                 PressureVitrification = pressVit,
                 ChangeoverPressureMPa = changeover,
+                TimeSamples = ntSamples,
             };
             var e = BuildElement(semiDia, gateThick);
             var fill = FillField.Build(e, p, proc, 101);

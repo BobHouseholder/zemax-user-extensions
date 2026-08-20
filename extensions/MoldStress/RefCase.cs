@@ -120,7 +120,9 @@ namespace MoldStress
             // 71.3 MPa is the paper's stated injection pressure. Fill and pack
             // times are still NOT given by the paper (it states a 25 s cooling
             // time only) and remain the declared defaults.
-            var proc = new Process { FillTimeS = 1.0, PackPressureMPa = 71.3, PackTimeS = 3.0 };
+            int ntSamples = (int)Program.Value(args, "-nt", 960.0);
+            var proc = new Process { FillTimeS = 1.0, PackPressureMPa = 71.3, PackTimeS = 3.0,
+                                     TimeSamples = ntSamples };
             if (Program.Has(args, "-relax-below-tg")) proc.RelaxBelowTg = true;
             // ADHERED BOUNDARY CONDITION, opt-in while it is being measured.
             // The release time is SOURCED here: the paper states a 25 s cooling

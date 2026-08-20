@@ -474,6 +474,43 @@ namespace MoldStress
             }
         }
 
+        /// <summary>
+        /// HOW MANY POINTS THE COOLING CURVE IS RECORDED AT.
+        ///
+        /// This was `const int nt = 240` inside FreezeHistory, and being a
+        /// constant it did not refine with nz - so an 8x refinement of the SPACE
+        /// grid refined the TIME axis by exactly nothing, and every convergence
+        /// sweep this project ever ran in nz alone was blind to it.
+        ///
+        /// It is not a detail. Every layer's vitrification instant is snapped to
+        /// the nearest recorded time, so the time grid sets how precisely the
+        /// solid set is known - and reference case 1's registered verdict flips
+        /// from MET to NOT met between nz 81 and 161 because of it, while the
+        /// depth ratio scatters 3.43 / 2.24 / 2.80. Refining this instead makes
+        /// that ratio flat and the failure disappear.
+        ///
+        /// Exposed 2026-08-20 so convergence could be taken in the (nz, nt) plane
+        /// rather than along one axis, and RAISED TO 960 the same day because the
+        /// sweep settled it. Measured on reference case 1, depth ratio and verdict:
+        ///
+        ///                 nt=240      nt=480      nt=960
+        ///     nz= 41    3.43 MET    3.42 MET    3.42 MET
+        ///     nz= 81    2.24 MET    3.27 MET    3.33 MET
+        ///     nz=161    2.80 FAIL   3.32 MET    3.38 MET
+        ///
+        /// At 240 the ratio scatters 3.43/2.24/2.80 and the registered criterion
+        /// FLIPS. At 960 it is 3.42/3.33/3.38, flat to 1.5%, and MET at every
+        /// grid. The old default was getting the right answer at nz=41 by luck.
+        ///
+        /// It costs almost nothing: case 1 goes 22.3 s -> 24.6 s, case 3 goes
+        /// 79.4 s -> 80.5 s. There was never a performance reason for 240.
+        ///
+        /// It DOES move published numbers - case 3's shape ratio goes 2.64 -> 3.07
+        /// - and those are corrected rather than kept. A number that changes when
+        /// the grid is made adequate was never the model's answer.
+        /// </summary>
+        public int TimeSamples = 960;
+
         public bool NormalStressDifference = true;
 
         public bool ChannelNarrowing = false;

@@ -294,17 +294,26 @@ first run. Numbers below are read from the binary, not carried in prose.
 
 | | what it tests | verdict at the shipped grid |
 |---|---|---|
-| `-refcase` | moulded plate, flow + thermal | MET at nz=41 — **NOT met at nz=161** |
+| `-refcase` | moulded plate, flow + thermal | **criterion MET**, grid-stable |
 | `-refcase2` | moulded lens, layer-removal depth data | NOT met — in-plane peak ~3.6x low |
 | `-refquench` | free quench, the THERMAL channel alone | **criterion MET** |
 | `-refplate` | flow and thermal SEPARATED by the author | MET, 3 of 8 clauses non-discriminating |
 
-**Read that column with the grid caveat.** Case 1's verdict is grid-dependent — depth
-ratio 3.43 / 2.24 / 2.80 at nz 41 / 81 / 161 — because the recorded time grid is fixed
-at `nt = 240` and does not refine with `nz`. A comment in `RefCase.cs` claimed
-grid-independence; that was true when written and was invalidated by the thermal
-boundary-condition change of 2026-08-20. Retracted in place in `7b41705`. Do not quote
-3.43 to three figures.
+**The time grid was the hidden axis.** Case 1's verdict used to flip — MET at
+nz=41, NOT met at nz=161 — because the recorded cooling history was fixed at
+`nt = 240` and did not refine with `nz`, so a sweep in `nz` alone was blind to it.
+Exposed as `-nt` and raised to 960 on 2026-08-20:
+
+| depth ratio | nt=240 | nt=480 | nt=960 |
+|---|---|---|---|
+| nz=41 | 3.43 MET | 3.42 MET | 3.42 MET |
+| nz=81 | 2.24 MET | 3.27 MET | 3.33 MET |
+| nz=161 | 2.80 **FAIL** | 3.32 MET | 3.38 MET |
+
+At the new default the ratio is flat to 1.5% and MET at every grid. It costs
+~10% runtime. It also moved published numbers — case 3's shape ratio 2.64 → 3.07 —
+and those are corrected rather than kept: a number that changes when the grid is
+made adequate was never the model's answer.
 
 How each was arrived at, and every mechanism tried and rejected, is in
 [`VALIDATION-LOG.md`](extensions/MoldStress/VALIDATION-LOG.md). Candidate sources
