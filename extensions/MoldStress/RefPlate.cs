@@ -414,7 +414,7 @@ namespace MoldStress
         /// the ones the widened table could not cover.</summary>
         internal static readonly string[] ReadsFlags =
         {
-            "-nz", "-moldtemp", "-station", "-semidia", "-filltime", "-gatethick",
+            "-thermal-orientation", "-nz", "-moldtemp", "-station", "-semidia", "-filltime", "-gatethick",
             "-snapshot", "-freeplate", "-ejecttime", "-fountain",
             "-pressure-vitrification", "-changeover", "-nt",
         };
@@ -523,6 +523,27 @@ namespace MoldStress
                 ChangeoverPressureMPa = changeover,
                 TimeSamples = ntSamples,
             };
+
+            // READ AND REPORTED. A flag on a read-list that nothing reads is the
+            // exact defect the guard exists to stop, so this is the read - and
+            // when it is on, the run says what it is extrapolating.
+            if (Program.Has(args, "-thermal-orientation"))
+            {
+                proc.ThermalOrientation = true;
+                Console.WriteLine(
+                    "  THERMAL ORIENTATION ON - and it is an extrapolation. Its retention");
+                Console.WriteLine(
+                    "  rises 0.05 -> 0.95 between 138 C and 149 C, while the measured tau(T)");
+                Console.WriteLine(
+                    "  it uses is stated valid only ABOVE ~148 C; 10 of those 11 degrees are");
+                Console.WriteLine(
+                    "  below the floor, where WLF over-estimates tau and so this UNDER-states");
+                Console.WriteLine(
+                    "  retention. Above 152 C it saturates at 1.0000 and carries no depth");
+                Console.WriteLine(
+                    "  information. Treat any number it moves as indicative, not measured.");
+            }
+
 
             var plate = BuildElement(semiDia, gateThick);
             var fill = FillField.Build(plate, p, proc, 101);

@@ -280,7 +280,28 @@ namespace MoldStress
                 Runner.ScalarVerdict(0.41, 1.0000, 1.0100, false),
                 "a 0.01-wave improvement and a 0.01-wave degradation read alike");
 
-            // --- PARTIAL COVERAGE -------------------------------------------
+            // --- THE THERMAL-ORIENTATION CHANNEL, both arms -----------------
+            //
+            // The channel is off by default and structurally null when on (see
+            // Channels.Build). BOTH of those need asserting, because "off" and
+            // "returns zero" are indistinguishable from a run, and that is exactly
+            // how the first attempt at measuring it produced two zeros for two
+            // different reasons - one because the mode never calls Channels.Build,
+            // one because the stress and memory windows are disjoint.
+            Check("the thermal-orientation channel is OFF by default",
+                !new Process().ThermalOrientation,
+                "a channel extrapolating outside its law's validity must be opt-in");
+
+            Check("polycarbonate carries measured optical memory",
+                Polymers.ByName("MS_POLYCARB").HasOpticalMemory,
+                "the only grade that does - so cases 1 and 2 cannot use it at all");
+
+            foreach (var nm in new[] { "MS_COC_TOPAS6017", "MS_COP_ZEONEX480R", "MS_PMMA" })
+                Check(nm + " has NO optical memory, so the channel is silent there",
+                    !Polymers.ByName(nm).HasOpticalMemory,
+                    "switching it on for this grade must change nothing");
+
+            // PARTIAL COVERAGE -------------------------------------------------
             //
             // NoDeltaReason fires only when NOTHING was applied. Two elements of
             // three landing produced a confident before/after with no hint that a

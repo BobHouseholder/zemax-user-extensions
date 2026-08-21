@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Globalization;
 
 namespace MoldStress
 {
@@ -86,6 +87,12 @@ namespace MoldStress
         public Polymer Material;
         public double PeakDnFlow, PeakDepthFraction;
 
+        /// <summary>Gapwise frozen-in thermal orientation, all zeros unless the
+        /// channel was switched on AND the grade carries measured optical
+        /// memory. Exposed so a reference case can report what it contributed
+        /// rather than only what the total became.</summary>
+        public double[] DnThermalOrientation;
+
         /// <summary>
         /// Clamp instrumentation, 2026-08-17. A clamped quantity is insensitive
         /// to its inputs, and the depth channel shows every symptom of that: a
@@ -108,6 +115,7 @@ namespace MoldStress
             {
                 S = fill.S, Z = freeze.Z, Material = p,
                 DnFlow = new double[ns, nz],
+                DnThermalOrientation = new double[nz],
                 DnTotalOutOfPlane = new double[ns, nz],
                 MemoryUsed = new double[ns, nz],
                 TauViscMPa = new double[ns, nz],
@@ -146,6 +154,96 @@ namespace MoldStress
                                                   p.TgC, p.CtePerK, eOver1MinusNu);
             else
                 sigma = ThermalProfile(freeze.TrefC, freeze.Z, eOver1MinusNu * p.CtePerK);
+
+            // --- FROZEN-IN THERMAL ORIENTATION, opt-in --------------------------
+            //
+            // What `KGlassBrewster * sigma` already carries is PHOTOELASTICITY:
+            // the instantaneous glassy response of whatever residual stress is
+            // left at the end. What it cannot carry is the orientation that built
+            // up WHILE that stress was acting, during vitrification, and then
+            // froze in. That is a different integral over the same history, and
+            // it is the one the optical-memory function describes.
+            //
+            // Zero unless asked for, and zero for any grade with no measured
+            // optical memory - which today is every grade except polycarbonate.
+            // Reference cases 3 and 4 are PC; cases 1 and 2 are not, so this
+            // channel is silent in both of them however it is switched.
+            //
+            // ============================================================
+            // MEASURED 2026-08-21, AND IT COMES OUT IDENTICALLY ZERO. The wiring
+            // is complete and correct; the model cannot feed it.
+            //
+            // `ThermalProfileIncremental` accumulates stress ONLY in nodes that
+            // are already below Tg - `solid[k] = tempHistoryC[k,j] <= tgC`, and
+            // non-solid nodes `continue`. And `FreezeTimeS[k]` is by definition
+            // the instant node k crossed Tg. So for every node, the stress history
+            // over [0, tFreeze] is identically zero: all of its thermal stress
+            // arrives AFTER it has vitrified.
+            //
+            // Optical memory builds only BEFORE vitrification. The two windows are
+            // therefore disjoint by construction, and the frozen-in orientation is
+            // exactly zero at every depth - 0 of 161 nodes non-zero on case 4.
+            //
+            // THAT IS THE REAL BLOCKER, and it is not the one that was recorded.
+            // The recorded one was the tau(T) extrapolation, which is real but
+            // secondary; this one is structural. The mechanism needs a stress
+            // acting DURING the vitrification window - the melt-side stress the
+            // source calls a cooling stress - and this model's thermal stress is a
+            // post-vitrification construction that does not exist there. No
+            // parameter, and no better tau(T), changes that.
+            // ============================================================
+            var dnOrient = new double[freeze.NodeCount];
+            bool orientOn = proc.ThermalOrientation && p.HasOpticalMemory
+                            && freeze.TimeGridS != null && freeze.TempHistoryC != null;
+            if (orientOn)
+            {
+                int ntH = Math.Min(freeze.TimeGridS.Length, freeze.TempHistoryC.GetLength(1));
+                var hist = new double[freeze.NodeCount, ntH];
+                ThermalProfileIncremental(freeze.Z, freeze.TimeGridS, freeze.TempHistoryC,
+                                          p.TgC, p.CtePerK, eOver1MinusNu,
+                                          double.NaN, hist);
+
+                var tGrid = new double[ntH];
+                Array.Copy(freeze.TimeGridS, tGrid, ntH);
+                for (int k = 0; k < freeze.NodeCount; k++)
+                {
+                    var tempK = new double[ntH];
+                    var sigK = new double[ntH];
+                    for (int j = 0; j < ntH; j++)
+                    {
+                        tempK[j] = freeze.TempHistoryC[k, j];
+                        sigK[j] = hist[k, j];
+                    }
+                    double v = FrozenBirefringence(tGrid, tempK, tGrid, sigK,
+                                                   p, freeze.FreezeTimeS[k]);
+                    dnOrient[k] = double.IsNaN(v) ? 0.0 : v;
+                }
+            }
+
+            for (int k = 0; k < freeze.NodeCount && k < c.DnThermalOrientation.Length; k++)
+                c.DnThermalOrientation[k] = dnOrient[k];
+
+            // SAY WHAT IT COMPUTED, not just that it was asked for. A channel
+            // that silently contributes zero and a channel that never ran look
+            // identical from the outside, and on 2026-08-21 the first attempt at
+            // this produced two zeros in a row for two different reasons.
+            if (proc.ThermalOrientation)
+            {
+                double pk = 0.0; int nzOrient = 0;
+                for (int k = 0; k < dnOrient.Length; k++)
+                {
+                    pk = Math.Max(pk, Math.Abs(dnOrient[k]));
+                    if (dnOrient[k] != 0.0) nzOrient++;
+                }
+                Console.WriteLine(string.Format(CultureInfo.InvariantCulture,
+                    "  thermal orientation: {0}, peak |dn| {1:E3} over {2}/{3} nodes"
+                    + " (grade {4} optical memory, history {5})",
+                    orientOn ? "COMPUTED" : "NOT COMPUTED",
+                    pk, nzOrient, dnOrient.Length,
+                    p.HasOpticalMemory ? "has" : "LACKS",
+                    (freeze.TimeGridS != null && freeze.TempHistoryC != null)
+                        ? "present" : "ABSENT"));
+            }
 
             // --- density: Lorentz-Lorenz on the packing pressure ---------------
             double llFactor = (p.Nd * p.Nd - 1.0) * (p.Nd * p.Nd + 2.0) / (6.0 * p.Nd);
@@ -546,7 +644,7 @@ namespace MoldStress
                     // informative. The sampler takes the magnitude afterwards,
                     // which is what a polarimeter reads.
                     c.DnTotalOutOfPlane[i, k] =
-                        c.DnFlow[i, k] + p.KGlassBrewster * 1e-6 * sigma[k];
+                        c.DnFlow[i, k] + p.KGlassBrewster * 1e-6 * sigma[k] + dnOrient[k];
                     c.DnDensity[i, k] = llFactor * compressibilityPerMPa * (fill.P[i] - pMean);
                 }
             }
@@ -666,7 +764,8 @@ namespace MoldStress
 
                     for (int k = 0; k < nz; k++)
                         c.DnTotalOutOfPlane[i, k] =
-                            c.DnFlow[i, k] + p.KGlassBrewster * 1e-6 * c.SigmaThermalMPa[i, k];
+                            c.DnFlow[i, k] + p.KGlassBrewster * 1e-6 * c.SigmaThermalMPa[i, k]
+                            + dnOrient[k];
                 }
 
                 c.DepthShapeApplied = new double[nz];
@@ -1034,16 +1133,36 @@ namespace MoldStress
         /// how much of the cooling happens while the front is still sweeping, and
         /// therefore how the increments are distributed across depth.
         /// </summary>
+        /// <summary>Copies the running stress into row j of the history, and
+        /// back-fills row 0 on the first call so the history starts at the
+        /// zero-stress state rather than at whatever the first step produced.</summary>
+        private static void RecordStep(double[,] historyOut, double[] sigma, int j, int nt)
+        {
+            if (historyOut == null || j >= historyOut.GetLength(1)) return;
+            for (int k = 0; k < sigma.Length && k < historyOut.GetLength(0); k++)
+                historyOut[k, j] = sigma[k];
+        }
+
         public static double[] ThermalProfileIncremental(
             double[] z, double[] timeGridS, double[,] tempHistoryC,
             double tgC, double alphaPerK, double eOver1MinusNu,
-            double finalTempC = double.NaN)
+            double finalTempC = double.NaN, double[,] historyOut = null)
         {
 
             int n = z.Length;
             var sigma = new double[n];
             if (timeGridS == null || tempHistoryC == null || timeGridS.Length < 2) return sigma;
             int nt = Math.Min(timeGridS.Length, tempHistoryC.GetLength(1));
+
+            // `historyOut`, when supplied, receives sigma[k] AFTER every step -
+            // the same numbers this function already computes, recorded rather
+            // than discarded. Added 2026-08-21 for the thermal-orientation
+            // channel, which needs the stress HISTORY rather than the residual,
+            // because optical memory builds while the stress acts.
+            //
+            // Parameterised rather than copied. A second implementation of this
+            // force-and-moment balance would drift from this one, and the two
+            // would then disagree with no test able to say which was right.
 
             var solid = new bool[n];
             for (int j = 1; j < nt; j++)
@@ -1072,7 +1191,7 @@ namespace MoldStress
                     sf += f; sfz += f * z[k];
                 }
                 double det = s1 * szz - sz * sz;
-                if (Math.Abs(det) < 1e-30) continue;
+                if (Math.Abs(det) < 1e-30) { RecordStep(historyOut, sigma, j, nt); continue; }
                 double a = (sf * szz - sfz * sz) / det;
                 double b = (s1 * sfz - sf * sz) / det;
 
@@ -1082,6 +1201,7 @@ namespace MoldStress
                     double f = alphaPerK * (tempHistoryC[k, j] - tempHistoryC[k, j - 1]);
                     sigma[k] += eOver1MinusNu * ((a + b * z[k]) - f);
                 }
+                RecordStep(historyOut, sigma, j, nt);
             }
 
             // POST-VITRIFICATION COOLING, AND WHO IS ENTITLED TO IT.

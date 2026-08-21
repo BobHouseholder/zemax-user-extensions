@@ -429,9 +429,24 @@ the result.
   6 mm would pass, and adopting it would be fitting a criterion registered in advance
   to prevent exactly that. It is grid-converged on this clause (0.2% from nz 161 to
   321); the earlier "not grid-converged" note predates the time-grid fix.
-- **No frozen-in thermal ORIENTATION channel.** Two independent cases implicate it;
-  it is the largest known physics gap. The optical-memory machinery for it is built
-  and tested but not wired — see `ct-reachability.py` and `tau-measured-pc.py`.
+- **The frozen-in thermal ORIENTATION channel is wired as of 2026-08-21, opt-in via
+  `-thermal-orientation`, and it computes identically zero.** That is a finding, not
+  a defect in the wiring. `ThermalProfileIncremental` accumulates stress only in
+  nodes already below Tg, and a node's freeze time is by definition when it crossed
+  Tg — so every node's stress history over `[0, tFreeze]` is empty, while optical
+  memory only builds *before* vitrification. **The two windows are disjoint by
+  construction**, and the channel returns 0 at 0 of 161 nodes on case 4 with the
+  grade's measured optical memory present and its cooling history in hand.
+  The mechanism needs a stress acting *during* vitrification — the melt-side cooling
+  stress the source describes — which this model does not compute. No parameter and
+  no better τ(T) changes that.
+  Two further limits, either of which would bite next: only **polycarbonate** carries
+  measured optical memory, so cases 1 and 2 cannot use the channel at all; and the
+  retention rises 0.05→0.95 between 138 °C and 149 °C while the measured τ(T) is
+  stated valid only above ~148 °C — 10 of those 11 degrees are outside it, in a known
+  direction. It is off by default for that reason. It also feeds **out-of-plane
+  only**, since cooling orientation is equibiaxial in the plane, so it could never
+  have closed case 2's in-plane clause. See `ct-reachability.py`, `tau-measured-pc.py`.
 - **The flow law is a recognised but dated simplification** (shear-stress-driven with
   a Maxwell memory, Kamal & Tan-era) against a field that has used full viscoelastic
   tensors since Baaijens 1991. Packing-stage flow orientation is not modelled.

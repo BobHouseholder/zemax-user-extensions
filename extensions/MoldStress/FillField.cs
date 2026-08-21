@@ -428,6 +428,36 @@ namespace MoldStress
         public bool PressureVitrification = false;
 
         /// <summary>
+        /// FROZEN-IN THERMAL ORIENTATION, opt-in and OFF by default. Wired
+        /// 2026-08-21; the machinery had been built and self-tested since
+        /// 2026-08-19 and left unconnected.
+        ///
+        /// It feeds the OUT-OF-PLANE channel only, and that is physics rather
+        /// than convenience: cooling-induced orientation in a plate is
+        /// equibiaxial in the plane, so for light down z the in-plane difference
+        /// is identically zero - the same argument that (correctly) keeps thermal
+        /// STRESS out of the in-plane clause. It therefore cannot close case 2's
+        /// in-plane failure, and anyone reaching for it to do that should stop.
+        ///
+        /// WHY IT IS OFF BY DEFAULT, measured 2026-08-21. The retention it
+        /// computes, f = 1 - exp(-(D/tau)^beta), rises from 0.05 to 0.95 between
+        /// 138 C and 149 C for a 10 s window - and the measured tau(T) it uses is
+        /// stated valid by its own source only ABOVE about 148 C, because below
+        /// that the volumetric glass transition is passed and the real shift
+        /// factors fall below the WLF line. TEN of those ELEVEN degrees lie below
+        /// the floor. Above 152 C the retention saturates at 1.0000 and carries
+        /// no depth information at all.
+        ///
+        /// So the channel discriminates in exactly one narrow window, and that
+        /// window sits almost entirely outside its law's stated validity, in a
+        /// KNOWN direction: WLF over-estimates tau there, so this under-estimates
+        /// retention. It is wired so it can be measured rather than argued about;
+        /// it is not on, because a channel whose every discriminating value comes
+        /// from an invalid extrapolation must not silently enter a shipped run.
+        /// </summary>
+        public bool ThermalOrientation = false;
+
+        /// <summary>
         /// CAVITY PRESSURE AT CHANGE-OVER, MPa. NaN means unspecified, and the
         /// field then carries only the filling pressure drop, as it always has.
         ///

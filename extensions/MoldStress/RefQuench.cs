@@ -85,6 +85,16 @@ namespace MoldStress
         /// the self-test can hold both arms of the guard against it - an inline
         /// array is unreachable from a test, which is why these two modes were
         /// the ones the widened table could not cover.</summary>
+        /// <summary>
+        /// -thermal-orientation is deliberately NOT here. This mode builds its
+        /// thermal profile by calling Channels.ThermalProfile directly and never
+        /// constructs a fill field, so it does not run Channels.Build - where that
+        /// channel lives. Listing the flag would make the guard ACCEPT a flag
+        /// nothing reads, which is the defect the guard exists to stop wearing the
+        /// guard's own uniform. It was listed for one build on 2026-08-21 and
+        /// `-refquench -thermal-orientation` changed exactly nothing while
+        /// reporting success. Refused now, which is the correct answer.
+        /// </summary>
         internal static readonly string[] ReadsFlags =
         {
             "-nz", "-ti", "-tc", "-snapshot", "-nt",
@@ -117,6 +127,8 @@ namespace MoldStress
             var p = Polymers.ByName("MS_POLYCARB").WithProcessTemps(ti, tc);
             var proc = new Process { FillTimeS = 1.0, PackPressureMPa = 0.0, PackTimeS = 0.0,
                                      TimeSamples = ntSamples };
+
+
 
             say("MoldStress - third reference case: FREE QUENCH (thermal channel alone)");
             say("  " + Program.ScopeLabel);

@@ -255,7 +255,7 @@ namespace MoldStress
             "-depthdiag", "-directindex", "-eulerian-depth", "-incremental-thermal", "-narrowing", "-normal-stress", "-packing-orientation", "-snapshot",
             "-gates", "-h", "-help", "-quiet",
             "-lagrangian", "-lagrangian-depth", "-refquench", "-refplate",
-            "-refcase", "-refcase2", "-relax-below-tg", "-ribbon", "-freeplate", "-adhered", "-pressure-vitrification", "-allow-nonspherical",
+            "-refcase", "-refcase2", "-relax-below-tg", "-ribbon", "-freeplate", "-adhered", "-pressure-vitrification", "-allow-nonspherical", "-thermal-orientation",
             "-run", "-selftest",
             "-thinned-lambda",
             "-writecatalog",
