@@ -497,3 +497,112 @@ Paywalled; per-run numbers not in the accessible synopsis.
 - Case 2's cavity count and gate width.
 - Any measurement isolating the front-elongation contribution from the wall-shear
   contribution - which is precisely the experiment that would settle section 1.
+
+# Fourth sweep, 2026-08-21 - the aspheric question
+
+Run because the full sag went in that day and **no reference case is aspheric** -
+every one is spherical or plano, which is exactly why the previous spherical-proxy
+substitution survived unnoticed. Eight searches, five fetches. Four of the leads
+recorded in the previous sweep are now CLOSED, and the best available aspheric
+source was found, read in full, and does not qualify. Recorded so nobody walks it
+again.
+
+## The best candidate, and why it fails
+
+**Hu & Xue, *Variotherm assisted precision injection molding of plastic optical
+lenses based on improved cooling stage control model*, Scientific Reports 15:15451
+(2 May 2025), doi 10.1038/s41598-025-96659-3.** OPEN ACCESS, full text read.
+
+It is the closest thing that exists to what this tool needs, and it is free:
+
+| what it gives | value |
+|---|---|
+| aspheric prescription (Table 2) | R = -30, K = -0.1, A2 = 0, A4 = -2.339e-6, A6 = 3.8457e-7, A8 = 2.5501e-8 |
+| second surface | spherical, R = 70 |
+| sag equation (Eq. 16) | `Z = cx^2/(1+sqrt(1-(k+1)c^2x^2)) + A2x^2 + A4x^4 + A6x^6 + A8x^8` |
+| geometry (Fig. 4) | effective diameter 38 mm, outer 39 mm, flange 0.5 mm, CT 11 mm, ET 2 mm, centre:edge 6:1 |
+| gate | single edge gate at the rim |
+| material (Table 3) | ACREPT VH001 PMMA - E 3.29e2 MPa, nu 0.32, **Brewster constant 4.6**, alpha 7.07e-5/K, Tg **105 C** |
+| constant-temperature process | injection 10 mm/s, mould 90 C, melt 245 C, packing 120 MPa, holding 20 s |
+| variotherm trials (Table 4) | 9 runs: Th 125/130/135 C, Tl 70/80/90 C, cooling 100/120/150 s |
+| measurement | WYL-3 stress gauge (Senarmont), 5 positions A-E, simulation vs experiment, Fig. 9 |
+
+**Eq. 16 is the even-aspheric form this tool now implements**, coefficient for
+coefficient, so the geometry drops straight in.
+
+**IT STILL CANNOT BE A VALIDATION CASE, for one hard reason.** PMMA's Tg is 105 C
+and **every trial that carries a number runs the mould at 125-135 C** - above Tg,
+which is the whole point of variotherm moulding. This tool REFUSES a mould at or
+above Tg: `FreezeHistory.Build` throws, and that refusal is load-bearing rather
+than incidental, because it is what makes "post-ejection cooling contributes zero"
+unconditional instead of a property of the cases we happen to run. Relaxing it to
+admit this paper would cost an invariant three other cases stand on.
+
+The one condition inside the envelope - the constant-temperature benchmark at a
+90 C mould - has **no numeric measurement**. It appears only as a photoelastic
+fringe photograph (Fig. 8b). Fig. 9's axes are the variotherm variables.
+
+Three further problems, any one of which would be enough on its own:
+
+- **The measured quantity is 50-73 MPa "residual stress"**, which is at PMMA's
+  yield strength and not credible as a local residual stress. Their Eq. 19 is
+  `dsigma = dl/(d x C)` over an **11 mm** path, so what is really measured is an
+  integrated optical path difference divided by thickness. Internally consistent
+  - 60 MPa back-converts to ~3040 nm of retardance, about 5.5 fringes at 550 nm,
+  which matches the multi-order colours in Fig. 8b - but it is a thickness-averaged
+  effective stress, not the local field this tool computes.
+- **PMMA is the least trustworthy row in the material table**, its stress-optical
+  coefficient changing sign near 144 C while one constant is carried across it.
+- **CT 11 mm at a 6:1 centre-to-edge ratio.** The published envelope for this tool
+  is a plate-like or shallow spherical part; this is neither, by a wide margin.
+- **"Data underlying the results are not publicly available"**, so Fig. 9 would
+  have to be digitised.
+
+**WHAT IS WORTH TAKING FROM IT ANYWAY.** The prescription above is a real,
+published, injection-moulded aspheric lens with a stated gate and process. It
+cannot validate the birefringence, but it can exercise the SAG path on a published
+part instead of on a hand-edited sample lens - which is the only aspheric geometry
+any test currently has.
+
+## The independently useful result
+
+**The paper's Brewster constant for PMMA is 4.6; this model carries K_glass =
+-4.5 Br.** A 1 in 45 agreement on magnitude, from a source that had nothing to do
+with the polymer-optical-fibre measurements the entry was built on, on the row the
+README calls least trustworthy. The paper states it unsigned (Eq. 19 uses it as a
+positive scalar), so this confirms the MAGNITUDE only and says nothing about the
+sign. Its Tg of 105 C is also an exact match for this table's PMMA row.
+
+## Leads now CLOSED
+
+- **Alvarez freeform lens, Polymers 2025 17:2453 (PMC12473918).** Read via the PMC
+  mirror. **No birefringence numbers at all** - the three optimisation objectives
+  are spot diagram, distortion and MTF; no lens coefficients; residual stress only
+  through a qualitative "stress viewer technique". Not a birefringence source.
+- **Lai & Wang, Applied Optics 47(12) 2017.** Abstract read: the lens is
+  **plano-convex SPHERICAL** in Zeonex 480R. This is the source behind reference
+  case 2, not a new aspheric case.
+- **NTU thesis, *Birefringent Effects in Plastic Optics*.** CDN returned 403 again
+  from the signed bitstream URL. Search snippets indicate its tables are
+  **micro-plate specimens**, a geometry class case 4 already covers. Deprioritised
+  rather than pursued further.
+- **Polymers 2024 16:168, COC substrates (PMC10819385).** Read in full - and its
+  process conditions are 280 C melt, 150 C mould, 0.9 s fill, 71.3 MPa, 25 s
+  cooling, which are **reference case 1's**. It is that case's source paper. Flat
+  100 x 100 x 1.5 mm plates, not aspheric.
+
+## Not reachable without payment
+
+`Measurement` (bi-aspheric lens, ANN+PSO, S0263224118310030) and Springer's
+*Optical Review* (large-diameter aspheric PC lens, 10.1007/s10043-010-0074-8) both
+403 or paywall. The second is the one most likely to be worth money: PC rather than
+PMMA, and PC's constants here are measured. **Neither was bought.**
+
+## The conclusion to carry
+
+**No public source found measures birefringence on an injection-moulded aspheric
+lens, at a stated process INSIDE this tool's envelope, with numbers rather than
+fringe photographs.** That is the same shape as this file's earlier finding that no
+benchmark or round-robin exists for moulded-optic birefringence at all. The
+aspheric gap is therefore not a gap in effort - it is a gap in the literature, and
+it should be stated that way rather than left reading as unfinished work.

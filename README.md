@@ -374,7 +374,15 @@ the result.
   **What remains open is that no reference case is aspheric.** The sag is held against
   closed forms (an exact parabola at k = -1, a hand-computed hyperbola, the r^4 and
   r^1 term identities) and against two deliberate sabotages, but nothing measures a
-  moulded asphere's birefringence against a published one. An asphere can also pinch
+  moulded asphere's birefringence against a published one — and a sweep on 2026-08-21
+  concluded **that is a gap in the literature, not in the effort**. The closest source
+  that exists is open access and was read in full (Hu & Xue, *Sci. Rep.* **15**:15451,
+  2025): it gives a complete aspheric prescription, gate, material and process for a
+  moulded PMMA lens, and every trial carrying a number runs the mould at 125–135 °C
+  against PMMA's 105 °C Tg — above Tg, which this tool refuses by construction, since
+  that refusal is what makes "post-ejection cooling contributes zero" unconditional.
+  The one in-envelope condition is reported only as a fringe photograph. Details and
+  the three other closed leads are in `VALIDATION-SOURCES.md`. An asphere can also pinch
   the wall in the middle of the aperture, where a sphere never can; that pinch is now
   scanned for, reported, and refused when it closes, but it is the regime the
   Hele-Shaw gapwise assumption is least happy in.

@@ -243,7 +243,7 @@ namespace MoldStress
                 Name = "MS_PMMA", Description = "Poly(methyl methacrylate), generic optical grade",
                 Nd = 1.4917, Vd = 57.4, WavelengthUm = 0.5876,
                 KGlassBrewster = -4.5, K11Brewster = 2.3,
-                KSource = "glassy stress-optic coefficient, PMMA fibre measurements, -4.5 to -1.5e-12 /Pa (Aston, polymer optical fibre); most negative value taken",
+                KSource = "glassy stress-optic coefficient, PMMA fibre measurements, -4.5 to -1.5e-12 /Pa (Aston, polymer optical fibre); most negative value taken. INDEPENDENTLY CORROBORATED 2026-08-21 on MAGNITUDE ONLY: Hu & Xue, Sci. Rep. 15:15451 (2025), Table 3, give Brewster constant 4.6 for the ACREPT VH001 PMMA they mould - 1 part in 45 against the 4.5 carried here, from a source unconnected to the fibre measurements. They state it unsigned (their Eq. 19 uses it as a positive scalar), so the SIGN is still carried on the fibre work alone. Their Tg of 105 C is an exact match for this row",
                 Provisional = true,
                 CMeltBrewster = -30.0,
                 CMeltSource = "MEASURED: Wimberger-Friedl, Rheol. Acta 30 (1991) 329-340, read via US Patent 9720155 Table 1 - PMMA -30 Br at 20 C above Tg. That is the SAME convention and the SAME paper this model's polycarbonate entry uses (+3000~4000 Br, carried here as +4000), so the two are now consistent",
