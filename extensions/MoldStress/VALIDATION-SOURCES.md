@@ -591,12 +591,48 @@ sign. Its Tg of 105 C is also an exact match for this table's PMMA row.
   cooling, which are **reference case 1's**. It is that case's source paper. Flat
   100 x 100 x 1.5 mm plates, not aspheric.
 
-## Not reachable without payment
+## Not reachable without payment - PRICED 2026-08-21, and NOT recommended
 
 `Measurement` (bi-aspheric lens, ANN+PSO, S0263224118310030) and Springer's
 *Optical Review* (large-diameter aspheric PC lens, 10.1007/s10043-010-0074-8) both
-403 or paywall. The second is the one most likely to be worth money: PC rather than
-PMMA, and PC's constants here are measured. **Neither was bought.**
+403 or paywall. **Neither was bought.**
+
+**Shieh, Wang & Ke, *Optical Review* 17:399-403 (2010) - USD $39.95**, closed
+access, confirmed via Springer and Semantic Scholar (`openAccessPdf` status
+`CLOSED`, no URL). No free copy found: not on the authors' repositories, not in
+Unpaywall.
+
+**Do not buy it.** The abstract is the whole of what is knowable, and it argues
+against the purchase rather than for it:
+
+- It is a **design-method** paper, not a measurement study - "a CAE tool-assisted
+  technique, using Moldex3D and aspheric analysis utility (AAU) software".
+- The experimental quantity it names is **SHRINKAGE**: "the actual quantity of
+  shrinkage after an injection molding trial ... as a reference to perform the core
+  shaping job". Birefringence appears once, as something the CAE makes
+  "attainable" alongside surface profile error - i.e. predicted, not measured.
+- **Five pages.** A full aspheric prescription, full process conditions AND a
+  measured birefringence map will not all fit in five pages alongside the shrinkage
+  compensation method that is the paper's actual subject.
+
+Estimated probability it carries measured birefringence numbers at all: roughly one
+in three; that it carries all three ingredients, lower. $39.95 for that, when the
+free Hu & Xue paper already supplies the prescription and process and fails only on
+the Tg envelope, is poor value.
+
+**THE BETTER MOVE IS FREE.** Hu & Xue's data statement reads: "Data underlying the
+results presented in this paper are not publicly available at this time but may be
+obtained from the authors upon reasonable request", naming Prof. Xue. Their Fig. 8b
+is a **constant-temperature** moulded lens at a 90 C mould - INSIDE this tool's
+envelope, PMMA's Tg being 105 C - and it is shown only as a fringe photograph. If
+the WYL-3 numbers exist for that lens at positions A-E, the paper becomes usable
+without touching the mould-above-Tg refusal. That is one email, and it targets the
+paper that already has everything else.
+
+Even then the case would be a stretch and should be registered as one: PMMA is the
+least trustworthy row in the material table, and an 11 mm centre thickness at 6:1
+centre-to-edge is well outside the plate-like envelope. **Requires Bob:** the email
+is an outbound message to a third party and is not something to send unprompted.
 
 ## The conclusion to carry
 
