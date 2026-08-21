@@ -197,6 +197,78 @@ namespace MoldStress
     {
         // CORRECTED 2026-08-18, from 3.7e-5, after reading Fig. 7 directly. The
         // FIGURE'S AXIS LABEL IS WRONG BY A FACTOR OF 100 - see the header.
+        /// <summary>
+        /// NO SINGLE INPUT CLOSES THE 3.6x WHILE STAYING INSIDE ITS OWN PUBLISHED
+        /// BOUNDS. Measured 2026-08-21, prospectively, before any tuning pass.
+        ///
+        /// This case has been treated as "the flow inputs are wrong" on the
+        /// strength of its wall shear stress sitting above published limits. That
+        /// reading does not survive a sweep, because the two constraints move in
+        /// OPPOSITE directions and the tool prints both.
+        ///
+        /// GATE WIDTH is the case's one remaining unsourced input - the default is
+        /// a guess, one eighth of the circumference - so it is the obvious
+        /// candidate. Sweeping it against clause (a) AND against tau_wall:
+        ///
+        ///     W (mm)     peak      ratio   tau_wall   clause (a)
+        ///      3.0     1.170e-2    3.18x    4.37 MPa   FAIL (high)
+        ///      4.0     6.786e-3    1.84x    3.28 MPa   PASS
+        ///      6.0     3.261e-3    0.89x    2.19 MPa   PASS
+        ///      8.0     2.014e-3    0.55x    1.64 MPa   PASS
+        ///     12.566   1.036e-3    0.28x    1.05 MPa   FAIL (low)   &lt;- default
+        ///     16.0     7.675e-4    0.21x    0.84 MPa   FAIL
+        ///     20.0     6.054e-4    0.16x    0.68 MPa   FAIL
+        ///
+        /// Clause (a) passes only for W = 4-8 mm, and across that whole window
+        /// tau_wall runs 1.64-3.28 MPa - **3.3x to 13x** the published amorphous
+        /// maxima (PC 0.50, PMMA 0.40, PS 0.25, SAN 0.30, PSU 0.50 MPa). The
+        /// configurations whose shear stress is closest to physical are the ones
+        /// that fail (a) worst. Gate width does not close the case; it trades one
+        /// failure for another, and only the second one is currently reported.
+        ///
+        /// THE STRESS-OPTICAL COEFFICIENT is the other candidate, and it is the
+        /// one input here that is explicitly BORROWED: 480R carries C = 1700 Br as
+        /// a FAMILY value (Inoue 1995, ROMP cyclic olefins), never measured for
+        /// this grade. C enters the ceiling linearly and appears nowhere in the
+        /// flow or freeze solve - `ceiling = mean_k[2*C*tau_k*f_k]`, with
+        /// `f = sqrt(1+Wi^2)` depending on tau and G but not on C - so the peak is
+        /// strictly proportional to it. Reaching 3.68e-3 would need
+        ///
+        ///     C = 1700 * 3.68/1.036 = 6040 Br
+        ///
+        /// against this entry's own published band of [900, 2500] Br. That is
+        /// **2.4x beyond the top of the band**, so the coefficient cannot absorb
+        /// the discrepancy either without being moved outside its source.
+        ///
+        /// RETENTION is not the cap either, which is the result that surprised.
+        /// The case prints `ceiling/gate = 1.35 =&gt; reachable - the gap is
+        /// parameters`, and the parameter it implies is the Maxwell memory factor,
+        /// which runs 0.00 at the wall to 0.91 in the core. But `-lambdascale 100`
+        /// - a hundredfold increase in relaxation time, which should drive memory
+        /// to 1 everywhere - moves the peak only 1.036e-3 -&gt; 1.159e-3, **+12%**,
+        /// saturating at 0.23 of the ceiling. Memory is not what is holding the
+        /// number down.
+        ///
+        /// WHAT THE SWEEP DOES ESTABLISH. peak/ceiling sits at 0.209 and is
+        /// remarkably insensitive: 0.10 to 0.25 across a 14x range of fill time, a
+        /// 100x range of relaxation time, a 7x range of gate width and an 8x range
+        /// of grid. The shortfall is a property of the ARCHITECTURE - how the
+        /// gapwise mean is assembled from a profile whose core contributes ~1e-5
+        /// because shear stress vanishes at the centreline - not of any one input.
+        ///
+        /// NOTHING WAS TUNED. W = 6 mm reaches 0.89x and would pass, and that is
+        /// precisely why it was not adopted: picking the value of the one unsourced
+        /// input that makes a registered clause pass is fitting the criterion, and
+        /// the criterion was registered before the case was first run in order to
+        /// prevent exactly that. W stays at its guessed default until a source
+        /// gives it a value.
+        ///
+        /// ALSO CORRECTED HERE: VALIDATION-SOURCES.md records "case 2 computes
+        /// tau_wall = 1.67 MPa - 3.3x to 6.7x every amorphous limit". Live it reads
+        /// **1.05 MPa** at the default gate width; the figure moved with the fill
+        /// time correction and the time-grid work and was not re-taken. 2.1x to
+        /// 4.2x, not 3.3x to 6.7x. The direction of that finding is unchanged.
+        /// </summary>
         public const double PublishedInPlanePeakDn = 3.68e-3;
         public const double FactorBar = 2.0;
 

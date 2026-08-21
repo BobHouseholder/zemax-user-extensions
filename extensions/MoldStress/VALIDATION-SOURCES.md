@@ -404,7 +404,17 @@ Generic moulding-industry maxima, READ in full from a training reference
 40,000 s^-1 shear-rate ceiling. No COC/COP entry exists.
 
 **Case 2 computes tau_wall = 1.67 MPa - 3.3x to 6.7x every amorphous limit in
-that table. Case 1's 0.297 MPa is inside it.** The second sweep recorded this
+that table. Case 1's 0.297 MPa is inside it.**
+
+> **RE-TAKEN 2026-08-21: tau_wall now reads 1.05 MPa at the default gate width**,
+> so 2.1x to 4.2x, not 3.3x to 6.7x. The figure moved with the fill-time correction
+> and the time-grid work and had not been re-measured. The DIRECTION is unchanged -
+> it is still above every amorphous limit in the table - but the number above is
+> stale and must not be requoted. And the inference drawn from it, that case 2's
+> FLOW INPUTS are wrong, does not survive a sweep: see the finding on
+> `RefCase2.PublishedInPlanePeakDn`. Clause (a) passes only for a gate width of
+> 4-8 mm, and across that whole window tau_wall runs 1.64-3.28 MPa - further from
+> the published limits, not closer. The second sweep recorded this
 number as unavailable outside the mould-flow databases; that was wrong, and it is
 now the third independent signal that case 2's flow inputs are wrong rather than
 its birefringence physics.

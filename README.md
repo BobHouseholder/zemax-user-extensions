@@ -409,7 +409,19 @@ the result.
   split moves it — but the **isotropic index shift spans a factor of 21** across
   plausible splits, and that is the term the density channel is delivered through.
   Both halves are asserted in `-selftest`.
-- **Case 2 is ~3.6x low on its in-plane peak** and not grid-converged.
+- **Case 2 is ~3.6x low on its in-plane peak, and no single input closes that gap
+  while staying inside its own published bounds** (measured 2026-08-21, before any
+  tuning pass). Gate width — the case's one unsourced input — passes clause (a) only
+  over 4–8 mm, and across that whole window the wall shear stress runs 1.64–3.28 MPa
+  against published amorphous maxima of 0.25–0.50 MPa; the settings closest to
+  physical shear fail the clause worst. The stress-optical coefficient would have to
+  reach 6040 Br against its own published band of [900, 2500]. A hundredfold increase
+  in relaxation time buys +12%. `peak/ceiling` sits at 0.209 and moves only 0.10–0.25
+  across a 14x range of fill time, 100x of relaxation time, 7x of gate width and 8x of
+  grid — so the shortfall is architectural, not an input error. **Nothing was tuned:**
+  6 mm would pass, and adopting it would be fitting a criterion registered in advance
+  to prevent exactly that. It is grid-converged on this clause (0.2% from nz 161 to
+  321); the earlier "not grid-converged" note predates the time-grid fix.
 - **No frozen-in thermal ORIENTATION channel.** Two independent cases implicate it;
   it is the largest known physics gap. The optical-memory machinery for it is built
   and tested but not wired — see `ct-reachability.py` and `tau-measured-pc.py`.
