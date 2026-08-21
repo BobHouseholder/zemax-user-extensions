@@ -28,6 +28,8 @@ namespace MoldStress
             Console.WriteLine();
             FlagGuardChecks();
             Console.WriteLine();
+            DeltaGuardChecks();
+            Console.WriteLine();
             FillField.SelfCheck();
             Console.WriteLine();
             FreezeHistory.SelfCheck();
@@ -124,6 +126,62 @@ namespace MoldStress
                     "the two read-lists are not interchangeable");
             }
             finally { Console.SetError(err); }
+        }
+
+        private static void DeltaGuardChecks()
+        {
+            Console.WriteLine("  delta guard");
+            // --- THE DELTA GUARD, all four states --------------------------
+            //
+            // A run can complete, write every file, and have no performance
+            // change to report. Until 2026-08-21 it reported one anyway: STAR
+            // rejected all 15015 stress points, the metric came back exactly
+            // 0.000000 waves, and the tool printed -100.0% and exited 0.
+            //
+            // The control is the one that matters most here. A guard that
+            // refuses every delta would also have suppressed that -100%, and
+            // would pass any test that only checks the bad cases - so the
+            // GOOD case is asserted first and asserted to be null.
+            Check("a real before/after IS reported",
+                Runner.NoDeltaReason(1, 1, 0.0500, 0.0530) == null,
+                "one element applied, both metrics positive and finite");
+
+            Check("nothing applied - no delta",
+                Reason(Runner.NoDeltaReason(1, 0, 72.716883, 0.0)).Contains("nothing was applied"),
+                Reason(Runner.NoDeltaReason(1, 0, 72.716883, 0.0)));
+
+            Check("post-import metric of exactly zero - no delta",
+                Reason(Runner.NoDeltaReason(1, 1, 0.0500, 0.0)).Contains("exactly 0.000000"),
+                Reason(Runner.NoDeltaReason(1, 1, 0.0500, 0.0)));
+
+            Check("baseline that did not evaluate - no delta",
+                Reason(Runner.NoDeltaReason(1, 1, double.NaN, 0.0530)).Contains("BASELINE"),
+                Reason(Runner.NoDeltaReason(1, 1, double.NaN, 0.0530)));
+
+            Check("baseline of exactly zero - no delta",
+                Reason(Runner.NoDeltaReason(1, 1, 0.0, 0.0530)).Contains("BASELINE"),
+                "the old code printed +0.0% here rather than refusing");
+
+            // AND THE ORDER OF THE REASONS MATTERS. The 2026-08-21 case trips
+            // BOTH (a) and (b) at once; the reason given must be the ROOT one -
+            // nothing was applied - not the downstream symptom, or the user is
+            // sent to debug the merit operand instead of the glass catalogue.
+            Check("the root cause is reported, not the symptom",
+                Reason(Runner.NoDeltaReason(1, 0, 72.716883, 0.0)).Contains("STAR accepted no"),
+                "both (a) and (b) hold; (a) is the one to say");
+
+            // An element that produced no points at all is not evidence that
+            // STAR refused anything, so it must NOT trip the nothing-applied arm.
+            Check("an element with no points does not fake a refusal",
+                Runner.NoDeltaReason(0, 0, 0.0500, 0.0530) == null,
+                "nothing was offered, so nothing was refused");
+        }
+
+        /// <summary>Renders a null reason as a readable failure rather than
+        /// throwing inside the assertion that was meant to report it.</summary>
+        private static string Reason(string r)
+        {
+            return r ?? "(null - the guard did not fire)";
         }
 
         private static void GeometryChecks()

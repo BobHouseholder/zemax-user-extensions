@@ -125,6 +125,12 @@ namespace MoldStress
                 say("");
 
                 var written = new List<StarFiles.Written>();
+
+                // WHAT ACTUALLY LANDED. The delta at the bottom of this report is
+                // only a measurement if something was applied between the two
+                // metric reads; see NoDeltaReason.
+                int elementsWithPoints = 0, elementsApplied = 0;
+
                 foreach (var e in els)
                 {
                     var p = Polymers.ByName(e.Material);
@@ -200,6 +206,8 @@ namespace MoldStress
                     say(string.Format(CultureInfo.InvariantCulture,
                         "      STAR      stress {0}/{1} points accepted (code {2}), index {3}",
                         read, w.Points, importCode, readIndex));
+                    if (w.Points > 0) elementsWithPoints++;
+                    if (read > 0) elementsApplied++;
                     if (read == 0)
                         say("      STAR      REFUSED THE STRESS DATA - does " + e.Material +
                             " carry a BD record? Run -writecatalog and add MOLDSTRESS to the system.");
@@ -228,16 +236,37 @@ namespace MoldStress
                 }
 
                 double loadedWfe = Metric(sys);
-                say(string.Format(CultureInfo.InvariantCulture,
-                    "  with moulding effects:       {0:F6} waves", loadedWfe));
-                say(string.Format(CultureInfo.InvariantCulture,
-                    "  change:                      {0:+0.000000;-0.000000} waves ({1:+0.0;-0.0}%)",
-                    loadedWfe - baseWfe,
-                    baseWfe > 0 ? 100.0 * (loadedWfe - baseWfe) / baseWfe : 0.0));
+                string noDelta = NoDeltaReason(elementsWithPoints, elementsApplied,
+                                               baseWfe, loadedWfe);
+                bool deltaRefused = noDelta != null;
+
+                if (deltaRefused)
+                {
+                    say("  NO PERFORMANCE CHANGE IS REPORTED.");
+                    say("  " + noDelta);
+                    say(string.Format(CultureInfo.InvariantCulture,
+                        "  the two metric reads were {0:F6} and {1:F6} waves; their difference is",
+                        baseWfe, loadedWfe));
+                    say("  NOT a moulding effect and is deliberately not printed as one.");
+                }
+                else
+                {
+                    say(string.Format(CultureInfo.InvariantCulture,
+                        "  with moulding effects:       {0:F6} waves", loadedWfe));
+                    say(string.Format(CultureInfo.InvariantCulture,
+                        "  change:                      {0:+0.000000;-0.000000} waves ({1:+0.0;-0.0}%)",
+                        loadedWfe - baseWfe,
+                        100.0 * (loadedWfe - baseWfe) / baseWfe));
+                }
                 say("");
                 say("  Files are in " + outDir);
-                say("  In OpticStudio, any analysis window's STAR Effects setting switches");
-                say("  between On and Difference, which shows this change directly.");
+                // Only when there IS a change. Pointing the user at a Difference
+                // view of nothing is the same false reassurance one level down.
+                if (!deltaRefused)
+                {
+                    say("  In OpticStudio, any analysis window's STAR Effects setting switches");
+                    say("  between On and Difference, which shows this change directly.");
+                }
 
                 string report = Path.Combine(outDir, "moldstress_report.txt");
                 Directory.CreateDirectory(outDir);
@@ -252,7 +281,7 @@ namespace MoldStress
                     try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(report) { UseShellExecute = true }); }
                     catch { }
                 }
-                return 0;
+                return deltaRefused ? NothingApplied : 0;
             }
             finally
             {
@@ -264,6 +293,76 @@ namespace MoldStress
         /// RMS wavefront error on axis. Chosen because it is a merit operand and
         /// so evaluates headlessly - the analysis windows do not, on this API.
         /// </summary>
+        /// <summary>
+        /// Exit code for a run that completed, wrote its files, and has NO
+        /// performance change to report. Distinct from UsageError (64): the
+        /// invocation was fine, the answer is missing.
+        /// </summary>
+        internal const int NothingApplied = 65;
+
+        /// <summary>
+        /// Why the before/after delta is not a measurement, or null when it is.
+        /// PURE, so both arms are testable without OpticStudio.
+        ///
+        /// FOUND 2026-08-21 on a lens whose material carried no BD record. STAR
+        /// rejected every one of 15015 stress points, the retardance map came
+        /// back empty, the post-import metric read exactly 0.000000 waves, and
+        /// the tool printed:
+        ///
+        ///     change:  -72.716883 waves (-100.0%)
+        ///
+        /// and exited 0. Nothing had been applied to anything. A 100%
+        /// improvement is the single most attention-grabbing number this tool
+        /// can print and it was produced by total failure.
+        ///
+        /// THREE SEPARATE WAYS THE DELTA CAN BE FICTION, and the run has to be
+        /// refused on any of them:
+        ///
+        /// (a) NOTHING WAS APPLIED. If no element's stress data was accepted,
+        ///     the system in front of the second metric read is the same system
+        ///     as the first. Any difference is drift, not moulding.
+        ///
+        /// (b) A METRIC IS NOT A MEASUREMENT. RWRE returning exactly 0.000000 on
+        ///     a real system is the merit operand failing, not a perfect
+        ///     wavefront - the same "compliance is not a value" trap the
+        ///     boundary operands set (MNEA, DIMX and friends all report the
+        ///     VIOLATION, and satisfied reads 0.0). NaN is the other half.
+        ///
+        /// (c) THE BASELINE IS ZERO. The old code divided by it under a
+        ///     `baseWfe > 0` ternary whose else-branch printed "+0.0%" - a
+        ///     silent zero standing in for an undefined ratio.
+        /// </summary>
+        internal static string NoDeltaReason(int elementsWithPoints, int elementsApplied,
+                                             double baseWfe, double loadedWfe)
+        {
+            if (elementsWithPoints > 0 && elementsApplied == 0)
+                return "STAR accepted no stress data on any element, so nothing was applied "
+                     + "and the system measured afterwards is the one measured before.";
+            if (!IsMeasurement(baseWfe))
+                return "the BASELINE metric did not evaluate (" + Describe(baseWfe)
+                     + "), so there is nothing to measure a change against.";
+            if (!IsMeasurement(loadedWfe))
+                return "the post-import metric did not evaluate (" + Describe(loadedWfe)
+                     + "); an RMS wavefront error of exactly zero is the operand failing, "
+                     + "not a perfect wavefront.";
+            return null;
+        }
+
+        /// <summary>A finite, strictly positive RMS wavefront error. Zero is
+        /// excluded on purpose - see NoDeltaReason (b).</summary>
+        private static bool IsMeasurement(double waves)
+        {
+            return !double.IsNaN(waves) && !double.IsInfinity(waves) && waves > 0.0;
+        }
+
+        private static string Describe(double waves)
+        {
+            if (double.IsNaN(waves)) return "NaN";
+            if (double.IsInfinity(waves)) return "infinite";
+            if (waves == 0.0) return "exactly 0.000000 waves";
+            return string.Format(CultureInfo.InvariantCulture, "{0:F6} waves", waves);
+        }
+
         private static double Metric(ZOSAPI.IOpticalSystem sys)
         {
             try
