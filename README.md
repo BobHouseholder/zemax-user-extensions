@@ -370,9 +370,13 @@ tested those differ by 585x.
   the wall in the middle of the aperture, where a sphere never can; that pinch is now
   scanned for, reported, and refused when it closes, but it is the regime the
   Hele-Shaw gapwise assumption is least happy in.
-- **`RejectFlagsNotReadBy` is wired into only two of the four reference modes**, so
-  `-refcase` and `-refcase2` still absorb flags they never read — `-filltime` and
-  now `-allow-nonspherical` among them. The guard exists; it is not connected.
+- **`RejectFlagsNotReadBy` is wired into all four reference modes as of 2026-08-21.**
+  Until then `-refcase -melttemp 400` ran a 400 °C melt nowhere, reported the
+  criterion **MET** and exited 0; `-refcase2 -adhered` reported a free-plate result
+  under an adhered heading. Both now exit 64 naming what the mode does read. The
+  flat read-list cannot see a **conditional** read — `-ejecttime` is read only
+  inside the `-adhered` branch — so that one is guarded by hand; any other
+  conditional read is still unprotected.
 - **The K11/K12 split is assumed for every polymer, including the measured one.**
   What the literature measures is the DIFFERENCE, because that is what a polariscope
   sees; the individual values are split in N-BK7's proportion. Measured consequence:
