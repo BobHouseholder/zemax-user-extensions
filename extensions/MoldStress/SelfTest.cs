@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
+using System.Linq;
 
 namespace MoldStress
 {
@@ -23,6 +25,8 @@ namespace MoldStress
             CatalogChecks();
             Console.WriteLine();
             GeometryChecks();
+            Console.WriteLine();
+            FlagGuardChecks();
             Console.WriteLine();
             FillField.SelfCheck();
             Console.WriteLine();
@@ -57,6 +61,69 @@ namespace MoldStress
             Check(what, rel <= relTol,
                 string.Format("got {0:E9}, want {1:E9}, rel {2:E2} (tol {3:E1})",
                               got, want, rel, relTol));
+        }
+
+        /// <summary>
+        /// THE READ-LISTS, held from both sides.
+        ///
+        /// A guard like this fails in two opposite ways and a suite that only
+        /// tests one of them cannot tell them apart. Refusing everything passes
+        /// any "it refuses bad flags" test while making the mode unusable;
+        /// refusing nothing passes any "it accepts good flags" test while being
+        /// exactly the defect the guard was written for. So each list is asserted
+        /// to REFUSE a flag the mode does not read and to ACCEPT one it does.
+        ///
+        /// `-melttemp` is the specific case: on 2026-08-21 `-refcase -melttemp
+        /// 400` ran to completion, printed VERDICT ... MET and exited 0, having
+        /// used 280 C throughout.
+        /// </summary>
+        private static void FlagGuardChecks()
+        {
+            Console.WriteLine("  flag guards");
+            var err = Console.Error;
+            Console.SetError(TextWriter.Null);     // the helper explains itself on stderr
+            try
+            {
+                foreach (var m in new[]
+                {
+                    new { Mode = "-refcase",  Reads = RefCase.ReadsFlags,  Good = "-nz" },
+                    new { Mode = "-refcase2", Reads = RefCase2.ReadsFlags, Good = "-nz" },
+                })
+                {
+                    foreach (string bad in new[] { "-melttemp", "-moldtemp", "-directindex" })
+                        Check(m.Mode + " refuses " + bad + ", which it does not read",
+                            Program.RejectFlagsNotReadBy(
+                                new[] { m.Mode, bad, "400" }, m.Reads, m.Mode) != 0,
+                            "must not be swallowed");
+
+                    Check(m.Mode + " still accepts " + m.Good + ", which it does read",
+                        Program.RejectFlagsNotReadBy(
+                            new[] { m.Mode, m.Good, "81" }, m.Reads, m.Mode) == 0,
+                        "the guard must not refuse everything");
+
+                    Check(m.Mode + " accepts every flag on its own read-list",
+                        Program.RejectFlagsNotReadBy(
+                            new[] { m.Mode }.Concat(m.Reads).ToArray(), m.Reads, m.Mode) == 0,
+                        m.Reads.Length + " flags");
+
+                    Check(m.Mode + " accepts -quiet, which no mode lists",
+                        Program.RejectFlagsNotReadBy(
+                            new[] { m.Mode, "-quiet" }, m.Reads, m.Mode) == 0,
+                        "-quiet is exempt by design");
+                }
+
+                // AND THE TWO LISTS MUST DIFFER. If they were accidentally the
+                // same array, every assertion above would still pass while one
+                // mode silently accepted the other's flags. -adhered is read by
+                // -refcase and has never been implemented in -refcase2.
+                Check("-refcase2 refuses -adhered, which only -refcase reads",
+                    Program.RejectFlagsNotReadBy(
+                        new[] { "-refcase2", "-adhered" }, RefCase2.ReadsFlags, "-refcase2") != 0
+                    && Program.RejectFlagsNotReadBy(
+                        new[] { "-refcase", "-adhered" }, RefCase.ReadsFlags, "-refcase") == 0,
+                    "the two read-lists are not interchangeable");
+            }
+            finally { Console.SetError(err); }
         }
 
         private static void GeometryChecks()

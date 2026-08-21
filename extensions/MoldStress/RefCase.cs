@@ -98,11 +98,41 @@ namespace MoldStress
         public const double PublishedDepthRatio = PublishedSurfaceDn / PublishedCoreDn;
         public const double PeakMustLieOutside = 0.75;   // outer 25% of the half-wall
 
+        /// <summary>
+        /// Every flag -refcase READS. Public so the self-test can hold both arms
+        /// of the guard against it without an OpticStudio session.
+        ///
+        /// KEEP THIS IN STEP WITH THE READS BELOW, in both directions. A flag
+        /// missing from the list makes a legitimate run fail loudly, which is
+        /// annoying and self-correcting. A flag listed here but never read is the
+        /// original defect wearing the guard's uniform: the run proceeds, the
+        /// flag does nothing, and the number that comes back looks like it
+        /// answered the question that was asked.
+        /// </summary>
+        internal static readonly string[] ReadsFlags =
+        {
+            "-adhered", "-complementary", "-deposition-decay", "-deposition-support",
+            "-ejecttime", "-eulerian-depth", "-fountain", "-freeplate", "-frontmode",
+            "-incremental-thermal", "-lagrangian-depth", "-lambdascale", "-narrowing",
+            "-normal-stress", "-nt", "-nz", "-out", "-packfrac", "-packing-orientation",
+            "-packpressure", "-packtime", "-relax-below-tg", "-shape-nodes",
+            "-shape-particles", "-shape-steps", "-snapshot", "-thinned-lambda",
+        };
+
         public static int Run(string[] args)
         {
             var log = new StringBuilder();
             Action<string> say = s => { Console.WriteLine(s); log.AppendLine(s); };
             var ci = CultureInfo.InvariantCulture;
+
+            // REFUSE A FLAG THIS MODE DOES NOT READ. Wired 2026-08-21, having
+            // existed unused on this mode since the helper was written: until
+            // today `-refcase -melttemp 400` ran a 400 C melt nowhere, reported
+            // the criterion MET, and exited 0. -melttemp and -moldtemp are not
+            // read here at all (the process temperatures are fixed to the ones
+            // the source paper states), and -filltime is not either.
+            int badForMode = Program.RejectFlagsNotReadBy(args, ReadsFlags, "-refcase");
+            if (badForMode != 0) return badForMode;
 
             // PROCESS CONDITIONS CORRECTED 2026-08-17 to those of the experiment
             // this case reproduces. Until today the reference case ran the
@@ -124,6 +154,12 @@ namespace MoldStress
             var proc = new Process { FillTimeS = 1.0, PackPressureMPa = 71.3, PackTimeS = 3.0,
                                      TimeSamples = ntSamples };
             if (Program.Has(args, "-relax-below-tg")) proc.RelaxBelowTg = true;
+            // The explicit opposite of -adhered, and the same spelling -refplate
+            // uses. It names the default rather than changing it, which is why it
+            // is READ here instead of being refused: a script that says which
+            // boundary condition it wants should not have to know which way the
+            // default happens to point today.
+            if (Program.Has(args, "-freeplate")) proc.MouldAdhesion = false;
             // ADHERED BOUNDARY CONDITION, opt-in while it is being measured.
             // The release time is SOURCED here: the paper states a 25 s cooling
             // time, so the part leaves the cavity at fill + 25 s. That is the
@@ -133,6 +169,18 @@ namespace MoldStress
             {
                 proc.MouldAdhesion = true;
                 proc.EjectionTimeS = Program.Value(args, "-ejecttime", proc.FillTimeS + 25.0);
+            }
+            else if (Program.Has(args, "-ejecttime"))
+            {
+                // -ejecttime is read ONLY inside the branch above, so on its own
+                // it is a silently ignored flag one level below the one the
+                // read-list can see. A flat list cannot catch a CONDITIONAL read;
+                // this is what that gap looks like when it is closed by hand.
+                Console.Error.WriteLine(
+                    "MoldStress: -ejecttime is only read with -adhered. Without it the "
+                    + "part is never held, so an ejection time would be ignored silently "
+                    + "and the run is refused instead.");
+                return Program.UsageError;
             }
             // -lagrangian-depth is now the default and is kept as an explicit
             // opt-IN so scripts written while it was optional still say what

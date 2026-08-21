@@ -205,10 +205,39 @@ namespace MoldStress
         public static readonly double[] RemovalDepthMm = { 0.1, 0.2, 0.3, 0.4 };
         public static readonly double[] RemovedFraction = { 0.279, 0.308, 0.439, 0.462 };
 
+        /// <summary>
+        /// Every flag -refcase2 READS. Public so the self-test can hold both arms
+        /// of the guard against it without an OpticStudio session.
+        ///
+        /// KEEP THIS IN STEP WITH THE READS BELOW, in both directions. A flag
+        /// missing from the list makes a legitimate run fail loudly, which is
+        /// annoying and self-correcting. A flag listed here but never read is the
+        /// original defect wearing the guard's uniform: the run proceeds, the
+        /// flag does nothing, and the number that comes back looks like it
+        /// answered the question that was asked.
+        /// </summary>
+        internal static readonly string[] ReadsFlags =
+        {
+            "-complementary", "-curvature", "-deposition-decay", "-deposition-support",
+            "-eulerian-depth", "-filltime", "-fountain", "-gatewidth",
+            "-incremental-thermal", "-lagrangian-depth", "-lambdascale", "-narrowing",
+            "-normal-stress", "-nt", "-nz", "-packfrac", "-packing-orientation",
+            "-packpressure", "-packtime", "-relax-below-tg", "-shape-nodes",
+            "-shape-particles", "-shape-steps", "-snapshot", "-thinned-lambda",
+        };
+
         public static int Run(string[] args)
         {
             var ci = CultureInfo.InvariantCulture;
             Action<string> say2 = t => Console.WriteLine(t);
+
+            // REFUSE A FLAG THIS MODE DOES NOT READ. Wired 2026-08-21 alongside
+            // -refcase. Note what is NOT in the list and used to be swallowed:
+            // -adhered, which this mode has never implemented, so every run of
+            // `-refcase2 -adhered` reported a free-plate result under an adhered
+            // heading. That is the -packtime sweep failure again, one mode over.
+            int badForMode = Program.RejectFlagsNotReadBy(args, ReadsFlags, "-refcase2");
+            if (badForMode != 0) return badForMode;
             Console.WriteLine("MoldStress - reference case 2: a moulded LENS (ZEONEX 480R)");
             Console.WriteLine("  " + Program.ScopeLabel);
             Console.WriteLine("  source: Chang et al., CoreTech/NTHU, Moldex3D verification study");
