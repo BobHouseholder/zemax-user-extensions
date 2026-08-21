@@ -228,6 +228,61 @@ namespace MoldStress
                 Runner.ScalarVerdict(0.41, 1.0100, 1.0000, false) ==
                 Runner.ScalarVerdict(0.41, 1.0000, 1.0100, false),
                 "a 0.01-wave improvement and a 0.01-wave degradation read alike");
+
+            // --- PARTIAL COVERAGE -------------------------------------------
+            //
+            // NoDeltaReason fires only when NOTHING was applied. Two elements of
+            // three landing produced a confident before/after with no hint that a
+            // third of the part was missing from the "after" - the same defect as
+            // the -100% case in a quieter register.
+            //
+            // The two predicates must PARTITION, not overlap: for any pair of
+            // counts, at most one of them may speak. Asserted below over the whole
+            // small grid rather than at a few chosen points, because an off-by-one
+            // in either boundary is exactly what would make them both fire, or
+            // neither.
+            Check("partial coverage is reported",
+                Verdict(Runner.PartialCoverage(3, 2)).Contains("2 of 3"),
+                Verdict(Runner.PartialCoverage(3, 2)));
+
+            Check("complete coverage is silent",
+                Runner.PartialCoverage(3, 3) == null,
+                "3 of 3 - nothing to qualify");
+
+            Check("total refusal is left to NoDeltaReason",
+                Runner.PartialCoverage(3, 0) == null,
+                "0 of 3 is that predicate's case, not this one");
+
+            Check("an element that offered nothing is not counted as refused",
+                Runner.PartialCoverage(0, 0) == null,
+                "no points anywhere, so nothing was declined");
+
+            {
+                int both = 0, neither = 0, grid = 0;
+                for (int with = 0; with <= 4; with++)
+                    for (int applied = 0; applied <= with; applied++)
+                    {
+                        bool p = Runner.PartialCoverage(with, applied) != null;
+                        bool n = Runner.NoDeltaReason(with, applied, 0.05, 0.053) != null;
+                        grid++;
+                        if (p && n) both++;
+                        if (!p && !n && applied < with) neither++;
+                    }
+                Check("the two coverage predicates never both fire",
+                    both == 0, grid + " count pairs, " + both + " overlaps");
+                Check("no incomplete run escapes both predicates",
+                    neither == 0, neither + " uncovered incomplete cases");
+            }
+
+            // The exit codes must be distinguishable, or a script cannot act on
+            // the difference the report is drawing.
+            Check("the three outcomes have three distinct exit codes",
+                Runner.NothingApplied != Runner.PartialApplication &&
+                Runner.NothingApplied != 0 && Runner.PartialApplication != 0 &&
+                Runner.NothingApplied != Program.UsageError &&
+                Runner.PartialApplication != Program.UsageError,
+                string.Format("usage {0}, nothing applied {1}, partial {2}, complete 0",
+                    Program.UsageError, Runner.NothingApplied, Runner.PartialApplication));
         }
 
         private static string Verdict(string v)

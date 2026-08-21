@@ -378,13 +378,23 @@ the result.
   the wall in the middle of the aperture, where a sphere never can; that pinch is now
   scanned for, reported, and refused when it closes, but it is the regime the
   Hele-Shaw gapwise assumption is least happy in.
-- **`RejectFlagsNotReadBy` is wired into all four reference modes as of 2026-08-21.**
-  Until then `-refcase -melttemp 400` ran a 400 °C melt nowhere, reported the
+- **`RejectFlagsNotReadBy` is wired into the four REFERENCE modes as of 2026-08-21,
+  and into none of the other four.** `-run`, `-gates`, `-writecatalog`, `-depthdiag`
+  and `-lagrangian` still absorb valid flags they do not read — demonstrated the same
+  day when `-writecatalog -outdir <path>` silently ignored `-outdir` (that mode reads
+  `-out`) and wrote to the default location instead. On the reference modes, until
+  2026-08-21 `-refcase -melttemp 400` ran a 400 °C melt nowhere, reported the
   criterion **MET** and exited 0; `-refcase2 -adhered` reported a free-plate result
   under an adhered heading. Both now exit 64 naming what the mode does read. The
   flat read-list cannot see a **conditional** read — `-ejecttime` is read only
   inside the `-adhered` branch — so that one is guarded by hand; any other
   conditional read is still unprotected.
+- **Exit codes distinguish three outcomes of a `-run`, as of 2026-08-21.** 0 every
+  element applied; **66** some applied and some refused, where the before/after is a
+  real measurement of the system as LOADED and not of the part; **65** nothing
+  applied, where no change is reported at all. 64 stays a usage error. The refused
+  elements are named with their materials, and the qualification is printed ABOVE the
+  number it qualifies.
 - **The K11/K12 split is assumed for every polymer, including the measured one.**
   What the literature measures is the DIFFERENCE, because that is what a polariscope
   sees; the individual values are split in N-BK7's proportion. Measured consequence:

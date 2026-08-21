@@ -130,6 +130,7 @@ namespace MoldStress
                 // only a measurement if something was applied between the two
                 // metric reads; see NoDeltaReason.
                 int elementsWithPoints = 0, elementsApplied = 0;
+                var refusedElements = new List<string>();
 
                 // THE POLARISATION HALF, carried out of the loop so it can be
                 // reported beside the scalar rather than only inside a per-element
@@ -217,6 +218,12 @@ namespace MoldStress
                         read, w.Points, importCode, readIndex));
                     if (w.Points > 0) elementsWithPoints++;
                     if (read > 0) elementsApplied++;
+                    // Named, not just counted. "2 of 3 applied" tells the user
+                    // there is a problem; the surface pair and the material tell
+                    // them which BD record is missing.
+                    else if (w.Points > 0)
+                        refusedElements.Add(string.Format(CultureInfo.InvariantCulture,
+                            "surfaces {0}-{1} ({2})", e.FrontSurface, e.BackSurface, e.Material));
                     if (read == 0)
                         say("      STAR      REFUSED THE STRESS DATA - does " + e.Material +
                             " carry a BD record? Run -writecatalog and add MOLDSTRESS to the system.");
@@ -271,7 +278,21 @@ namespace MoldStress
                 // magnitude. Both are correct; they answer different questions,
                 // and only one of them is about birefringence, which is what this
                 // tool exists to estimate.
+                string partial = PartialCoverage(elementsWithPoints, elementsApplied);
+
                 say("  WAVEFRONT - what any system sees");
+                if (partial != null)
+                {
+                    // ABOVE the number, not below it. A qualification printed
+                    // after the figure it qualifies is read second or not at all,
+                    // and this one changes what the figure MEANS.
+                    say("    PARTIAL: " + partial);
+                    foreach (var r in refusedElements)
+                        say("             refused: " + r);
+                    say("    The change below is a real measurement of the system as");
+                    say("    LOADED, which is not the moulded part. Do not quote it as the");
+                    say("    part's moulding effect.");
+                }
                 if (deltaRefused)
                 {
                     say("    NO CHANGE IS REPORTED. " + noDelta);
@@ -350,7 +371,12 @@ namespace MoldStress
                     try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(report) { UseShellExecute = true }); }
                     catch { }
                 }
-                return deltaRefused ? NothingApplied : 0;
+                // Three outcomes, three codes. A partial run is not a failure -
+                // it did everything it could and its files are good - but it is
+                // not a complete answer either, and a script that treats exit 0
+                // as "the part was analysed" would be wrong.
+                if (deltaRefused) return NothingApplied;
+                return partial != null ? PartialApplication : 0;
             }
             finally
             {
@@ -424,6 +450,38 @@ namespace MoldStress
         /// invocation was fine, the answer is missing.
         /// </summary>
         internal const int NothingApplied = 65;
+
+        /// <summary>
+        /// Exit code for a run where SOME elements were applied and some were
+        /// not. Distinct from 65: there IS a number, and it is a real
+        /// measurement - of the wrong object.
+        /// </summary>
+        internal const int PartialApplication = 66;
+
+        /// <summary>
+        /// Says that only part of the part was loaded, or null when coverage is
+        /// complete. PURE, so both arms are testable without OpticStudio.
+        ///
+        /// THE GAP THIS CLOSES, left open deliberately on 2026-08-21 and named in
+        /// that day's report: `NoDeltaReason` fires only when NOTHING was applied.
+        /// Two elements of three landing produced a confident before/after with no
+        /// hint that a third of the part was missing from the "after". That is the
+        /// same defect as the -100% case in a quieter register - there, the number
+        /// described a system nothing had been done to; here, it describes a
+        /// system some of the moulding was done to, and is quoted as the part.
+        ///
+        /// The denominator is elements that PRODUCED POINTS, not all elements. An
+        /// element that offered nothing was not refused, and counting it as a
+        /// miss would fire this warning on runs where coverage is complete.
+        /// </summary>
+        internal static string PartialCoverage(int elementsWithPoints, int elementsApplied)
+        {
+            if (elementsApplied <= 0) return null;                    // NoDeltaReason owns this
+            if (elementsApplied >= elementsWithPoints) return null;   // complete
+            return string.Format(CultureInfo.InvariantCulture,
+                "STAR accepted {0} of {1} elements. {2} carried stress that was not applied.",
+                elementsApplied, elementsWithPoints, elementsWithPoints - elementsApplied);
+        }
 
         /// <summary>
         /// Why the before/after delta is not a measurement, or null when it is.
