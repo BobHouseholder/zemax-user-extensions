@@ -418,7 +418,14 @@ the result.
   reach 6040 Br against its own published band of [900, 2500]. A hundredfold increase
   in relaxation time buys +12%. `peak/ceiling` sits at 0.209 and moves only 0.10–0.25
   across a 14x range of fill time, 100x of relaxation time, 7x of gate width and 8x of
-  grid — so the shortfall is architectural, not an input error. **Nothing was tuned:**
+  grid — so the shortfall is architectural, not an input error. **The deficit is SHAPE,
+  not magnitude:** the model's peak dn is 3.646e-3 against the published 3.680e-3
+  (**0.991x**) while its gapwise mean is 0.281x — it puts nearly the right orientation
+  at the wall and almost none through the middle, a factor of 262 across the gap. The
+  comparison itself is sound: 0 sign changes over 101 stations x 161 nodes, uniform
+  nodes spanning the full thickness, so the clause's quantity is the fringe count's
+  quantity. That shape is what a missing frozen-in thermal **orientation** channel
+  would leave, which two other cases already implicate. **Nothing was tuned:**
   6 mm would pass, and adopting it would be fitting a criterion registered in advance
   to prevent exactly that. It is grid-converged on this clause (0.2% from nz 161 to
   321); the earlier "not grid-converged" note predates the time-grid fix.

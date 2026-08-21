@@ -256,6 +256,44 @@ namespace MoldStress
         /// gapwise mean is assembled from a profile whose core contributes ~1e-5
         /// because shear stress vanishes at the centreline - not of any one input.
         ///
+        /// ============================================================
+        /// AND THE DEFICIT IS SHAPE, NOT MAGNITUDE. Diagnosed 2026-08-21.
+        ///
+        /// The first question was whether the clause even compares like with like.
+        /// The published number is a FRINGE COUNT - Eq. (9), dn = lambda*N/h - so
+        /// it is the thickness-mean of the SIGNED birefringence, since
+        /// opposite-signed material cancels in the retardance a polariscope sees.
+        /// The clause averages |DnFlow| over gapwise nodes. Three ways those can
+        /// differ, all now closed:
+        ///
+        ///   node mean vs thickness mean  FreezeHistory lays nodes uniformly,
+        ///                                Z[i] = -half + t*i/(nz-1), so they are
+        ///                                the same mean;
+        ///   half gap vs full path        that grid spans the FULL thickness;
+        ///   |mean| vs mean|.|            measured: 0 sign changes over 101
+        ///                                stations x 161 nodes, worst ratio 1.0000.
+        ///
+        /// Zero sign changes is not luck - DnFlow is orientation PARALLEL TO FLOW
+        /// and cannot change sign through the gap; the channel that could is the
+        /// thermal one, and it is correctly excluded from an in-plane clause. So
+        /// the absolute value is a no-op here and the comparison is sound. The 3.6x
+        /// is real.
+        ///
+        /// THEN THE USEFUL NUMBER. At the peak station the model's PEAK dn is
+        /// 3.646e-3 against the published 3.680e-3 - **0.991x** - while its gapwise
+        /// MEAN is 1.036e-3, 0.281x. The model puts very nearly the right amount of
+        /// orientation at the wall and almost none through the middle: the profile
+        /// runs 3.646e-3 down to 1.392e-5, a factor of 262 across the gap.
+        ///
+        /// That is why no input closes the case. Inputs scale the magnitude, and
+        /// the magnitude is already right; what is missing is orientation in the
+        /// CORE. It is also the shape a missing frozen-in thermal ORIENTATION
+        /// channel would leave - the gap two other cases already implicate as the
+        /// largest known physics deficit - so case 2 is most likely not a separate
+        /// problem. Stated as a consistency observation, not a proof: one number
+        /// agreeing to 0.9% does not validate the wall physics, and could be
+        /// coincidence.
+        ///
         /// NOTHING WAS TUNED. W = 6 mm reaches 0.89x and would pass, and that is
         /// precisely why it was not adopted: picking the value of the one unsourced
         /// input that makes a registered clause pass is fitting the criterion, and
@@ -635,6 +673,63 @@ namespace MoldStress
             for (int i = 1; i < ns; i++) if (avg[i] > avg[argMax]) argMax = i;
             double peak = avg[argMax];
             double peakRatio = peak / PublishedInPlanePeakDn;
+
+            // IS THE CLAUSE'S QUANTITY THE MEASURED QUANTITY? Added 2026-08-21.
+            //
+            // The published value comes from a FRINGE COUNT: Eq. (9) is
+            // dn = lambda*N/h, and a fringe order is retardance over wavelength,
+            // so the source's number is (1/h) * INTEGRAL of the SIGNED
+            // birefringence over the light path - a thickness-mean of dn, sign
+            // included, because opposite-signed material cancels in the retardance
+            // a polariscope actually sees.
+            //
+            // The clause above averages |DnFlow|. Two of the three ways that can
+            // differ are already ruled out by construction: FreezeHistory lays its
+            // nodes uniformly across the FULL thickness (Z[i] = -half + t*i/(nz-1)),
+            // so a node mean IS a thickness-weighted mean and the path is the whole
+            // path. What is left is the SIGN, and mean|x| >= |mean x| always - so
+            // if the profile changes sign, the clause reads HIGH against the
+            // measurement and the true shortfall is worse than the reported one.
+            //
+            // Printed rather than silently corrected: the clause was registered on
+            // the absolute-value quantity before this was noticed, and changing
+            // what a registered criterion measures because it is failing is the
+            // move the registration exists to prevent. If these two numbers differ,
+            // that is a finding to act on deliberately, not a fix to slip in.
+            {
+                // EVERY station, not just the peak one - a diagnostic that looks at
+                // one place must not be reported as though it looked everywhere.
+                int totalSignChanges = 0, worstStation = 0;
+                double worstRatio = 1.0;
+                for (int i = 0; i < ns; i++)
+                {
+                    double sa = 0.0, ss = 0.0;
+                    int lastSign = 0;
+                    for (int k = 0; k < nzc; k++)
+                    {
+                        double v = ch.DnFlow[i, k];
+                        sa += Math.Abs(v); ss += v;
+                        int sg = v > 0 ? 1 : (v < 0 ? -1 : 0);
+                        if (sg != 0 && lastSign != 0 && sg != lastSign) totalSignChanges++;
+                        if (sg != 0) lastSign = sg;
+                    }
+                    double r = Math.Abs(ss) > 0 ? sa / Math.Abs(ss) : 1.0;
+                    if (r > worstRatio) { worstRatio = r; worstStation = i; }
+                }
+
+                double pk = 0.0;
+                for (int k = 0; k < nzc; k++) pk = Math.Max(pk, Math.Abs(ch.DnFlow[argMax, k]));
+
+                Console.WriteLine(string.Format(ci,
+                    "  clause quantity IS the measured quantity: {0} sign change(s) over " +
+                    "{1} stations x {2} nodes, worst mean|dn| / |mean dn| = {3:F4} (station {4})",
+                    totalSignChanges, ns, nzc, worstRatio, worstStation));
+                Console.WriteLine(string.Format(ci,
+                    "    and the shortfall is SHAPE, not magnitude: peak dn {0:E3} against the " +
+                    "published {1:E3} ({2:F3}x), while the gapwise MEAN is {3:E3} ({4:F3}x)",
+                    pk, PublishedInPlanePeakDn, pk / PublishedInPlanePeakDn,
+                    peak, peakRatio));
+            }
             bool peakOk = peakRatio >= 1.0 / FactorBar && peakRatio <= FactorBar;
             bool shapeOk = ch.S[argMax] <= 0.25 * ch.S[ns - 1] && avg[ns - 1] < peak;
 
