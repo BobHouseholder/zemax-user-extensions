@@ -131,6 +131,15 @@ namespace MoldStress
                 // metric reads; see NoDeltaReason.
                 int elementsWithPoints = 0, elementsApplied = 0;
 
+                // THE POLARISATION HALF, carried out of the loop so it can be
+                // reported beside the scalar rather than only inside a per-element
+                // block. Peak over the elements that produced a map; the count of
+                // those that did NOT is carried too, because a missing map is not
+                // a zero and must not read as one.
+                double peakRetWaves = 0.0, peakRetNm = 0.0;
+                int peakRetFront = 0, peakRetBack = 0;
+                int retMeasured = 0, retMissing = 0;
+
                 foreach (var e in els)
                 {
                     var p = Polymers.ByName(e.Material);
@@ -214,13 +223,25 @@ namespace MoldStress
 
                     int samples; string note;
                     double peakRet = PeakRetardance(st, e, out samples, out note);
-                    if (note != null) say("      retardance UNAVAILABLE: " + note);
+                    if (note != null) { retMissing++; say("      retardance UNAVAILABLE: " + note); }
                     else
+                    {
+                        retMeasured++;
+                        // WAVES FIRST. rad and nm are both correct and neither is
+                        // comparable by eye to an RMS wavefront error in waves,
+                        // which is the number sitting four lines below it.
+                        double waves = Math.Abs(peakRet) / (2 * Math.PI);
+                        double nm = waves *
+                            sys.SystemData.Wavelengths.GetWavelength(1).Wavelength * 1000.0;
+                        if (waves > peakRetWaves)
+                        {
+                            peakRetWaves = waves; peakRetNm = nm;
+                            peakRetFront = e.FrontSurface; peakRetBack = e.BackSurface;
+                        }
                         say(string.Format(CultureInfo.InvariantCulture,
-                            "      retardance peak {0:F4} rad = {1:F1} nm, over {2} map points",
-                            peakRet, Math.Abs(peakRet) / (2 * Math.PI) *
-                            sys.SystemData.Wavelengths.GetWavelength(1).Wavelength * 1000.0,
-                            samples));
+                            "      retardance peak {0:F4} waves = {1:F1} nm ({2:F4} rad), " +
+                            "over {3} map points", waves, nm, peakRet, samples));
+                    }
 
                     // The tool's own silent-zero guard. A stress field that
                     // carries real equivalent stress cannot produce exactly zero
@@ -240,23 +261,71 @@ namespace MoldStress
                                                baseWfe, loadedWfe);
                 bool deltaRefused = noDelta != null;
 
+                // TWO QUANTITIES, TWO QUESTIONS, AND THE RUN ENDS ON THE SECOND.
+                //
+                // Until 2026-08-21 the last number this tool printed was the RMS
+                // wavefront delta, so that is the number people quote. On the one
+                // real lens it read +0.5% while peak retardance was 0.41 waves - a
+                // factor of 585 - and for a polarisation-sensitive system the
+                // scalar is the wrong headline by two and a half orders of
+                // magnitude. Both are correct; they answer different questions,
+                // and only one of them is about birefringence, which is what this
+                // tool exists to estimate.
+                say("  WAVEFRONT - what any system sees");
                 if (deltaRefused)
                 {
-                    say("  NO PERFORMANCE CHANGE IS REPORTED.");
-                    say("  " + noDelta);
+                    say("    NO CHANGE IS REPORTED. " + noDelta);
                     say(string.Format(CultureInfo.InvariantCulture,
-                        "  the two metric reads were {0:F6} and {1:F6} waves; their difference is",
+                        "    the two metric reads were {0:F6} and {1:F6} waves; their",
                         baseWfe, loadedWfe));
-                    say("  NOT a moulding effect and is deliberately not printed as one.");
+                    say("    difference is NOT a moulding effect and is not printed as one.");
                 }
                 else
                 {
                     say(string.Format(CultureInfo.InvariantCulture,
-                        "  with moulding effects:       {0:F6} waves", loadedWfe));
+                        "    baseline                   {0:F6} waves RMS", baseWfe));
                     say(string.Format(CultureInfo.InvariantCulture,
-                        "  change:                      {0:+0.000000;-0.000000} waves ({1:+0.0;-0.0}%)",
-                        loadedWfe - baseWfe,
-                        100.0 * (loadedWfe - baseWfe) / baseWfe));
+                        "    with moulding effects      {0:F6} waves RMS", loadedWfe));
+                    say(string.Format(CultureInfo.InvariantCulture,
+                        "    change                     {0:+0.000000;-0.000000} waves ({1:+0.0;-0.0}%)",
+                        loadedWfe - baseWfe, 100.0 * (loadedWfe - baseWfe) / baseWfe));
+                }
+                say("");
+
+                say("  POLARISATION - what a birefringent system sees");
+                if (retMeasured == 0 && deltaRefused)
+                {
+                    // Both halves missing. Saying "the wavefront number above
+                    // stands alone" here would be wrong - there is no number
+                    // above, and the run already said why.
+                    say("    NOT MEASURED either. Nothing was applied, so there is no");
+                    say("    birefringence to read back.");
+                }
+                else if (retMeasured == 0)
+                {
+                    // THE DANGEROUS ONE. Stress was applied and the wavefront
+                    // moved, so a number exists and reads as the result - while
+                    // the half this tool exists to estimate is simply absent.
+                    say("    NOT MEASURED on any element, although stress WAS applied. The");
+                    say("    wavefront number above therefore stands alone, and on the one");
+                    say("    real lens tested the wavefront understated the polarisation");
+                    say("    effect by 585x. Do not quote it as the moulding result until");
+                    say("    the retardance map is readable.");
+                }
+                else
+                {
+                    say(string.Format(CultureInfo.InvariantCulture,
+                        "    peak retardance            {0:F4} waves = {1:F1} nm, " +
+                        "on surfaces {2}-{3}", peakRetWaves, peakRetNm,
+                        peakRetFront, peakRetBack));
+                    if (retMissing > 0)
+                        say(string.Format(CultureInfo.InvariantCulture,
+                            "    peak is over {0} of {1} elements - {2} produced no map, and a",
+                            retMeasured, retMeasured + retMissing, retMissing) +
+                            " missing map is not a zero.");
+
+                    string verdict = ScalarVerdict(peakRetWaves, baseWfe, loadedWfe, deltaRefused);
+                    if (verdict != null) { say(""); say("    " + verdict); }
                 }
                 say("");
                 say("  Files are in " + outDir);
@@ -293,6 +362,62 @@ namespace MoldStress
         /// RMS wavefront error on axis. Chosen because it is a merit operand and
         /// so evaluates headlessly - the analysis windows do not, on this API.
         /// </summary>
+        /// <summary>
+        /// How badly the scalar wavefront delta understates the polarisation
+        /// effect, in words, or null when there is nothing to warn about.
+        /// PURE, so both arms are testable without OpticStudio.
+        ///
+        /// THE BOUNDARY IS DERIVED, NOT CHOSEN. The two quantities are both in
+        /// waves, so the comparison that matters is simply which is larger: once
+        /// peak retardance exceeds the wavefront change, a reader quoting the
+        /// wavefront change alone is quoting the smaller of two effects and
+        /// calling it the result. No threshold was invented to make that fire.
+        ///
+        /// The ratio is reported whichever way it goes, because the case where
+        /// the scalar is the LARGER number is real too and the reader should not
+        /// have to infer it from silence.
+        /// </summary>
+        internal static string ScalarVerdict(double peakRetWaves, double baseWfe,
+                                             double loadedWfe, bool deltaRefused)
+        {
+            if (deltaRefused) return null;                 // no scalar to compare against
+            double delta = Math.Abs(loadedWfe - baseWfe);
+            if (!(peakRetWaves > 0.0)) return null;
+
+            if (delta <= 0.0)
+                return string.Format(CultureInfo.InvariantCulture,
+                    "THE WAVEFRONT DID NOT MOVE AT ALL and the retardance is {0:F4} waves. "
+                    + "Quoting the wavefront result would report this part as unaffected.",
+                    peakRetWaves);
+
+            double ratio = peakRetWaves / delta;
+            if (ratio <= 1.0)
+                return string.Format(CultureInfo.InvariantCulture,
+                    "For scale: peak retardance is {0} the wavefront change, so the "
+                    + "wavefront number is the larger effect here.", Times(ratio));
+
+            // THE RATIO CARRIES THE FORCE, so it must not be rounded into
+            // nonsense. `{0:F0}` printed "UNDERSTATES BY A FACTOR OF 1" at a
+            // ratio of 1.01 - which reads as "not at all", the opposite of the
+            // warning. No numeral appears in the claim itself now; the claim is
+            // that the wavefront number understates, and the ratio says by how
+            // much, to a precision that still means something near 1.
+            return string.Format(CultureInfo.InvariantCulture,
+                "THE WAVEFRONT NUMBER UNDERSTATES THIS. Peak retardance is {0} the "
+                + "wavefront change - {1:F4} waves against {2:F6} waves. For a "
+                + "polarisation-sensitive system the retardance is the result.",
+                Times(ratio), peakRetWaves, delta);
+        }
+
+        /// <summary>A ratio as a multiplier, kept legible across four orders of
+        /// magnitude: two decimals near 1 where the digits decide the meaning,
+        /// none by the time it reaches the hundreds where they are noise.</summary>
+        private static string Times(double ratio)
+        {
+            string f = ratio < 10.0 ? "{0:F2}x" : "{0:F0}x";
+            return string.Format(CultureInfo.InvariantCulture, f, ratio);
+        }
+
         /// <summary>
         /// Exit code for a run that completed, wrote its files, and has NO
         /// performance change to report. Distinct from UsageError (64): the

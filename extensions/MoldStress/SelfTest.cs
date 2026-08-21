@@ -130,7 +130,7 @@ namespace MoldStress
 
         private static void DeltaGuardChecks()
         {
-            Console.WriteLine("  delta guard");
+            Console.WriteLine("  delta guard and headline");
             // --- THE DELTA GUARD, all four states --------------------------
             //
             // A run can complete, write every file, and have no performance
@@ -175,6 +175,64 @@ namespace MoldStress
             Check("an element with no points does not fake a refusal",
                 Runner.NoDeltaReason(0, 0, 0.0500, 0.0530) == null,
                 "nothing was offered, so nothing was refused");
+
+            // --- THE SCALAR-VS-RETARDANCE VERDICT ---------------------------
+            //
+            // The number a tool prints LAST is the number people quote. Until
+            // 2026-08-21 that was the RMS wavefront delta, and on the one real
+            // lens it read +0.5% while peak retardance was 0.41 waves - a factor
+            // of 585. Both correct; only one is about birefringence.
+            //
+            // The boundary is DERIVED, not chosen: both quantities are in waves,
+            // so the warning fires exactly when the retardance is the larger of
+            // the two. That is what makes the control cheap and meaningful -
+            // just below the boundary it must not fire, just above it must.
+            Check("just below the boundary, no understatement is claimed",
+                Verdict(Runner.ScalarVerdict(0.0099, 1.0000, 1.0100, false))
+                    .Contains("larger effect here"),
+                Verdict(Runner.ScalarVerdict(0.0099, 1.0000, 1.0100, false)));
+
+            Check("just above the boundary, it IS claimed",
+                Verdict(Runner.ScalarVerdict(0.0101, 1.0000, 1.0100, false))
+                    .Contains("UNDERSTATES"),
+                Verdict(Runner.ScalarVerdict(0.0101, 1.0000, 1.0100, false)));
+
+            // The real lens, to the numbers on record: 0.41 waves of retardance
+            // against a 0.5% move on a 0.140186-wave baseline, i.e. a
+            // 0.000701-wave change. 0.41 / 0.000701 = 585.
+            Check("the 585x case is reported as 585x",
+                Verdict(Runner.ScalarVerdict(0.41, 0.140186, 0.140887, false))
+                    .Contains("585x"),
+                Verdict(Runner.ScalarVerdict(0.41, 0.140186, 0.140887, false)));
+
+            // A wavefront that does not move AT ALL is the worst version of the
+            // trap: the ratio is infinite, and a bare format string would print
+            // a symbol rather than saying what happened.
+            Check("a wavefront that did not move is described, not divided by",
+                Verdict(Runner.ScalarVerdict(0.41, 1.0, 1.0, false))
+                    .Contains("DID NOT MOVE AT ALL"),
+                Verdict(Runner.ScalarVerdict(0.41, 1.0, 1.0, false)));
+
+            // TWO SILENCES, each for its own reason.
+            Check("no verdict when there is no retardance to compare",
+                Runner.ScalarVerdict(0.0, 1.0000, 1.0100, false) == null,
+                "nothing measured on the polarisation side");
+            Check("no verdict when the scalar itself was refused",
+                Runner.ScalarVerdict(0.41, double.NaN, 0.0, true) == null,
+                "there is no wavefront number to be understated");
+
+            // ...and the SIGN of the wavefront change must not matter. An
+            // improvement and a degradation of the same size understate the
+            // retardance equally, and loaded-minus-base is negative in one.
+            Check("the comparison uses the magnitude of the change",
+                Runner.ScalarVerdict(0.41, 1.0100, 1.0000, false) ==
+                Runner.ScalarVerdict(0.41, 1.0000, 1.0100, false),
+                "a 0.01-wave improvement and a 0.01-wave degradation read alike");
+        }
+
+        private static string Verdict(string v)
+        {
+            return v ?? "(null - no verdict was returned)";
         }
 
         /// <summary>Renders a null reason as a readable failure rather than

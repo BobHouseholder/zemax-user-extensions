@@ -348,9 +348,17 @@ against.
 **Not** worth acting on for: a **toroidal, biconic or Zernike** surface, whose shape
 this solver cannot read at all; a **non-circular outline**, approximated as a disc; a material whose photoelastic constants are
 catalogue-generic (four of the five are); a part whose dominant moulding risk is
-**warpage or sink**, which is not modelled at all; or on the strength of the final RMS
-wavefront delta rather than the per-element **peak retardance** — on the one real lens
-tested those differ by 585x.
+**warpage or sink**, which is not modelled at all.
+
+Since 2026-08-21 the run reports the two quantities under separate headings and ends
+on the **polarisation** one, because they answer different questions and the last
+number printed is the one people quote. On the one real lens tested, RMS wavefront
+error moved +0.5% while peak retardance reached 0.41 waves — **585x** — and the run
+used to end on the scalar. It now also states the ratio, warns whenever retardance
+exceeds the wavefront change (a derived boundary, not a chosen threshold), and says
+so explicitly when the retardance map could not be read at all while stress WAS
+applied, which is the case where a real wavefront number stands alone and reads as
+the result.
 
 #### Open
 
