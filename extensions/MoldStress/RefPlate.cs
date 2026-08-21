@@ -408,16 +408,23 @@ namespace MoldStress
         public const double TotalLoFraction = 0.15, TotalHiFraction = 1.00;
         public const double FlowPeakZOverDLo = 0.70, FlowPeakZOverDHi = 0.90;
 
+        /// <summary>Every flag -refplate reads. Hoisted out of the call 2026-08-21 so
+        /// the self-test can hold both arms of the guard against it - an inline
+        /// array is unreachable from a test, which is why these two modes were
+        /// the ones the widened table could not cover.</summary>
+        internal static readonly string[] ReadsFlags =
+        {
+            "-nz", "-moldtemp", "-station", "-semidia", "-filltime", "-gatethick",
+            "-snapshot", "-freeplate", "-ejecttime", "-fountain",
+            "-pressure-vitrification", "-changeover", "-nt",
+        };
+
         public static int Run(string[] args)
         {
             var ci = CultureInfo.InvariantCulture;
             Action<string> say = Console.WriteLine;
 
-            int badForMode = Program.RejectFlagsNotReadBy(
-                args, new[] { "-nz", "-moldtemp", "-station", "-semidia", "-filltime",
-                              "-gatethick", "-snapshot", "-freeplate", "-ejecttime",
-                              "-fountain", "-pressure-vitrification", "-changeover", "-nt" },
-                "-refplate");
+            int badForMode = Program.RejectFlagsNotReadBy(args, ReadsFlags, "-refplate");
             if (badForMode != 0) return badForMode;
 
             int nz = (int)Program.Value(args, "-nz", 161.0);

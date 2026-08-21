@@ -81,6 +81,15 @@ namespace MoldStress
         public const double InitialTempC = 160.0;
         public const double BathTempC = 60.0;
 
+        /// <summary>Every flag -refquench reads. Hoisted out of the call 2026-08-21 so
+        /// the self-test can hold both arms of the guard against it - an inline
+        /// array is unreachable from a test, which is why these two modes were
+        /// the ones the widened table could not cover.</summary>
+        internal static readonly string[] ReadsFlags =
+        {
+            "-nz", "-ti", "-tc", "-snapshot", "-nt",
+        };
+
         public static int Run(string[] args)
         {
             var ci = CultureInfo.InvariantCulture;
@@ -89,8 +98,7 @@ namespace MoldStress
             // Refuse a flag this mode does not read. The helper existed for one
             // build without being CALLED anywhere - a guard that cannot fire,
             // which is the same defect it was written to prevent.
-            int badForMode = Program.RejectFlagsNotReadBy(
-                args, new[] { "-nz", "-ti", "-tc", "-snapshot", "-nt" }, "-refquench");
+            int badForMode = Program.RejectFlagsNotReadBy(args, ReadsFlags, "-refquench");
             if (badForMode != 0) return badForMode;
 
             int nz = (int)Program.Value(args, "-nz", 161.0);

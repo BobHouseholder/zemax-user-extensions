@@ -75,8 +75,17 @@ namespace MoldStress
             }
         }
 
+        /// <summary>The one flag -writecatalog reads. It is `-out`, not
+        /// `-outdir`, and on 2026-08-21 `-writecatalog -outdir <path>` silently
+        /// ignored the argument and wrote to the default location - which is how
+        /// this mode's turn came around.</summary>
+        internal static readonly string[] CatalogReadsFlags = { "-out" };
+
         private static int WriteCatalog(string[] args)
         {
+            int badForMode = RejectFlagsNotReadBy(args, CatalogReadsFlags, "-writecatalog");
+            if (badForMode != 0) return badForMode;
+
             string outPath = Value(args, "-out")
                 ?? Path.Combine(CatalogWriter.DefaultDirectory(),
                                 CatalogWriter.CatalogName + ".AGF");
@@ -123,10 +132,20 @@ namespace MoldStress
             return 0;
         }
 
+        /// <summary>Every flag -gates reads. See Runner.ReadsFlags for why this
+        /// must track the reads in both directions.</summary>
+        internal static readonly string[] GatesReadsFlags =
+        {
+            "-file", "-gateconfig", "-materials",
+        };
+
         [System.Runtime.CompilerServices.MethodImpl(
             System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         private static int Gates(string[] args)
         {
+            int badForMode = RejectFlagsNotReadBy(args, GatesReadsFlags, "-gates");
+            if (badForMode != 0) return badForMode;
+
             Session.Locate();
             return GatesConnected(args);
         }
@@ -181,7 +200,13 @@ namespace MoldStress
         internal const int UsageError = 64;
 
         /// <summary>Flags that consume the following token as their value.</summary>
-        private static readonly string[] ValueFlags = {
+        /// <summary>The two registries are INTERNAL so the self-test can derive
+        /// a mode's "flags it does not read" from the real universe of flags
+        /// rather than from a hand-picked triple. Hardcoding that triple across
+        /// every mode is what produced four false failures on 2026-08-21: -run
+        /// genuinely reads -melttemp, -moldtemp and -directindex, and the test
+        /// asserted it must refuse them.</summary>
+        internal static readonly string[] ValueFlags = {
             "-file", "-filltime", "-fountain", "-frontmode", "-gateconfig",
             "-materials", "-melttemp", "-moldtemp", "-gatewidth", "-packfrac", "-nz", "-shape-nodes", "-shape-particles", "-shape-steps", "-ti", "-tc", "-nzexport",
             "-curvature", "-lambdascale", "-out", "-outdir", "-packpressure", "-packtime",
@@ -225,7 +250,7 @@ namespace MoldStress
             return 0;
         }
 
-        private static readonly string[] BoolFlags = {
+        internal static readonly string[] BoolFlags = {
             "-complementary", "-deposition-decay", "-deposition-support",
             "-depthdiag", "-directindex", "-eulerian-depth", "-incremental-thermal", "-narrowing", "-normal-stress", "-packing-orientation", "-snapshot",
             "-gates", "-h", "-help", "-quiet",

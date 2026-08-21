@@ -17,10 +17,32 @@ namespace MoldStress
     /// </summary>
     internal static class Runner
     {
+        /// <summary>
+        /// Every flag -run READS. Public so the self-test can hold both arms
+        /// of the guard against it without an OpticStudio session.
+        ///
+        /// KEEP THIS IN STEP WITH THE READS BELOW, IN BOTH DIRECTIONS. A flag
+        /// missing from the list makes a legitimate run fail loudly, which is
+        /// annoying and self-correcting. A flag listed here but never read is the
+        /// original defect wearing the guard's uniform.
+        /// </summary>
+        internal static readonly string[] ReadsFlags =
+        {
+            "-allow-nonspherical", "-directindex", "-file", "-filltime", "-gateconfig",
+            "-materials", "-melttemp", "-moldtemp", "-nz", "-nzexport", "-outdir",
+            "-packpressure", "-packtime", "-ribbon",
+        };
+
         [System.Runtime.CompilerServices.MethodImpl(
             System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         public static int Run(string[] args)
         {
+            // BEFORE Session.Locate(), deliberately. Refusing after starting an
+            // OpticStudio session costs the user the startup and tells them
+            // nothing they could not have been told immediately.
+            int badForMode = Program.RejectFlagsNotReadBy(args, ReadsFlags, "-run");
+            if (badForMode != 0) return badForMode;
+
             Session.Locate();
             return RunConnected(args);
         }

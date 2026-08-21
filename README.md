@@ -378,12 +378,11 @@ the result.
   the wall in the middle of the aperture, where a sphere never can; that pinch is now
   scanned for, reported, and refused when it closes, but it is the regime the
   Hele-Shaw gapwise assumption is least happy in.
-- **`RejectFlagsNotReadBy` is wired into the four REFERENCE modes as of 2026-08-21,
-  and into none of the other four.** `-run`, `-gates`, `-writecatalog`, `-depthdiag`
-  and `-lagrangian` still absorb valid flags they do not read — demonstrated the same
-  day when `-writecatalog -outdir <path>` silently ignored `-outdir` (that mode reads
-  `-out`) and wrote to the default location instead. On the reference modes, until
-  2026-08-21 `-refcase -melttemp 400` ran a 400 °C melt nowhere, reported the
+- **`RejectFlagsNotReadBy` is wired into ALL TEN modes as of 2026-08-21.** Each mode
+  publishes the flags it reads, and the self-test derives the set it must refuse by
+  subtracting that list from the flag registries — 32 to 58 flags per mode, none
+  swallowed — rather than from a hand-picked example. Until that day
+  `-refcase -melttemp 400` ran a 400 °C melt nowhere, reported the
   criterion **MET** and exited 0; `-refcase2 -adhered` reported a free-plate result
   under an adhered heading. Both now exit 64 naming what the mode does read. The
   flat read-list cannot see a **conditional** read — `-ejecttime` is read only

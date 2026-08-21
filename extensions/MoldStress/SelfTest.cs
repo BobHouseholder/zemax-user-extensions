@@ -15,8 +15,19 @@ namespace MoldStress
     {
         private static int _pass, _fail;
 
+        /// <summary>
+        /// -selftest reads NO flags, and an empty read-list is the honest way to
+        /// say so rather than the way to opt out of the guard. `-selftest -nz 41`
+        /// used to run the full suite at the built-in grid and report a clean
+        /// pass, which reads as "the suite passed at nz=41".
+        /// </summary>
+        internal static readonly string[] ReadsFlags = new string[0];
+
         public static int Run(string[] args)
         {
+            int badForMode = Program.RejectFlagsNotReadBy(args, ReadsFlags, "-selftest");
+            if (badForMode != 0) return badForMode;
+
             _pass = _fail = 0;
             Console.WriteLine("MoldStress self-test");
             Console.WriteLine("  " + Program.ScopeLabel);
@@ -86,17 +97,41 @@ namespace MoldStress
             Console.SetError(TextWriter.Null);     // the helper explains itself on stderr
             try
             {
+                // ALL TEN MODES, not the two that had the guard first. The
+                // 2026-08-21 extension found that a case named after a defect
+                // class covers whichever half its author had in mind; a table
+                // that lists only the modes someone remembered is the same shape.
                 foreach (var m in new[]
                 {
-                    new { Mode = "-refcase",  Reads = RefCase.ReadsFlags,  Good = "-nz" },
-                    new { Mode = "-refcase2", Reads = RefCase2.ReadsFlags, Good = "-nz" },
+                    new { Mode = "-refcase",      Reads = RefCase.ReadsFlags,       Good = "-nz" },
+                    new { Mode = "-refcase2",     Reads = RefCase2.ReadsFlags,      Good = "-nz" },
+                    new { Mode = "-refplate",     Reads = RefPlate.ReadsFlags,      Good = "-nz" },
+                    new { Mode = "-refquench",    Reads = RefQuench.ReadsFlags,     Good = "-nz" },
+                    new { Mode = "-run",          Reads = Runner.ReadsFlags,        Good = "-file" },
+                    new { Mode = "-gates",        Reads = Program.GatesReadsFlags,  Good = "-file" },
+                    new { Mode = "-writecatalog", Reads = Program.CatalogReadsFlags,Good = "-out" },
+                    new { Mode = "-depthdiag",    Reads = DepthDiag.ReadsFlags,     Good = "-out" },
+                    new { Mode = "-lagrangian",   Reads = Lagrangian.ReadsFlags,    Good = "-nz" },
                 })
                 {
-                    foreach (string bad in new[] { "-melttemp", "-moldtemp", "-directindex" })
-                        Check(m.Mode + " refuses " + bad + ", which it does not read",
-                            Program.RejectFlagsNotReadBy(
-                                new[] { m.Mode, bad, "400" }, m.Reads, m.Mode) != 0,
-                            "must not be swallowed");
+                    // DERIVED, not hardcoded. The whole universe of flags minus
+                    // this mode's own list is exactly the set that must be
+                    // refused, and it is read off the registries rather than
+                    // guessed. A fixed triple produced four FALSE failures here
+                    // on 2026-08-21 because -run really does read -melttemp,
+                    // -moldtemp and -directindex - the test was wrong, not the
+                    // guard, and a literal is what made it possible.
+                    var reads = new HashSet<string>(m.Reads, StringComparer.OrdinalIgnoreCase);
+                    var mustRefuse = Program.ValueFlags.Concat(Program.BoolFlags)
+                        .Where(f => !reads.Contains(f))
+                        .Where(f => !string.Equals(f, m.Mode, StringComparison.OrdinalIgnoreCase))
+                        .Where(f => !string.Equals(f, "-quiet", StringComparison.OrdinalIgnoreCase))
+                        .ToArray();
+                    int swallowed = mustRefuse.Count(f => Program.RejectFlagsNotReadBy(
+                        new[] { m.Mode, f, "400" }, m.Reads, m.Mode) == 0);
+                    Check(m.Mode + " refuses every flag it does not read",
+                        swallowed == 0 && mustRefuse.Length > 0,
+                        mustRefuse.Length + " flags outside its list, " + swallowed + " swallowed");
 
                     Check(m.Mode + " still accepts " + m.Good + ", which it does read",
                         Program.RejectFlagsNotReadBy(
@@ -113,6 +148,22 @@ namespace MoldStress
                             new[] { m.Mode, "-quiet" }, m.Reads, m.Mode) == 0,
                         "-quiet is exempt by design");
                 }
+
+                // -selftest reads NOTHING, so it has no "good flag" arm. Its two
+                // properties are that it refuses everything valid and still
+                // accepts the exempt -quiet.
+                Check("-selftest refuses every valid flag, having no reads",
+                    Program.RejectFlagsNotReadBy(
+                        new[] { "-selftest", "-nz", "41" }, SelfTest.ReadsFlags, "-selftest") != 0
+                    && Program.RejectFlagsNotReadBy(
+                        new[] { "-selftest", "-melttemp", "400" }, SelfTest.ReadsFlags, "-selftest") != 0,
+                    "an empty read-list is a statement, not an opt-out");
+                Check("-selftest still runs bare, and with -quiet",
+                    Program.RejectFlagsNotReadBy(
+                        new[] { "-selftest" }, SelfTest.ReadsFlags, "-selftest") == 0
+                    && Program.RejectFlagsNotReadBy(
+                        new[] { "-selftest", "-quiet" }, SelfTest.ReadsFlags, "-selftest") == 0,
+                    "the guard must not make the suite unrunnable");
 
                 // AND THE TWO LISTS MUST DIFFER. If they were accidentally the
                 // same array, every assertion above would still pass while one

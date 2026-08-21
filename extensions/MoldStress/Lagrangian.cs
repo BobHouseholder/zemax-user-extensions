@@ -733,8 +733,25 @@ namespace MoldStress
             return DnFlow[best];
         }
 
+        /// <summary>
+        /// Every flag -lagrangian READS. Public so the self-test can hold both arms
+        /// of the guard against it without an OpticStudio session.
+        ///
+        /// KEEP THIS IN STEP WITH THE READS BELOW, IN BOTH DIRECTIONS. A flag
+        /// missing from the list makes a legitimate run fail loudly, which is
+        /// annoying and self-correcting. A flag listed here but never read is the
+        /// original defect wearing the guard's uniform.
+        /// </summary>
+        internal static readonly string[] ReadsFlags =
+        {
+            "-lambdascale", "-nz", "-particles",
+        };
+
         public static int Run(string[] args)
         {
+            int badForMode = Program.RejectFlagsNotReadBy(args, ReadsFlags, "-lagrangian");
+            if (badForMode != 0) return badForMode;
+
             var ci = CultureInfo.InvariantCulture;
             var p = Polymers.ByName("MS_COC_TOPAS6017").WithProcessTemps(280.0, 150.0);
             var proc = new Process { FillTimeS = 1.0, PackPressureMPa = 71.3, PackTimeS = 3.0 };

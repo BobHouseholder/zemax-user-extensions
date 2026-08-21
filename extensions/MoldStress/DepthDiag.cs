@@ -27,8 +27,25 @@ namespace MoldStress
     /// </summary>
     internal static class DepthDiag
     {
+        /// <summary>
+        /// Every flag -depthdiag READS. Public so the self-test can hold both arms
+        /// of the guard against it without an OpticStudio session.
+        ///
+        /// KEEP THIS IN STEP WITH THE READS BELOW, IN BOTH DIRECTIONS. A flag
+        /// missing from the list makes a legitimate run fail loudly, which is
+        /// annoying and self-correcting. A flag listed here but never read is the
+        /// original defect wearing the guard's uniform.
+        /// </summary>
+        internal static readonly string[] ReadsFlags =
+        {
+            "-complementary", "-out", "-thinned-lambda",
+        };
+
         public static int Run(string[] args)
         {
+            int badForMode = Program.RejectFlagsNotReadBy(args, ReadsFlags, "-depthdiag");
+            if (badForMode != 0) return badForMode;
+
             var ci = CultureInfo.InvariantCulture;
             var log = new StringBuilder();
             Action<string> say = s => { Console.WriteLine(s); log.AppendLine(s); };
