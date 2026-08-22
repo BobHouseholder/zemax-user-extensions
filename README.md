@@ -377,25 +377,29 @@ file that owns the question before writing a conclusion in its domain.**
 
 #### Open
 
-- **The frozen-in thermal ORIENTATION channel is wired as of 2026-08-21, opt-in via
-  `-thermal-orientation`, and it computes identically zero.** That is a finding, not
-  a defect in the wiring. `ThermalProfileIncremental` accumulates stress only in
-  nodes already below Tg, and a node's freeze time is by definition when it crossed
-  Tg — so every node's stress history over `[0, tFreeze]` is empty, while optical
-  memory only builds *before* vitrification. **The two windows are disjoint by
-  construction**, and the channel returns 0 at 0 of 161 nodes on case 4 with the
-  grade's measured optical memory present and its cooling history in hand.
-  The mechanism needs a stress acting *during* vitrification — the melt-side cooling
-  stress the source describes — which this model does not compute. No parameter and
-  no better τ(T) changes that.
-  Two further limits, either of which would bite next: only **polycarbonate** carries
-  measured optical memory, so cases 1 and 2 cannot use the channel at all; and the
-  retention rises 0.05→0.95 between 138 °C and 149 °C while the measured τ(T) is
-  stated valid only above ~148 °C — 10 of those 11 degrees are outside it, in a known
-  direction. It is off by default for that reason. It also feeds **out-of-plane
-  only**, since cooling orientation is equibiaxial in the plane, so it could never
-  have closed case 2's in-plane clause. See `ct-reachability.py`, `tau-measured-pc.py`.
-
+- **The frozen-in thermal ORIENTATION channel is wired and now NON-ZERO** as of
+  2026-08-21, opt-in via `-thermal-orientation` and off by default. It was
+  structurally null on first wiring — the model's thermal stress accumulates only in
+  nodes already below Tg while optical memory builds only above it, so the two
+  windows were disjoint and it returned 0 at 0 of 161 nodes. A **melt-side cooling
+  stress** now supplies the missing half: thermal stress in still-molten material,
+  built against the rubbery modulus `3G/(1−ν)` rather than the glassy `E/(1−ν)` (four
+  orders of magnitude apart), balanced over the liquid set, and relaxing each step by
+  `exp(−Δt/λ)`.
+  **What it is worth, measured on case 4:** peak |dn| 4.28e-5 over 157 of 161 nodes,
+  moving the gapwise-average clause from 3.402e-4 to 3.504e-4 — **+3.0%**, ratio 0.57
+  → 0.58 against the measured 6.0e-4. All eight clauses still pass; the case is still
+  MET. The channel reads exactly zero in the CTE = 0 null arm, which is its own
+  negative control.
+  **And that +3% is an upper bound, not a measurement.** `λ = η₀/G` near Tg has been
+  measured in this repo as 1e6–1e7× longer than the polymer's real optical
+  retardation time, so this stress barely relaxes and is over-stated. Even so
+  favoured, the mechanism supplies 3% — it cannot be the explanation for case 4's
+  remaining 43% deficit, still less for case 2's. Two further limits: only
+  **polycarbonate** carries measured optical memory, so cases 1 and 2 cannot use the
+  channel at all; and the retention transition sits 10 of its 11 degrees below the
+  measured τ(T)'s stated validity floor. It also feeds **out-of-plane only**, since
+  cooling orientation is equibiaxial in the plane.
 - **The K11/K12 split is assumed for every polymer, including the measured one.**
   What the literature measures is the DIFFERENCE, because that is what a polariscope
   sees; the individual values are split in N-BK7's proportion. Measured consequence:

@@ -203,6 +203,17 @@ namespace MoldStress
                                           p.TgC, p.CtePerK, eOver1MinusNu,
                                           double.NaN, hist);
 
+                // THE TWO SIDES OF Tg, ADDED. The solid-side history above is empty
+                // before each node freezes, which is precisely the window optical
+                // memory builds in; the melt-side history is non-zero exactly
+                // there and zero after. Their sum spans the vitrification window,
+                // which is what the mechanism needs and what it did not have.
+                var meltHist = MeltSideCoolingStressHistory(
+                    freeze.Z, freeze.TimeGridS, freeze.TempHistoryC, p, proc.LambdaScale);
+                for (int k = 0; k < freeze.NodeCount; k++)
+                    for (int j = 0; j < ntH && j < meltHist.GetLength(1); j++)
+                        hist[k, j] += meltHist[k, j];
+
                 var tGrid = new double[ntH];
                 Array.Copy(freeze.TimeGridS, tGrid, ntH);
                 for (int k = 0; k < freeze.NodeCount; k++)
@@ -1141,6 +1152,104 @@ namespace MoldStress
             if (historyOut == null || j >= historyOut.GetLength(1)) return;
             for (int k = 0; k < sigma.Length && k < historyOut.GetLength(0); k++)
                 historyOut[k, j] = sigma[k];
+        }
+
+        /// <summary>
+        /// THE MELT-SIDE COOLING STRESS: thermal stress in material that is still
+        /// ABOVE Tg, building against the rubbery modulus and relaxing as it goes.
+        /// Added 2026-08-21, because without it the optical-memory channel is
+        /// structurally null - `ThermalProfileIncremental` accumulates only in
+        /// nodes already below Tg, a node's freeze time IS when it crossed Tg, and
+        /// optical memory only builds BEFORE vitrification, so the two windows
+        /// never overlap and the frozen-in orientation is exactly zero.
+        ///
+        /// THREE CHOICES THAT DECIDE THE MAGNITUDE, all stated rather than buried.
+        ///
+        /// (a) THE MODULUS IS RUBBERY, NOT GLASSY. Above Tg the material has the
+        ///     plateau modulus, not E. Using the solid-side E/(1-nu) here would
+        ///     overstate the stress by about four orders of magnitude, since
+        ///     G ~ 2e5 Pa against E ~ 3e9. The rubber-elastic relation E = 3G gives
+        ///     a biaxial modulus 3G/(1-nu), which is the same biaxial form the
+        ///     solid-side construction uses, with the right modulus in it.
+        ///
+        /// (b) IT RELAXES, which is the whole difference between this and the
+        ///     solid-side stress. Each step the accumulated stress decays by
+        ///     exp(-dt/lambda) with lambda = eta0(T)/G from Cross-WLF - the same
+        ///     relaxation time the flow channel uses, so the two are consistent
+        ///     within the model even where that lambda is itself suspect.
+        ///
+        /// (c) THE BALANCE IS OVER THE LIQUID SET, mirroring the solid-side
+        ///     balance over the solid set. A layer that is still molten is
+        ///     constrained by its neighbours, not by the mould.
+        ///
+        /// AND THE CAVEAT THAT MATTERS MOST. `lambda = eta0/G` near Tg has already
+        /// been measured, in this repo, as roughly 1e6 to 1e7 times LONGER than the
+        /// polymer's real optical retardation time (`tau-measured-pc.py`). Where
+        /// lambda is far too long, this stress barely relaxes and behaves like a
+        /// solid-side stress that started earlier. So treat what comes out as an
+        /// upper bound on the melt-side contribution, not a measurement of it.
+        /// </summary>
+        public static double[,] MeltSideCoolingStressHistory(
+            double[] z, double[] timeGridS, double[,] tempHistoryC,
+            Polymer p, double lambdaScale)
+        {
+            int n = z.Length;
+            int nt = (timeGridS == null || tempHistoryC == null)
+                     ? 0 : Math.Min(timeGridS.Length, tempHistoryC.GetLength(1));
+            var hist = new double[n, Math.Max(nt, 1)];
+            if (nt < 2 || p.MeltModulusPa <= 0.0) return hist;
+
+            double biaxial = 3.0 * p.MeltModulusPa / Math.Max(1.0 - p.PoissonRatio, 1e-6);
+            var sigma = new double[n];
+            var liquid = new bool[n];
+
+            for (int j = 1; j < nt; j++)
+            {
+                double dt = timeGridS[j] - timeGridS[j - 1];
+                int nLiquid = 0;
+                for (int k = 0; k < n; k++)
+                {
+                    liquid[k] = tempHistoryC[k, j] > p.TgC;
+                    if (liquid[k]) nLiquid++;
+                }
+
+                if (nLiquid >= 2)
+                {
+                    double s1 = 0, sz = 0, szz = 0, sf = 0, sfz = 0;
+                    for (int k = 0; k < n; k++)
+                    {
+                        if (!liquid[k]) continue;
+                        double f = p.CtePerK * (tempHistoryC[k, j] - tempHistoryC[k, j - 1]);
+                        s1 += 1.0; sz += z[k]; szz += z[k] * z[k];
+                        sf += f; sfz += f * z[k];
+                    }
+                    double det = s1 * szz - sz * sz;
+                    if (Math.Abs(det) > 1e-30)
+                    {
+                        double a = (sf * szz - sfz * sz) / det;
+                        double b = (s1 * sfz - sf * sz) / det;
+                        for (int k = 0; k < n; k++)
+                        {
+                            if (!liquid[k]) continue;
+                            double f = p.CtePerK * (tempHistoryC[k, j] - tempHistoryC[k, j - 1]);
+                            sigma[k] += biaxial * ((a + b * z[k]) - f) * 1e-6;   // Pa -> MPa
+                        }
+                    }
+                }
+
+                // Relax every still-molten layer. A frozen one keeps what it had:
+                // that is the hand-off to the solid-side construction.
+                for (int k = 0; k < n; k++)
+                {
+                    if (!liquid[k]) continue;
+                    double eta0 = FillField.CrossWlf(p, 0.0, tempHistoryC[k, j], 0.0);
+                    double lam = Math.Max(lambdaScale * eta0 / p.MeltModulusPa, 1e-12);
+                    sigma[k] *= Math.Exp(-dt / lam);
+                }
+
+                for (int k = 0; k < n; k++) hist[k, j] = sigma[k];
+            }
+            return hist;
         }
 
         public static double[] ThermalProfileIncremental(

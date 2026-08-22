@@ -280,6 +280,74 @@ namespace MoldStress
                 Runner.ScalarVerdict(0.41, 1.0000, 1.0100, false),
                 "a 0.01-wave improvement and a 0.01-wave degradation read alike");
 
+            // --- THE MELT-SIDE COOLING STRESS -------------------------------
+            //
+            // Without it the orientation channel is structurally null, so what has
+            // to be asserted is that it is non-zero where it should be, exactly
+            // zero where it should be, and that the RELAXATION in it is doing
+            // something - a build-and-relax that never relaxes is just the
+            // solid-side construction started earlier.
+            {
+                var pc = Polymers.ByName("MS_POLYCARB");
+                int n = 21, nt = 201;
+                var z = new double[n];
+                for (int k = 0; k < n; k++) z[k] = -0.75 + 1.5 * k / (n - 1.0);
+
+                // A cooling history that starts well above Tg and ends below it,
+                // with a gradient through the thickness so the balance has
+                // something to balance.
+                var tg = new double[nt];
+                var th = new double[n, nt];
+                for (int j = 0; j < nt; j++)
+                {
+                    tg[j] = 20.0 * j / (nt - 1.0);
+                    for (int k = 0; k < n; k++)
+                        th[k, j] = 300.0 - (160.0 * j / (nt - 1.0)) * (1.0 + 0.4 * Math.Abs(z[k]));
+                }
+
+                Func<double[,], double> peak = h =>
+                {
+                    double m = 0.0;
+                    for (int k = 0; k < h.GetLength(0); k++)
+                        for (int j = 0; j < h.GetLength(1); j++)
+                            m = Math.Max(m, Math.Abs(h[k, j]));
+                    return m;
+                };
+
+                double onPeak = peak(Channels.MeltSideCoolingStressHistory(z, tg, th, pc, 1.0));
+                Check("the melt-side cooling stress is non-zero above Tg",
+                    onPeak > 0.0, string.Format(CultureInfo.InvariantCulture,
+                        "peak |sigma| {0:E3} MPa", onPeak));
+
+                // THE NULL, and it must be exact: no thermal expansion, no
+                // thermal stress, however the history runs.
+                var noCte = pc.WithProcessTemps(pc.MeltTempC, pc.MoldTempC);
+                noCte.CtePerK = 0.0;
+                Check("CTE = 0 collapses it to exactly zero",
+                    peak(Channels.MeltSideCoolingStressHistory(z, tg, th, noCte, 1.0)) == 0.0,
+                    "the channel's own negative control");
+
+                // ...and a history that never leaves the solid state has no LIQUID
+                // set to balance over, so it must also be exactly zero - this is
+                // the arm that proves the Tg test is being applied at all.
+                var cold = new double[n, nt];
+                for (int j = 0; j < nt; j++)
+                    for (int k = 0; k < n; k++) cold[k, j] = 100.0 - 0.1 * j;
+                Check("a history entirely below Tg produces nothing",
+                    peak(Channels.MeltSideCoolingStressHistory(z, tg, cold, pc, 1.0)) == 0.0,
+                    "no liquid set, so no melt-side stress");
+
+                // THE RELAXATION IS LOAD-BEARING. Scaling lambda down by 1e-6
+                // relaxes almost everything away; scaling it up by 1e6 keeps it.
+                // If these two agreed, the exp(-dt/lambda) would be doing nothing.
+                double fast = peak(Channels.MeltSideCoolingStressHistory(z, tg, th, pc, 1e-6));
+                double slow = peak(Channels.MeltSideCoolingStressHistory(z, tg, th, pc, 1e6));
+                Check("relaxation is doing something: slow lambda retains more",
+                    slow > fast * 1.5,
+                    string.Format(CultureInfo.InvariantCulture,
+                        "peak {0:E3} at lambda x1e6 against {1:E3} at x1e-6", slow, fast));
+            }
+
             // --- THE THERMAL-ORIENTATION CHANNEL, both arms -----------------
             //
             // The channel is off by default and structurally null when on (see
