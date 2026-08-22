@@ -400,6 +400,17 @@ file that owns the question before writing a conclusion in its domain.**
   channel at all; and the retention transition sits 10 of its 11 degrees below the
   measured τ(T)'s stated validity floor. It also feeds **out-of-plane only**, since
   cooling orientation is equibiaxial in the plane.
+- **`λ = η₀/G` is the most suspicious quantity in the model, and this repo has already
+  measured it wrong.** `tau-measured-pc.py` puts it **1e6 to 1e7× longer** than
+  polycarbonate's real optical retardation time near Tg — a melt viscosity divided by a
+  plateau modulus, evaluated far below the range it was fitted in. It is not a corner:
+  the **flow channel's Maxwell memory** runs on it, and so does the **melt-side cooling
+  stress** added 2026-08-21. Both of the model's two largest remaining deficits sit
+  downstream of it. Note the direction differs by channel — too long means too little
+  relaxation, so the melt-side stress is over-stated while the flow memory is too
+  retentive — so it cannot be corrected by one scale factor, and `-lambdascale` moving
+  the answer by only 12% says the model is not simply mis-scaled here either.
+
 - **The K11/K12 split is assumed for every polymer, including the measured one.**
   What the literature measures is the DIFFERENCE, because that is what a polariscope
   sees; the individual values are split in N-BK7's proportion. Measured consequence:
