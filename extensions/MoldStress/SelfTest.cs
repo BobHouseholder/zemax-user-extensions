@@ -280,6 +280,23 @@ namespace MoldStress
                 Runner.ScalarVerdict(0.41, 1.0000, 1.0100, false),
                 "a 0.01-wave improvement and a 0.01-wave degradation read alike");
 
+            // --- THE GRIN STEP, both arms ------------------------------------
+            //
+            // STAR traces direct-index data as a GRIN medium, so the step is
+            // simultaneously the accuracy of the index integration and the cost
+            // of every FFT-type analysis - measured 2026-08-22 as the difference
+            // between 3 s and 17 s on three small elements. CT/10 clamped to
+            // [0.5, 2.0] mm; the clamps are the part a plausible edit would
+            // silently break.
+            {
+                SelfTest.Near("a 10 mm part steps at 1.0 mm",
+                    StarFiles.GrinStepFor(10.0), 1.0, 1e-12);
+                SelfTest.Near("a thin part is clamped at 0.5 mm, not starved",
+                    StarFiles.GrinStepFor(2.0), 0.5, 1e-12);
+                SelfTest.Near("a thick part is clamped at 2.0 mm, not gold-plated",
+                    StarFiles.GrinStepFor(30.0), 2.0, 1e-12);
+            }
+
             // --- THE WAVELENGTH GATE, both arms ------------------------------
             //
             // Found 2026-08-22 as "FFT MTF would not compute": the MS glasses

@@ -38,6 +38,25 @@ namespace MoldStress
             public double PeakDnDensity;
         }
 
+        /// <summary>
+        /// The GRIN integration step STAR should use for this element's direct
+        /// index, in mm. OpticStudio traces STAR direct-index data as a GRIN
+        /// medium, stepping every ray through the fitted volume - so this number
+        /// is the COST of every FFT-type analysis: measured 2026-08-22 at about
+        /// one second per element at the default 1.0 mm step on a 10 mm part,
+        /// and 17 s for three small elements at 0.1 mm, before GUI sampling
+        /// multiplies it. It is also the ACCURACY: our index field is a smooth
+        /// low-order pressure profile, so a tenth of the wall resolves it fully.
+        /// CT/10 clamped to [0.5, 2.0] mm - thin elements get enough steps to
+        /// see the profile, thick ones stop paying for resolution the field
+        /// does not carry.
+        /// </summary>
+        public static double GrinStepFor(double centreThicknessMm)
+        {
+            double s = centreThicknessMm / 10.0;
+            return Math.Max(0.5, Math.Min(2.0, s));
+        }
+
         public static Written Write(MouldedElement e, Polymer p, Channels c,
                                     FillField fill, FreezeHistory freeze,
                                     string directory, int nRadial = 17, int nAzimuth = 24,

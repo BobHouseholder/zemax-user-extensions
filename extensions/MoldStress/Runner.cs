@@ -390,9 +390,12 @@ namespace MoldStress
                         di.FEAData.ImportDirectIndex_1(w.IndexPath);
                         readIndex = di.FEAData.NumberOfDataPoints;
                         di.Fits.Refit();
+                        double step = StarFiles.GrinStepFor(e.CentreThicknessMm);
+                        try { di.Fits.GRINStep = step; } catch { }
                         say(string.Format(CultureInfo.InvariantCulture,
                             "      STAR      index {0} points accepted (direct index; " +
-                            "no stress applied)", readIndex));
+                            "no stress applied); GRIN step {1:F2} mm, ~{2:F0} steps/ray",
+                            readIndex, step, e.CentreThicknessMm / step));
                     }
                     else
                     {
@@ -584,6 +587,21 @@ namespace MoldStress
                 }
                 say("");
                 say("  Files are in " + outDir);
+                // The cost warning, where the user reads it before opening an
+                // analysis. Measured 2026-08-22: FFT-type analyses step every ray
+                // through every element's fitted index volume - about a second per
+                // element per wavelength at 32x32 on this machine, and GUI
+                // sampling of 128x128 is 16x the rays. A long compute with no
+                // progress bar reads as a hang.
+                if (indexOnly && elementsApplied > 0)
+                {
+                    say("");
+                    say("  NOTE: with STAR index data loaded, FFT-type analyses (MTF, PSF)");
+                    say("  trace every ray through the index volume and can take MINUTES on");
+                    say("  a multi-element system at high sampling. If a window seems hung,");
+                    say("  check CPU in Task Manager: pegged means computing - let it finish");
+                    say("  or lower the analysis sampling. Idle means genuinely stuck.");
+                }
                 // Only when there IS a change. Pointing the user at a Difference
                 // view of nothing is the same false reassurance one level down.
                 if (!deltaRefused)
