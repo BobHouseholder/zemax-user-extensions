@@ -588,7 +588,18 @@ namespace MoldStress
                     "    against the published {0:E3}: ceiling/gate = {1:F2}  =>  {2}",
                     PublishedInPlanePeakDn, ceiling / PublishedInPlanePeakDn,
                     ceiling >= PublishedInPlanePeakDn
-                        ? "reachable - the gap is parameters"
+                        // RETRACTED 2026-08-21. This read "reachable - the gap is
+                        // parameters", and it was printed on every run. It does not
+                        // follow: a ceiling above the gate says the ARCHITECTURE
+                        // permits the number, not that any parameter reaches it.
+                        // Swept - 14x in fill time, 100x in relaxation time, 7x in
+                        // gate width, 8x in grid - peak/ceiling never left
+                        // 0.10-0.25, and the only gate widths that pass clause (a)
+                        // put the wall shear stress 3.3-13x above every published
+                        // amorphous limit. The gap is not parameters.
+                        ? "architecturally permitted - but NO parameter reaches it; " +
+                          "peak/ceiling is pinned near 0.21 (see the sweep on " +
+                          "PublishedInPlanePeakDn)"
                         : "NOT REACHABLE BY ANY PARAMETER CHOICE - the gap is structural"));
                 if (ceiling < PublishedInPlanePeakDn)
                     Console.WriteLine(string.Format(ci,

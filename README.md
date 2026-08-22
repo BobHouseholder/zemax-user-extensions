@@ -360,6 +360,21 @@ so explicitly when the retardance map could not be read at all while stress WAS
 applied, which is the case where a real wavefront number stands alone and reads as
 the result.
 
+#### Questions this extension has already answered, and where
+
+Four times in this project's history a conclusion was written that a file already
+on disk contradicted — twice about what to buy, once about a mechanism's
+reachability, once about which mechanism would close a failing case. **Read the
+file that owns the question before writing a conclusion in its domain.**
+
+| standing question | the file that owns it |
+|---|---|
+| Can the optical-memory / C_t rewrite reach its targets, and on what input? | `ct-reachability.py` |
+| What is the measured τ(T) for PC, and where is it valid? | `tau-measured-pc.py` |
+| Has this source been assessed, bought, priced or closed? | `VALIDATION-SOURCES.md` |
+| What does each reference case measure, and what does it currently read? | `VALIDATION-LOG.md` |
+| Why is a constant the value it is, and how well sourced? | the `KSource` / `CMeltSource` strings in `Polymers.cs` |
+
 #### Open
 
 - **The sag is read in full as of 2026-08-20** — base radius, conic, and even or odd
