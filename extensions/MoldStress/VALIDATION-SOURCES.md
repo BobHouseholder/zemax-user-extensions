@@ -680,12 +680,20 @@ That is precisely the missing quantity, for the two polymers that matter most he
 `q11` and `q12` are stress-optical (index change per unit stress) and map directly
 onto this model's `K11Brewster` and `K12Brewster`.
 
-**A FETCH RETURNED TABLE I VALUES AND THEY MUST NOT BE USED.** One retrieval of the
-Optica abstract page produced a complete set of numbers - and the same response said
-the article was "Not Accessible", which is self-contradictory. A targeted search for
-any citing paper reproducing them found none, and a second lookup returned nothing.
-**Treat those numbers as fabricated until a primary source confirms them**; they are
-deliberately not written down here, so that nobody lifts them from a transcript.
+**RETRACTED 2026-08-22.** This section said: "A FETCH RETURNED TABLE I VALUES AND
+THEY MUST NOT BE USED ... treat those numbers as fabricated until a primary source
+confirms them." **The paper was bought the same day and every one of those numbers is
+correct** - q11 26.7, q12 25.5, p11 0.300, p12 0.297 for Plexiglas 55; q11 -4.6,
+q12 34.6, p11 0.252, p12 0.321 for Lexan. The fetch had genuinely read Table I.
+
+Worth separating the two halves, because only one of them was wrong. The PROCEDURE
+was right and stays: a response that claims an article is "Not Accessible" while
+producing its data is self-contradictory, no citing source reproduced the values, and
+a second lookup found nothing - on that evidence the numbers could not be trusted into
+a material table. The LABEL was wrong. "Unverified, do not use yet" was the supportable
+statement; "fabricated" asserted a mechanism that had not been tested, which is the
+failure this project has a kernel rule about. Being right to distrust is not the same
+as being right about the distrust.
 
 **Disposition: BUY-CANDIDATE, and unlike the last one this is recommended.** The
 profile is the opposite of the aspheric paper priced on 2026-08-21 and refused: that
@@ -747,3 +755,50 @@ its abstract - the sweep's job there is done, and what remains is a purchase
 decision. PMMA's C(T) is answerable too, by a paper this repo already cites
 second-hand, and should not be bought, because the row it would improve is exercised
 by nothing.
+
+## Waxler Table I, read from the paper 2026-08-22
+
+Bought and read in full. NBS, uniaxial and hydrostatic interferometry at 632.8 nm,
+five repeats per measurement, stated accuracy **2%** on the computed coefficients.
+Both specimens 6.4 mm plates; the Plexiglas was essentially birefringence-free
+as-cast, the Lexan carried six wavelengths of uniform double refraction.
+
+|                | Plexiglas 55 (PMMA) | Lexan (PC) |
+|---|---|---|
+| q11            | 26.7e-12 Pa^-1 | -4.6e-12 Pa^-1 |
+| q12            | 25.5e-12 Pa^-1 | 34.6e-12 Pa^-1 |
+| p11            | 0.300 | 0.252 |
+| p12            | 0.297 | 0.321 |
+| n (589.3 nm)   | 1.4950 | 1.5854 |
+| alpha          | 67.9e-6 /C | 65.5e-6 /C |
+| dn/dT          | -105e-6 /C | -107e-6 /C |
+
+**Sign convention, from the paper's own equations.** Its Eq. (4) gives the
+stress-birefringence fringe shift as proportional to `(q11 - q12)`, so this model's
+`K_glass = K12 - K11` maps to `q12 - q11`:
+
+    PMMA   q12 - q11 = -1.2 Br      this model carries -4.5 Br   (same sign, 3.8x)
+    PC     q12 - q11 = +39.2 Br     this model carries +72.0 Br   (same sign, 1.8x)
+
+**AND THE SPLIT, WHICH IS WHAT THE SWEEP WAS FOR.** The hydrostatic combination is
+`q11 + 2*q12` (the paper's Eq. 3), and that is the route the density channel is
+delivered through:
+
+    PMMA   measured  26.7 + 2(25.5) =  +77.7      model  2.3 + 2(-2.2) =  -2.1
+    PC     measured  -4.6 + 2(34.6) =  +64.6      model -24.0 + 2(48.0) = +72.0
+
+**For PMMA the assumed N-BK7 split is wrong by a factor of 37 AND in sign. For
+polycarbonate it lands within 12% of the measurement.** The assumption is refuted as
+a general method and happens to be good for the one polymer two reference cases
+actually use. Both halves matter: the 12% is luck, not validation, and the same
+assumption applied to a COC or COP grade has no reason to be any better than it was
+for PMMA.
+
+**NOT ADOPTED, and the reason is a three-way disagreement rather than caution.** For
+PMMA the glassy difference now has three values: -4.5 Br (Aston polymer-optical-fibre,
+this model's current source), 4.6 unsigned (Hu & Xue 2025, Table 3), and -1.2 Br
+(Waxler, here). For PC: 72-82 Br standard photoelastic literature against Waxler's
+39.2 Br for 1979 Lexan. Adopting Waxler wholesale would move PC's `K_glass` outside
+the band this model's own self-test enforces, [60, 95]. Which source wins is a
+judgement about grade and era, not an arithmetic fix, and it is recorded here rather
+than made silently.

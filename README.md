@@ -416,24 +416,26 @@ file that owns the question before writing a conclusion in its domain.**
   worse. It remains wrong, and it still matters to the melt-side cooling stress, whose
   magnitude it over-states — but it is not what is holding either registered deficit
   down, and no work on it should be started expecting that.
-- **The K11/K12 split is assumed for every polymer — and the source that would settle
-  it has been found.** Waxler, Horowitz & Feldman, *Appl. Opt.* **18**(1) 101 (1979)
-  is a four-page NBS measurement paper whose abstract names `q11, q12, p11, p12` for
-  **Plexiglas 55 (PMMA) and Lexan (PC)** as its deliverables — precisely the
-  individual constants this model splits by analogy. Closed access, **USD $35
-  non-member / $15 Optica member**, and **recommended to buy**: unlike the aspheric paper refused on
-  2026-08-21, the quantities needed are the paper's own subject rather than a
-  by-product. A retrieval that returned its Table I is being treated as fabricated —
-  the same response called the article inaccessible and no citing source reproduces
-  the numbers.
-- **The K11/K12 split is assumed for every polymer, including the measured one.**
-  What the literature measures is the DIFFERENCE, because that is what a polariscope
-  sees; the individual values are split in N-BK7's proportion. Measured consequence:
-  **retardance is unaffected** — it rides only on the difference and no choice of
-  split moves it — but the **isotropic index shift spans a factor of 21** across
-  plausible splits, and that is the term the density channel is delivered through.
-  Both halves are asserted in `-selftest`.
+- **The K11/K12 split is assumed for every polymer, and the measurement now says how
+  badly.** Waxler, Horowitz & Feldman, *Appl. Opt.* **18**(1) 101 (1979) — bought and
+  read 2026-08-22 — measured the individual constants by interferometry for Plexiglas
+  55 (PMMA) and Lexan (PC). The hydrostatic combination `q11 + 2·q12`, which is the
+  route the density channel is delivered through:
 
+  | | measured | this model |
+  |---|---|---|
+  | PMMA | **+77.7** | −2.1 |
+  | PC | **+64.6** | +72.0 |
+
+  **For PMMA the assumed N-BK7 split is wrong by a factor of 37 and in sign; for
+  polycarbonate it lands within 12%.** So the assumption is refuted as a general
+  method and happens to be good for the one polymer two reference cases use — and 12%
+  is luck, not validation. Applied to a COC or COP grade it has no more reason to hold
+  than it had for PMMA. **Not adopted**, because the glassy difference now has three
+  disagreeing sources for PMMA (−4.5, 4.6 unsigned, −1.2 Br) and two for PC (72–82 vs
+  Waxler's 39.2), and taking Waxler wholesale would push PC outside the [60, 95] band
+  this model's own self-test enforces. Which source wins is a judgement about grade and
+  era, recorded in `VALIDATION-SOURCES.md` rather than made silently.
 - **The pressure-vitrification term applies the stress-optical rule ~12x beyond its
   measured ceiling.** Luap, Karlina, Schweizer & Venerus, *Rheol. Acta* (2005) find the
   rule holds for monodisperse PS melts to a critical stress of about 2.7 MPa and fails

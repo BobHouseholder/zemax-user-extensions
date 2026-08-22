@@ -280,6 +280,48 @@ namespace MoldStress
                 Runner.ScalarVerdict(0.41, 1.0000, 1.0100, false),
                 "a 0.01-wave improvement and a 0.01-wave degradation read alike");
 
+            // --- THE K11/K12 SPLIT, AGAINST A MEASUREMENT --------------------
+            //
+            // Waxler, Horowitz & Feldman, Appl. Opt. 18(1) 101 (1979) measured the
+            // INDIVIDUAL constants for Plexiglas 55 and Lexan by interferometry -
+            // the quantity a polariscope cannot see and which this model therefore
+            // splits in N-BK7's proportion. The hydrostatic combination q11 + 2*q12
+            // is the route the density channel is delivered through.
+            //
+            // These assert the DISAGREEMENT, not agreement, because that is what is
+            // true: the split is refuted for PMMA and coincidentally good for PC.
+            // Written as tests so that changing either row without reading the
+            // source fails loudly rather than quietly moving a published number.
+            {
+                Func<string, double> hydro = nm =>
+                {
+                    var q = Polymers.ByName(nm);
+                    return q.K11Brewster + 2.0 * q.K12Brewster;
+                };
+
+                // PC: measured -4.6 + 2(34.6) = +64.6 Br. The model's assumed split
+                // gives +72.0 - within 12%, which is luck rather than validation.
+                SelfTest.Near("the PC split happens to match the measurement to ~12%",
+                    hydro("MS_POLYCARB") / 64.6, 1.0, 0.15);
+
+                // PMMA: measured 26.7 + 2(25.5) = +77.7 Br against the model's -2.1.
+                // Wrong by a factor of 37 AND in sign. Asserted so the refutation
+                // cannot be silently "fixed" by adjusting the row.
+                SelfTest.Check("the PMMA split is refuted by the measurement",
+                    hydro("MS_PMMA") < 0.0 && Math.Abs(77.7 / hydro("MS_PMMA")) > 20.0,
+                    string.Format(CultureInfo.InvariantCulture,
+                        "model {0:F1} Br against a measured +77.7 Br - opposite sign, "
+                        + "factor {1:F0}", hydro("MS_PMMA"), Math.Abs(77.7 / hydro("MS_PMMA"))));
+
+                // And PMMA is the row no reference case uses, so the refutation costs
+                // no registered number - which is why it is recorded, not patched.
+                SelfTest.Check("no reference case uses the refuted row",
+                    !Polymers.ByName("MS_PMMA").Name.Equals("MS_COC_TOPAS6017")
+                    && !Polymers.ByName("MS_PMMA").Name.Equals("MS_COP_ZEONEX480R")
+                    && !Polymers.ByName("MS_PMMA").Name.Equals("MS_POLYCARB"),
+                    "cases run TOPAS 6017, ZEONEX 480R and polycarbonate twice");
+            }
+
             // --- THE MELT-SIDE COOLING STRESS -------------------------------
             //
             // Without it the orientation channel is structurally null, so what has
