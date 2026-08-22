@@ -55,6 +55,32 @@ namespace MoldStress
         public string ShapeUnreadable;
 
         /// <summary>
+        /// The radius the STAR EXPORT must cover, as opposed to the radius the
+        /// physics runs on. Zero means "same as SemiDiameterMm".
+        ///
+        /// WHY THEY DIFFER (found 2026-08-22, in OpticStudio's Multiphysics
+        /// Data Loader): `SemiDiameterMm` is the smaller of the two surfaces'
+        /// OPTICAL semi-diameters, which bounds the solve - but the loader draws
+        /// the part to its MECHANICAL semi-diameter, and a moulded lens has a
+        /// flange, so the mechanical aperture routinely exceeds the clear one.
+        /// A cloud that stops at the clear aperture leaves the flange annulus
+        /// empty, STAR is left to extrapolate there, and in the loader the data
+        /// visibly fails to fill the lens.
+        /// </summary>
+        public double ExportSemiDiameterMm;
+
+        /// <summary>The larger of the mechanical semi-diameters, floored at the
+        /// physics radius; guards let a zero or unreadable MEMA fall back
+        /// harmlessly. Pure, so the choice is testable without a session.</summary>
+        public static double ExportRadius(double mechFront, double mechBack, double optical)
+        {
+            double m = 0.0;
+            if (!double.IsNaN(mechFront) && mechFront > 0) m = Math.Max(m, mechFront);
+            if (!double.IsNaN(mechBack) && mechBack > 0) m = Math.Max(m, mechBack);
+            return Math.Max(m, optical);
+        }
+
+        /// <summary>
         /// Thickness of the cavity at radius r, from the two surface sags. This
         /// is the whole reason the estimator needs no mesh: OpticStudio already
         /// holds the cavity profile exactly.

@@ -280,6 +280,26 @@ namespace MoldStress
                 Runner.ScalarVerdict(0.41, 1.0000, 1.0100, false),
                 "a 0.01-wave improvement and a 0.01-wave degradation read alike");
 
+            // --- THE EXPORT RADIUS, both arms --------------------------------
+            //
+            // Found 2026-08-22 in OpticStudio's Multiphysics Data Loader: the
+            // exported cloud stopped at the CLEAR aperture while the loader
+            // draws the part to its MECHANICAL aperture, so on any flanged
+            // moulded lens the data visibly failed to fill the part. The choice
+            // of radius is pure, so both directions are pinned here.
+            {
+                Check("a flange extends the export to the mechanical aperture",
+                    MouldedElement.ExportRadius(18.0, 16.0, 15.0) == 18.0,
+                    "the larger mechanical wins");
+                Check("the export never shrinks below the physics radius",
+                    MouldedElement.ExportRadius(12.0, 0.0, 15.0) == 15.0,
+                    "a MEMA smaller than the clear aperture must not clip the solve domain");
+                Check("unset mechanical apertures fall back to the clear aperture",
+                    MouldedElement.ExportRadius(0.0, 0.0, 15.0) == 15.0
+                    && MouldedElement.ExportRadius(double.NaN, double.NaN, 15.0) == 15.0,
+                    "zero and NaN both mean unknown, not tiny");
+            }
+
             // --- AUTOMATIC MATERIAL CONVERSION, both arms --------------------
             //
             // The replacement table is a set of claims - "this catalogue name IS

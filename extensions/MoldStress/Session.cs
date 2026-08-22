@@ -155,6 +155,13 @@ namespace MoldStress
                 // above from the base radii alone.
                 e.EdgeThicknessMm = e.ThicknessAt(e.SemiDiameterMm);
 
+                // The export has to reach the MECHANICAL aperture - the flange -
+                // or the loader shows the data stopping short of the part.
+                double mf = 0, mb = 0;
+                try { mf = s.MechanicalSemiDiameter; } catch { }
+                try { mb = next.MechanicalSemiDiameter; } catch { }
+                e.ExportSemiDiameterMm = MouldedElement.ExportRadius(mf, mb, e.SemiDiameterMm);
+
                 string dFront = ShapeDeparture(tFront, e.FrontConic, e.FrontPars);
                 string dBack = ShapeDeparture(tBack, e.BackConic, e.BackPars);
                 e.ShapeDeparture = Join(i, dFront, dBack);

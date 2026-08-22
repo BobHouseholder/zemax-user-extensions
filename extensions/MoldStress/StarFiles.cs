@@ -92,25 +92,38 @@ namespace MoldStress
                 picked.CopyTo(zIdx);
             }
             int nz = zIdx.Length;
+            // The grid spans the EXPORT radius - the mechanical aperture, flange
+            // included - while every field lookup below is clamped to the physics
+            // radius. Beyond the clear aperture the true cavity is flange
+            // geometry this model does not know, so the rim's field values are
+            // carried outward at the rim's z-band: honest coverage rather than
+            // invented physics, and STAR interpolates data instead of
+            // extrapolating into a void. The banner the run prints says so
+            // whenever the two radii differ.
+            double rExport = e.ExportSemiDiameterMm > 0
+                ? Math.Max(e.ExportSemiDiameterMm, e.SemiDiameterMm) : e.SemiDiameterMm;
             for (int ir = 0; ir < nRadial; ir++)
             {
-                double r = e.SemiDiameterMm * ir / (nRadial - 1.0);
+                double r = rExport * ir / (nRadial - 1.0);
+                double rField = Math.Min(r, e.SemiDiameterMm);
                 int nAz = ir == 0 ? 1 : nAzimuth;
                 for (int ia = 0; ia < nAz; ia++)
                 {
                     double th = 2.0 * Math.PI * ia / nAz;
                     double x = r * Math.Cos(th), y = r * Math.Sin(th);
+                    // ...but the FIELD is evaluated at the clamped radius.
+                    double xf = rField * Math.Cos(th), yf = rField * Math.Sin(th);
 
                     // Path coordinate from the gate, and the local flow direction.
                     double s, fx, fy;
-                    FlowDirection(e, x, y, out fx, out fy, out s);
+                    FlowDirection(e, xf, yf, out fx, out fy, out s);
                     int iS = NearestNode(fill.S, s);
 
-                    double h = e.ThicknessAt(r);
+                    double h = e.ThicknessAt(rField);
                     // The SAME shape the cavity was solved on, conic and
                     // aspheric terms included. A sphere here against an asphere
                     // there would put the stress field on the wrong surface.
-                    double zFront = e.SagFrontAt(r);
+                    double zFront = e.SagFrontAt(rField);
 
                     for (int kk = 0; kk < nz; kk++)
                     {

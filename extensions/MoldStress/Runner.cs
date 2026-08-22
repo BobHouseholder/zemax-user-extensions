@@ -300,6 +300,12 @@ namespace MoldStress
                     written.Add(w);
 
                     Session.Describe(e);
+                    if (e.ExportSemiDiameterMm > e.SemiDiameterMm + 1e-9)
+                        say(string.Format(CultureInfo.InvariantCulture,
+                            "      export   to the MECHANICAL semi-diameter, {0:F3} mm " +
+                            "(clear aperture {1:F3}); beyond the clear aperture the rim's " +
+                            "values are carried outward, not solved",
+                            e.ExportSemiDiameterMm, e.SemiDiameterMm));
                     say(string.Format(CultureInfo.InvariantCulture,
                         "      fill      gate pressure {0:F2} MPa, viscosity {1:E2} Pa.s, {2:F0} mm3/s",
                         fill.P[0], fill.EtaPaS, fill.FlowRateMm3PerS));
