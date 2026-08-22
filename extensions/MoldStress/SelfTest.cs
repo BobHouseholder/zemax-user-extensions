@@ -280,6 +280,37 @@ namespace MoldStress
                 Runner.ScalarVerdict(0.41, 1.0000, 1.0100, false),
                 "a 0.01-wave improvement and a 0.01-wave degradation read alike");
 
+            // --- THE WAVELENGTH GATE, both arms ------------------------------
+            //
+            // Found 2026-08-22 as "FFT MTF would not compute": the MS glasses
+            // are an nd/vd fit valid 0.4-1.0 um, and a system converted outside
+            // that band has every ray fail - measured at 1.2 um as ~185 waves of
+            // extrapolated error and an empty MTF. The gate that now refuses
+            // must catch the out-of-band wavelength AND pass a visible system,
+            // or it trades a blank window for a tool nobody can run.
+            {
+                Check("a visible-band system passes the gate",
+                    CatalogWriter.WavelengthsOutOfRange(
+                        new[] { 0.4861, 0.5876, 0.6563 }).Count == 0,
+                    "F, d, C - the common case must not be refused");
+                Check("an NIR wavelength is caught and NAMED",
+                    CatalogWriter.WavelengthsOutOfRange(
+                        new[] { 0.5876, 1.31 }).Count == 1
+                    && CatalogWriter.WavelengthsOutOfRange(
+                        new[] { 0.5876, 1.31 })[0] == 1.31,
+                    "1.31 um is outside 0.4-1.0 and must be reported, not counted");
+                Check("the band edges themselves are inside",
+                    CatalogWriter.WavelengthsOutOfRange(
+                        new[] { CatalogWriter.LambdaMinUm, CatalogWriter.LambdaMaxUm }).Count == 0,
+                    "0.4 and 1.0 exactly are valid, per the LD record");
+                Check("UV below the band is caught too",
+                    CatalogWriter.WavelengthsOutOfRange(new[] { 0.355 }).Count == 1,
+                    "the gate is a band, not a ceiling");
+                Check("the LD record and the gate share one constant",
+                    CatalogWriter.LambdaMinUm == 0.4 && CatalogWriter.LambdaMaxUm == 1.0,
+                    "the AGF's LD line is written from these same values");
+            }
+
             // --- THE EXPORT RADIUS, both arms --------------------------------
             //
             // Found 2026-08-22 in OpticStudio's Multiphysics Data Loader: the

@@ -104,6 +104,31 @@ namespace MoldStress
             }
             if (plan.Count == 0) return 0;
 
+            // THE WAVELENGTH GATE, before anything is written or saved. The MS
+            // glasses are valid 0.4-1.0 um; a system with a wavelength outside
+            // that band would convert into one whose every ray fails - measured
+            // 2026-08-22 as FFT MTF refusing to compute, which is how this was
+            // found. Refusing here, with the wavelength named, turns a blank
+            // analysis window into an actionable message.
+            var um = new List<double>();
+            try
+            {
+                var wl = sys.SystemData.Wavelengths;
+                for (int i = 1; i <= wl.NumberOfWavelengths; i++)
+                    um.Add(wl.GetWavelength(i).Wavelength);
+            }
+            catch { }
+            var bad = CatalogWriter.WavelengthsOutOfRange(um);
+            if (bad.Count > 0)
+                throw new Exception(string.Format(CultureInfo.InvariantCulture,
+                    "this system uses wavelength(s) {0} um, outside the MOLDSTRESS " +
+                    "catalogue's validity of {1:F1}-{2:F1} um. The MS_* glasses are an " +
+                    "nd/vd fit - visible-band by construction - and converting would " +
+                    "make every ray fail (FFT MTF refuses to compute). Nothing was " +
+                    "converted or saved.",
+                    string.Join(", ", bad.Select(w => w.ToString("F4", CultureInfo.InvariantCulture))),
+                    CatalogWriter.LambdaMinUm, CatalogWriter.LambdaMaxUm));
+
             // ---- the catalogue, rewritten every time -----------------------
             // Always rewritten rather than written-if-absent: the deployed AGF
             // was once found carrying 4 of the 5 materials, and a stale

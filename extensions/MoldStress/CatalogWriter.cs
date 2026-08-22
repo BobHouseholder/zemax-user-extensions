@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 
@@ -30,6 +31,30 @@ namespace MoldStress
     /// </summary>
     internal static class CatalogWriter
     {
+        /// <summary>
+        /// The wavelength validity of every MS_* glass, in microns - the LD
+        /// record each row carries. NARROW BY CONSTRUCTION: the dispersion is a
+        /// two-coefficient fit from nd and vd alone, which is a visible-band
+        /// statement, and extending the claimed range without dispersion data
+        /// would fabricate an index. Measured 2026-08-22: at 1.2 um the
+        /// extrapolated formula put ~185 waves of error on a 10 mm part and FFT
+        /// MTF refused to compute - which is how this constant earned its
+        /// checks in Convert.Prepare and Runner.
+        /// </summary>
+        internal const double LambdaMinUm = 0.4;
+        internal const double LambdaMaxUm = 1.0;
+
+        /// <summary>The wavelengths outside the MS validity range, or an empty
+        /// list. Pure, so both arms are testable without a session.</summary>
+        internal static List<double> WavelengthsOutOfRange(IEnumerable<double> um)
+        {
+            var bad = new List<double>();
+            if (um == null) return bad;
+            foreach (double w in um)
+                if (!(w >= LambdaMinUm && w <= LambdaMaxUm)) bad.Add(w);
+            return bad;
+        }
+
         public const string CatalogName = "MOLDSTRESS";
 
         public static string Write(string path)
@@ -74,7 +99,8 @@ namespace MoldStress
                     b1, c1));
                 sb.AppendLine("TD 0 0 0 0 0 0 2.0000E+001");
                 sb.AppendLine("OD -1 -1 -1 -1 -1 -1");
-                sb.AppendLine("LD 4.000000E-001 1.000000E+000");
+                sb.AppendLine(string.Format(CultureInfo.InvariantCulture,
+                    "LD {0:E6} {1:E6}", LambdaMinUm, LambdaMaxUm));
                 // K is written as K12 - K11 so a catalog reload cannot disagree
                 // with itself; OpticStudio recomputes it on save from the same rule.
                 sb.AppendLine(string.Format(ci, "BD {0:F3} {1:F4} {2:F4} {3:F4}",

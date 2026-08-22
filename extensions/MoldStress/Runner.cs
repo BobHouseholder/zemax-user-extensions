@@ -176,6 +176,37 @@ namespace MoldStress
                     return finish(NothingApplied);
                 }
 
+                // THE SAME WAVELENGTH GATE Convert.Prepare applies, for systems
+                // that already carry MS_* glasses by hand - they die identically
+                // outside the catalogue's validity, just without the conversion
+                // step to catch it.
+                {
+                    var umHere = new List<double>();
+                    try
+                    {
+                        var wlq = sys.SystemData.Wavelengths;
+                        for (int i = 1; i <= wlq.NumberOfWavelengths; i++)
+                            umHere.Add(wlq.GetWavelength(i).Wavelength);
+                    }
+                    catch { }
+                    var badWl = CatalogWriter.WavelengthsOutOfRange(umHere);
+                    if (els.Count > 0 && badWl.Count > 0)
+                    {
+                        say(string.Format(CultureInfo.InvariantCulture,
+                            "  REFUSED: wavelength(s) {0} um lie outside the MOLDSTRESS " +
+                            "catalogue's validity, {1:F1}-{2:F1} um.",
+                            string.Join(", ", badWl.Select(v => v.ToString("F4", CultureInfo.InvariantCulture))),
+                            CatalogWriter.LambdaMinUm, CatalogWriter.LambdaMaxUm));
+                        say("  The MS_* glasses are an nd/vd fit - visible-band by construction -");
+                        say("  and outside that band the extrapolated index is meaningless: rays");
+                        say("  fail and FFT-based analyses refuse to compute. Restrict the system");
+                        say("  to " + string.Format(CultureInfo.InvariantCulture, "{0:F1}-{1:F1}",
+                            CatalogWriter.LambdaMinUm, CatalogWriter.LambdaMaxUm) +
+                            " um for the moulding estimate, then restore its real bands.");
+                        return finish(Program.UsageError);
+                    }
+                }
+
                 // --- NON-SPHERICAL SURFACES ARE REFUSED -----------------------
                 //
                 // This solver reads only the base radius, so every surface it
