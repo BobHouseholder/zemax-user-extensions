@@ -25,6 +25,24 @@ namespace MoldStress
 
         private static int Main(string[] args)
         {
+            // FIRST STATEMENT, BEFORE ANYTHING CAN FAIL. Two ribbon clicks in a
+            // row appeared to do nothing (2026-08-22), and after the first fix
+            // there was still no evidence anywhere of the process having run at
+            // all. This breadcrumb splits that world cleanly: if the file exists
+            // after a click, the exe ran and the recorded arguments say which
+            // path it took; if it does not, OpticStudio never started the exe
+            // and the fault is upstream of this program entirely.
+            try
+            {
+                string bdir = Path.Combine(Path.GetTempPath(), "moldstress");
+                Directory.CreateDirectory(bdir);
+                File.AppendAllText(Path.Combine(bdir, "launch-log.txt"),
+                    string.Format("{0:u}  args=[{1}]  cwd={2}",
+                        DateTime.UtcNow, string.Join(" | ", args),
+                        Environment.CurrentDirectory) + Environment.NewLine);
+            }
+            catch { }
+
             try
             {
                 string mode = args.FirstOrDefault(a => !a.StartsWith("-")) ?? "";

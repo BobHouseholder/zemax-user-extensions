@@ -43,7 +43,10 @@ namespace MoldStress
             int badForMode = Program.RejectFlagsNotReadBy(args, ReadsFlags, "-run");
             if (badForMode != 0) return badForMode;
 
-            Session.Locate();
+            // Locate() moved INSIDE the ribbon guard below on 2026-08-22: it
+            // runs before any ZOSAPI type is touched and can throw, and a throw
+            // here previously escaped the wrapper to an invisible stderr.
+            if (!Program.Has(args, "-ribbon")) { Session.Locate(); return RunConnected(args); }
 
             // A RIBBON RUN HAS NO CONSOLE, so an exception that reaches Main's
             // catch prints to a stderr nobody can see and the click appears to do
@@ -51,8 +54,7 @@ namespace MoldStress
             // 2026-08-22. Every failure a ribbon run can produce must end in an
             // OPENED report, including the ones thrown before an output directory
             // is known; those go to %TEMP%\moldstress.
-            if (!Program.Has(args, "-ribbon")) return RunConnected(args);
-            try { return RunConnected(args); }
+            try { Session.Locate(); return RunConnected(args); }
             catch (Exception ex)
             {
                 string dir = Path.Combine(Path.GetTempPath(), "moldstress");
