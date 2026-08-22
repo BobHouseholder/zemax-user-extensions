@@ -30,7 +30,7 @@ namespace MoldStress
         {
             "-allow-nonspherical", "-directindex", "-file", "-filltime", "-gateconfig",
             "-materials", "-melttemp", "-moldtemp", "-nz", "-nzexport", "-outdir",
-            "-packpressure", "-packtime", "-prepare", "-ribbon",
+            "-full", "-packpressure", "-packtime", "-prepare", "-ribbon",
         };
 
         [System.Runtime.CompilerServices.MethodImpl(
@@ -235,6 +235,30 @@ namespace MoldStress
                     "  baseline RMS wavefront error: {0:F6} waves", baseWfe));
                 say("");
 
+                // INDEX-ONLY IS THE DEFAULT, at Bob's direction, 2026-08-22
+                // ("scale back, for now, and only calculate the change in
+                // refractive index from molding"). In this mode the density
+                // index change is loaded through STAR's DIRECT INDEX route and
+                // nothing else is applied - no stress tensor, no birefringence,
+                // no retardance.
+                //
+                // The scale-back is also a caveat-shedding move, and that is
+                // worth stating: the direct-index route applies DnDensity as an
+                // index change without ever touching K11/K12, so the refuted
+                // split assumption does not enter; and the flow law the 1989
+                // literature indicts drives the birefringence channel, which is
+                // not applied here. What remains is Lorentz-Lorenz on the packing
+                // pressure - the least-criticised channel in the tool. -full
+                // restores the stress/birefringence export.
+                bool indexOnly = !Program.Has(args, "-full");
+                if (indexOnly)
+                {
+                    say("  INDEX-ONLY MODE (default): only the refractive-index change from");
+                    say("  moulding is computed and applied, through STAR's direct-index route.");
+                    say("  No stress, no birefringence, no retardance. Pass -full for those.");
+                    say("");
+                }
+
                 var written = new List<StarFiles.Written>();
 
                 // WHAT ACTUALLY LANDED. The delta at the bottom of this report is
@@ -287,17 +311,14 @@ namespace MoldStress
                         "density dn {2:E3}",
                         ch.PeakDnFlow, ch.PeakDepthFraction, w.PeakDnDensity));
 
-                    // THE DENSITY HALF CARRIES AN UNMEASURED ASSUMPTION, and until
-                    // 2026-08-22 it carried it silently. StarFiles converts that
-                    // index shift into an equivalent hydrostatic stress by DIVIDING
-                    // by K11 + 2*K12, and writes the result into the STAR file - so
-                    // the number above and the file both inherit a split this model
-                    // takes from N-BK7, a glass. Waxler et al. (1979) measured the
-                    // split for the only two polymers anyone has, and it came out a
-                    // factor of 37 and the opposite SIGN from the assumption for an
-                    // acrylic. The retardance half is untouched: it rides on the
-                    // measured DIFFERENCE and no choice of split moves it.
-                    if (!p.SplitMeasured)
+                    // THE DENSITY HALF CARRIES AN UNMEASURED ASSUMPTION - but
+                    // ONLY on the stress-tensor route, where StarFiles divides the
+                    // index shift by K11 + 2*K12 (a split refuted by Waxler 1979,
+                    // factor 37 and the wrong sign for an acrylic). The DIRECT
+                    // INDEX route applies DnDensity as-is and never touches the
+                    // split, so in index-only mode this caveat would be FALSE and
+                    // printing it anyway would teach users to ignore it.
+                    if (!indexOnly && !p.SplitMeasured)
                     {
                         double lo, hi;
                         double span = SplitUncertainty.IsotropicSpan(p, out lo, out hi);
@@ -319,52 +340,79 @@ namespace MoldStress
                     // --- load it -----------------------------------------------
                     var surf = sys.LDE.GetSurfaceAt(e.FrontSurface);
                     var st = surf.STARData.Stress;
-                    try { st.FEAData.UnloadData(); } catch { }
-                    st.SetDataIsLocal();
-                    st.SetWorkingWavelength(1);
-                    // ImportStress(string) is obsolete and, per the API's own
-                    // attribute, "no longer implemented" - it returns nothing and
-                    // does nothing. Exactly the silent no-op this project keeps
-                    // running into. ImportStress_1 returns a status code.
-                    int importCode = st.FEAData.ImportStress_1(w.StressPath);
-                    int read = st.FEAData.NumberOfDataPoints;
-                    st.Fits.Refit();
-                    st.Fits.ApplyStress();
-
                     var di = surf.STARData.DirectIndex;
-                    int readIndex = 0;
-                    try
+                    int importCode = 0, read = 0, readIndex = 0;
+
+                    if (indexOnly)
                     {
-                        // OFF by default, and the A/B above is why: it costs the
-                        // retardance map entirely. The density term is already in
-                        // the stress tensor as a hydrostatic component, so this
-                        // opt-in exists only for an index-only study.
-                        if (!Program.Has(args, "-directindex"))
-                            throw new Exception("not loaded - density rides in the stress tensor " +
-                                                "(pass -directindex to load it instead, which " +
-                                                "disables stress birefringence on this surface)");
+                        // INDEX ONLY: unload any stale stress so nothing rides
+                        // along from a previous run, then load the index change
+                        // through the direct route. No stress, no birefringence.
+                        try { st.FEAData.UnloadData(); } catch { }
                         di.SetDataIsLocal();
                         di.FEAData.ImportDirectIndex_1(w.IndexPath);
                         readIndex = di.FEAData.NumberOfDataPoints;
                         di.Fits.Refit();
+                        say(string.Format(CultureInfo.InvariantCulture,
+                            "      STAR      index {0} points accepted (direct index; " +
+                            "no stress applied)", readIndex));
                     }
-                    catch (Exception ex) { say("      index     " + ex.Message); }
+                    else
+                    {
+                        try { st.FEAData.UnloadData(); } catch { }
+                        st.SetDataIsLocal();
+                        st.SetWorkingWavelength(1);
+                        // ImportStress(string) is obsolete and, per the API's own
+                        // attribute, "no longer implemented" - it returns nothing
+                        // and does nothing. Exactly the silent no-op this project
+                        // keeps running into. ImportStress_1 returns a status code.
+                        importCode = st.FEAData.ImportStress_1(w.StressPath);
+                        read = st.FEAData.NumberOfDataPoints;
+                        st.Fits.Refit();
+                        st.Fits.ApplyStress();
+
+                        try
+                        {
+                            // OFF by default in full mode, and the A/B above is
+                            // why: it costs the retardance map entirely. The
+                            // density term is already in the stress tensor as a
+                            // hydrostatic component.
+                            if (!Program.Has(args, "-directindex"))
+                                throw new Exception("not loaded - density rides in the stress tensor " +
+                                                    "(pass -directindex to load it instead, which " +
+                                                    "disables stress birefringence on this surface)");
+                            di.SetDataIsLocal();
+                            di.FEAData.ImportDirectIndex_1(w.IndexPath);
+                            readIndex = di.FEAData.NumberOfDataPoints;
+                            di.Fits.Refit();
+                        }
+                        catch (Exception ex) { say("      index     " + ex.Message); }
+                    }
 
                     say(string.Format(CultureInfo.InvariantCulture,
                         "      STAR      stress {0}/{1} points accepted (code {2}), index {3}",
                         read, w.Points, importCode, readIndex));
                     if (w.Points > 0) elementsWithPoints++;
-                    if (read > 0) elementsApplied++;
+                    if ((indexOnly ? readIndex : read) > 0) elementsApplied++;
                     // Named, not just counted. "2 of 3 applied" tells the user
                     // there is a problem; the surface pair and the material tell
-                    // them which BD record is missing.
+                    // them which record is missing.
                     else if (w.Points > 0)
                         refusedElements.Add(string.Format(CultureInfo.InvariantCulture,
                             "surfaces {0}-{1} ({2})", e.FrontSurface, e.BackSurface, e.Material));
-                    if (read == 0)
+                    if (!indexOnly && read == 0)
                         say("      STAR      REFUSED THE STRESS DATA - does " + e.Material +
                             " carry a BD record? Run -writecatalog and add MOLDSTRESS to the system.");
+                    if (indexOnly && readIndex == 0)
+                        say("      STAR      REFUSED THE INDEX DATA - is the MOLDSTRESS " +
+                            "catalogue attached to the system?");
 
+                    if (indexOnly)
+                    {
+                        retMissing++;   // by design, not by failure; the summary says so
+                        say("");
+                        continue;
+                    }
                     int samples; string note;
                     double peakRet = PeakRetardance(st, e, out samples, out note);
                     if (note != null) { retMissing++; say("      retardance UNAVAILABLE: " + note); }
@@ -455,7 +503,15 @@ namespace MoldStress
                 say("");
 
                 say("  POLARISATION - what a birefringent system sees");
-                if (retMeasured == 0 && deltaRefused)
+                if (indexOnly)
+                {
+                    say("    NOT COMPUTED, by design. Index-only mode applies the density index");
+                    say("    change and nothing else - no stress tensor, no birefringence, no");
+                    say("    retardance. On the one real lens where both were measured, peak");
+                    say("    retardance was 585x the wavefront change, so a polarisation-");
+                    say("    sensitive system needs the full run: pass -full.");
+                }
+                else if (retMeasured == 0 && deltaRefused)
                 {
                     // Both halves missing. Saying "the wavefront number above
                     // stands alone" here would be wrong - there is no number

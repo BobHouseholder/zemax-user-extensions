@@ -299,7 +299,7 @@ namespace MoldStress
         internal static readonly string[] BoolFlags = {
             "-complementary", "-deposition-decay", "-deposition-support",
             "-depthdiag", "-directindex", "-eulerian-depth", "-incremental-thermal", "-narrowing", "-normal-stress", "-packing-orientation", "-snapshot",
-            "-gates", "-h", "-help", "-quiet",
+            "-full", "-gates", "-h", "-help", "-quiet",
             "-lagrangian", "-lagrangian-depth", "-refquench", "-refplate",
             "-prepare", "-refcase", "-refcase2", "-relax-below-tg", "-ribbon", "-freeplate", "-adhered", "-pressure-vitrification", "-allow-nonspherical", "-thermal-orientation",
             "-run", "-selftest",
@@ -412,7 +412,7 @@ namespace MoldStress
             Console.WriteLine("  -run [-file <lens.zmx>] [-gateconfig <f>] [-outdir <d>]");
             Console.WriteLine("       [-filltime s] [-packpressure MPa] [-packtime s]");
             Console.WriteLine("       [-melttemp C] [-moldtemp C]");
-            Console.WriteLine("       [-nt n] [-allow-nonspherical]");
+            Console.WriteLine("       [-nt n] [-allow-nonspherical] [-prepare] [-full]");
             Console.WriteLine("        The whole chain: gate, fill field, freeze history, the three");
             Console.WriteLine("        channels, STAR stress and index files, loaded and applied,");
             Console.WriteLine("        with the performance change against a baseline measured");
@@ -421,6 +421,10 @@ namespace MoldStress
             Console.WriteLine("        and even or odd aspheric terms. A surface type whose shape");
             Console.WriteLine("        cannot be read at all is REFUSED; -allow-nonspherical");
             Console.WriteLine("        substitutes its base radius and says so.");
+            Console.WriteLine("        INDEX-ONLY by default: only the refractive-index change is");
+            Console.WriteLine("        computed and applied (direct index). -full restores the");
+            Console.WriteLine("        stress/birefringence export. -prepare converts ordinary");
+            Console.WriteLine("        polymer names (PMMA, POLYCARB...) in a -MoldStress copy.");
             Console.WriteLine();
             Console.WriteLine("  -selftest");
             Console.WriteLine("        Run every stage against its closed form. Exits non-zero on");

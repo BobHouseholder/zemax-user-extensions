@@ -532,6 +532,18 @@ file that owns the question before writing a conclusion in its domain.**
   inside the `-adhered` branch — so that one is guarded by hand; any other
   conditional read is still unprotected.
 
+- **INDEX-ONLY is the default `-run` and ribbon behaviour as of 2026-08-22** — a
+  deliberate scale-back: only the refractive-index change from moulding is computed
+  and applied, through STAR's **direct-index** route. No stress tensor, no
+  birefringence, no retardance; `-full` restores the stress/birefringence export.
+  The scale-back also sheds the two heaviest caveats, and that is not a coincidence:
+  the direct-index route applies the density Δn without ever touching the refuted
+  K11/K12 split (which only enters when converting index → equivalent stress), and
+  the flow law the 1989 literature indicts drives the birefringence channel, which is
+  not applied here. What remains is Lorentz-Lorenz on the packing pressure. The
+  report's POLARISATION section states plainly that nothing was computed there and
+  why a polarisation-sensitive system still needs `-full` — on the one real lens
+  where both were measured, peak retardance was 585× the wavefront change.
 - **Exit codes distinguish three outcomes of a `-run`, as of 2026-08-21.** 0 every
   element applied; **66** some applied and some refused, where the before/after is a
   real measurement of the system as LOADED and not of the part; **65** nothing
