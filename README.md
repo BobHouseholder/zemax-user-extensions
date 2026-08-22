@@ -416,6 +416,16 @@ file that owns the question before writing a conclusion in its domain.**
   worse. It remains wrong, and it still matters to the melt-side cooling stress, whose
   magnitude it over-states — but it is not what is holding either registered deficit
   down, and no work on it should be started expecting that.
+- **The K11/K12 split is assumed for every polymer — and the source that would settle
+  it has been found.** Waxler, Horowitz & Feldman, *Appl. Opt.* **18**(1) 101 (1979)
+  is a four-page NBS measurement paper whose abstract names `q11, q12, p11, p12` for
+  **Plexiglas 55 (PMMA) and Lexan (PC)** as its deliverables — precisely the
+  individual constants this model splits by analogy. Closed access, price not yet
+  obtained, and **recommended to buy**: unlike the aspheric paper refused on
+  2026-08-21, the quantities needed are the paper's own subject rather than a
+  by-product. A retrieval that returned its Table I is being treated as fabricated —
+  the same response called the article inaccessible and no citing source reproduces
+  the numbers.
 - **The K11/K12 split is assumed for every polymer, including the measured one.**
   What the literature measures is the DIFFERENCE, because that is what a polariscope
   sees; the individual values are split in N-BK7's proportion. Measured consequence:
@@ -458,8 +468,13 @@ file that owns the question before writing a conclusion in its domain.**
   a Maxwell memory, Kamal & Tan-era) against a field that has used full viscoelastic
   tensors since Baaijens 1991. Packing-stage flow orientation is not modelled.
 
-- **PMMA is the least trustworthy row** in the material table — its stress-optical
-  coefficient changes sign near 144 C while one constant is carried across it.
+- **PMMA is the least trustworthy row in the material table — and the least
+  consequential.** Its stress-optical coefficient changes sign near 144 °C while one
+  constant is carried across an integral that straddles the inversion. **No reference
+  case uses PMMA**: the four run TOPAS 6017, ZEONEX 480R and polycarbonate twice. So a
+  better PMMA constant cannot change a single registered number, which is why the
+  paper that would supply it was priced and **not** bought (2026-08-22 sweep). Reopens
+  the moment a PMMA reference case is added.
 
 - **Needs Bob:** click the ribbon entry once in the GUI. Everything here ran headless.
 

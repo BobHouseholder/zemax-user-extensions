@@ -652,3 +652,94 @@ fringe photographs.** That is the same shape as this file's earlier finding that
 benchmark or round-robin exists for moulded-optic birefringence at all. The
 aspheric gap is therefore not a gap in effort - it is a gap in the literature, and
 it should be stated that way rather than left reading as unfinished work.
+
+# Fifth sweep, 2026-08-22 - K11/K12, and PMMA's sign inversion
+
+Two questions, run under the `source-sweep` procedure. What a usable source had to
+contain was written down first, in both cases:
+
+  K11/K12  the INDIVIDUAL photoelastic constants for an optical polymer - not their
+           difference, which is all a polariscope sees - measured rather than split
+           by analogy, with the sign convention stated or derivable.
+  PMMA     a temperature-resolved C(T) spanning or bracketing the ~144 C inversion,
+           with sign, measured; or a defensible single value with its regime named.
+
+Checked what was already held first. The repo carries **nothing at all** on K11/K12 -
+no previous sweep touched it. For PMMA it carries -30 Br and the inversion, both
+already recorded, so what was missing was only the temperature resolution.
+
+## K11/K12: the source exists, is exactly right, and was NOT obtained
+
+**Waxler, Horowitz & Feldman, *Optical and physical parameters of Plexiglas 55 and
+Lexan*, Applied Optics 18(1) 101-104 (1979).** SNIPPET (abstract only). An NBS
+measurement paper whose abstract names as its deliverables the refractive indices,
+dn/dT, the thermal expansion coefficient, **the photoelastic constants q11, q12, p11
+and p12**, and the elastic moduli - for **Plexiglas 55 (PMMA) and Lexan (PC)**.
+
+That is precisely the missing quantity, for the two polymers that matter most here.
+`q11` and `q12` are stress-optical (index change per unit stress) and map directly
+onto this model's `K11Brewster` and `K12Brewster`.
+
+**A FETCH RETURNED TABLE I VALUES AND THEY MUST NOT BE USED.** One retrieval of the
+Optica abstract page produced a complete set of numbers - and the same response said
+the article was "Not Accessible", which is self-contradictory. A targeted search for
+any citing paper reproducing them found none, and a second lookup returned nothing.
+**Treat those numbers as fabricated until a primary source confirms them**; they are
+deliberately not written down here, so that nobody lifts them from a transcript.
+
+**Disposition: BUY-CANDIDATE, and unlike the last one this is recommended.** The
+profile is the opposite of the aspheric paper priced on 2026-08-21 and refused: that
+was a five-page design-method paper whose named experimental quantity was shrinkage,
+with birefringence a by-product. This is a four-page NBS measurement paper whose
+entire subject IS the constants, listed in its own abstract. The risk that it does
+not contain what is needed is close to zero. **Price not obtained** - the Optica
+page did not render on either route tried; get it before buying.
+
+What it would settle: the model splits every polymer's K in N-BK7's proportion, and
+the measured consequence is already recorded - retardance is invariant, the isotropic
+index shift spans a **factor of 21**, and that is the density channel's route.
+
+## PMMA C(T): do not buy, and the reason is not the price
+
+The paper that would answer it is **Wimberger-Friedl, *The peculiar rheo-optical
+behaviour of bisphenol A-polycarbonate and polymethylmethacrylate*, Rheol. Acta 30,
+329-340 (1991)** - SNIPPET, and already this model's source for PMMA's -30 Br, read
+second-hand through US 9,720,155 Table 1 rather than directly. Springer, closed
+access; their single-article rate was verified at USD $39.95 on a different Springer
+article the same week, not on this one.
+
+**Two reasons not to buy it, and the second is decisive.**
+
+1. Replacing one constant with a C(T) curve is the same class of change as the
+   optical-memory rewrite, which was built, wired and measured on 2026-08-21 at
+   **+3%**. A temperature-resolved coefficient is a bigger change than it sounds and
+   the precedent for its payoff is small.
+
+2. **PMMA IS USED BY NO REFERENCE CASE.** The four cases run TOPAS 6017, ZEONEX 480R,
+   and polycarbonate twice. So a better PMMA coefficient improves a row that nothing
+   in the validation suite exercises - it cannot change a single registered number.
+   That reframes the standing "PMMA is the least trustworthy row" item: it is also
+   the least consequential, and those two facts belong together wherever it is
+   recorded.
+
+**Reopens if** a reference case in PMMA is ever added - at which point the constant
+becomes load-bearing and the paper becomes the first thing to buy.
+
+## Found on disk, unindexed
+
+`~/Downloads/ao-39-34-6530.pdf` is **Hung, *Quantitative Measurement of
+Birefringence-Induced Astigmatism of Optical Pickup Objective Lenses*** (Sony
+Precision Engineering, OPN Supplement 11(11), 2000). READ, first page. It is not a
+validation case - no process conditions - but it is the only thing yet seen that
+quantifies what moulded-in birefringence does to an actual optical *performance*
+metric, which is the question the tool's new polarisation headline raises. Recorded
+so the next sweep does not rediscover it as a lead.
+
+## The finding
+
+**One of the two questions has a source and the other has no reason to.** K11/K12 is
+answerable by a single four-page 1979 measurement paper that names the quantities in
+its abstract - the sweep's job there is done, and what remains is a purchase
+decision. PMMA's C(T) is answerable too, by a paper this repo already cites
+second-hand, and should not be bought, because the row it would improve is exercised
+by nothing.
