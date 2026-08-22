@@ -280,6 +280,51 @@ namespace MoldStress
                 Runner.ScalarVerdict(0.41, 1.0000, 1.0100, false),
                 "a 0.01-wave improvement and a 0.01-wave degradation read alike");
 
+            // --- AUTOMATIC MATERIAL CONVERSION, both arms --------------------
+            //
+            // The replacement table is a set of claims - "this catalogue name IS
+            // that MS row" - so what needs asserting is that the claims made are
+            // right AND that the claims deliberately NOT made stay unmade. The
+            // refusals are load-bearing: TOPAS 5013 is reported at -700 Br
+            // against 6017's +1000, so a generous match on "COC" or a sibling
+            // grade would borrow a coefficient with the wrong SIGN.
+            {
+                Check("PMMA converts to MS_PMMA",
+                    Convert.MsReplacement("PMMA") == "MS_PMMA", "the common case");
+                Check("conversion is case-insensitive",
+                    Convert.MsReplacement("polycarb") == "MS_POLYCARB"
+                    && Convert.MsReplacement("Acrylic") == "MS_PMMA",
+                    "catalogue names arrive in every casing");
+                Check("ZEONEX 480R converts, space and hyphen alike",
+                    Convert.MsReplacement("ZEONEX 480R") == "MS_COP_ZEONEX480R"
+                    && Convert.MsReplacement("ZEONEX-480R") == "MS_COP_ZEONEX480R",
+                    "vendor spellings vary");
+                Check("an ordinary glass does NOT convert",
+                    Convert.MsReplacement("N-BK7") == null, "must be left alone");
+                Check("an MS_* material does NOT convert again",
+                    Convert.MsReplacement("MS_PMMA") == null,
+                    "already converted; a second pass must be a no-op");
+                Check("generic COC is REFUSED, deliberately",
+                    Convert.MsReplacement("COC") == null,
+                    "TOPAS 5013 reads -700 Br against 6017's +1000 - grade decides the SIGN");
+                Check("sibling grade E48R is REFUSED, deliberately",
+                    Convert.MsReplacement("E48R") == null,
+                    "E48R is not 480R, and borrowing across grades is the recorded trap");
+                Check("empty and null convert to nothing",
+                    Convert.MsReplacement("") == null && Convert.MsReplacement(null) == null,
+                    "guarded");
+
+                Check("the sibling path gets the suffix before the extension",
+                    Convert.SuffixPath(@"C:\x\lens.zmx") == @"C:\x\lens-MoldStress.zmx",
+                    Convert.SuffixPath(@"C:\x\lens.zmx"));
+                Check("the extension's casing is preserved",
+                    Convert.SuffixPath(@"C:\x\LENS.ZMX") == @"C:\x\LENS-MoldStress.ZMX",
+                    Convert.SuffixPath(@"C:\x\LENS.ZMX"));
+                Check("an unsaved system has no sibling path",
+                    Convert.SuffixPath("") == null && Convert.SuffixPath(null) == null,
+                    "the caller must refuse rather than invent a location");
+            }
+
             // --- THE HOST-LAUNCH DETECTOR, both arms -------------------------
             //
             // OpticStudio launches ribbon extensions with -zpid/-zplt/-zsid, a

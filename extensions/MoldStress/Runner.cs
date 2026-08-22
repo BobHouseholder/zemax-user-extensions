@@ -30,7 +30,7 @@ namespace MoldStress
         {
             "-allow-nonspherical", "-directindex", "-file", "-filltime", "-gateconfig",
             "-materials", "-melttemp", "-moldtemp", "-nz", "-nzexport", "-outdir",
-            "-packpressure", "-packtime", "-ribbon",
+            "-packpressure", "-packtime", "-prepare", "-ribbon",
         };
 
         [System.Runtime.CompilerServices.MethodImpl(
@@ -124,6 +124,30 @@ namespace MoldStress
                 var extra = (Program.Value(args, "-materials") ?? "")
                     .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
                 var els = Session.FindElements(sys, extra);
+
+                // AUTOMATIC PREPARATION, in ribbon mode or under -prepare. If
+                // the system carries ordinary polymer names this tool recognises
+                // - PMMA, POLYCARB, 480R... - it is saved as a -MoldStress
+                // sibling, the MOLDSTRESS catalogue is written and attached, and
+                // the materials are replaced IN THE COPY. The original file is
+                // never modified. The pre-substitution metric is measured first,
+                // because MS_* glasses carry their own index model and the
+                // baseline shift belongs in the report, not hidden under it.
+                double originalWfe = double.NaN;
+                int replaced = 0;
+                if (Program.Has(args, "-ribbon") || Program.Has(args, "-prepare"))
+                {
+                    originalWfe = Metric(sys);
+                    replaced = Convert.Prepare(sys, say);
+                    if (replaced > 0)
+                    {
+                        say(string.Format(CultureInfo.InvariantCulture,
+                            "  {0} surface(s) converted; re-scanning the copy", replaced));
+                        outDir = Program.Value(args, "-outdir")
+                            ?? Path.Combine(Path.GetDirectoryName(sys.SystemFile), "moldstress");
+                        els = Session.FindElements(sys, extra);
+                    }
+                }
                 Gating.ApplyOverrides(els, Program.Value(args, "-gateconfig"));
 
                 say("MoldStress");
@@ -144,9 +168,11 @@ namespace MoldStress
                         (used.Count == 0 ? "(none)" : string.Join(", ", used.ToArray())));
                     say("  MoldStress only recognises its own polymer rows: " +
                         string.Join(", ", Polymers.All.Select(q => q.Name).ToArray()) + ".");
-                    say("  To analyse an element: run -writecatalog once, add MOLDSTRESS to");
-                    say("  the system's Material Catalogs, set the element's glass to one of");
-                    say("  the rows above, and press the ribbon button again.");
+                    say("  Materials it can CONVERT automatically: PMMA, ACRYLIC, POLYCARB,");
+                    say("  POLYSTYR, ZEONEX 480R, TOPAS 6017 - name an element's glass one of");
+                    say("  those and press the button again: the system is then saved as a");
+                    say("  -MoldStress copy, the catalogue attached, and the materials");
+                    say("  replaced there. The original file is never modified.");
                     return finish(NothingApplied);
                 }
 
@@ -414,6 +440,10 @@ namespace MoldStress
                 }
                 else
                 {
+                    if (replaced > 0 && !double.IsNaN(originalWfe))
+                        say(string.Format(CultureInfo.InvariantCulture,
+                            "    original materials         {0:F6} waves RMS (before substitution)",
+                            originalWfe));
                     say(string.Format(CultureInfo.InvariantCulture,
                         "    baseline                   {0:F6} waves RMS", baseWfe));
                     say(string.Format(CultureInfo.InvariantCulture,
