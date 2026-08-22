@@ -428,14 +428,18 @@ file that owns the question before writing a conclusion in its domain.**
   | PC | **+64.6** | +72.0 |
 
   **For PMMA the assumed N-BK7 split is wrong by a factor of 37 and in sign; for
-  polycarbonate it lands within 12%.** So the assumption is refuted as a general
-  method and happens to be good for the one polymer two reference cases use — and 12%
-  is luck, not validation. Applied to a COC or COP grade it has no more reason to hold
-  than it had for PMMA. **Not adopted**, because the glassy difference now has three
-  disagreeing sources for PMMA (−4.5, 4.6 unsigned, −1.2 Br) and two for PC (72–82 vs
-  Waxler's 39.2), and taking Waxler wholesale would push PC outside the [60, 95] band
-  this model's own self-test enforces. Which source wins is a judgement about grade and
-  era, recorded in `VALIDATION-SOURCES.md` rather than made silently.
+  polycarbonate it lands within 12%.** So the splitting method is refuted, and happens
+  to be good for the one polymer two reference cases use — 12% is luck, not
+  validation, and applied to a COC or COP grade it has no more reason to hold than it
+  had for PMMA.
+
+  **The measured values are NOT adopted, and the reason is grade rather than doubt**
+  (decided 2026-08-22). Plexiglas 55 and Lexan are 1979 general-purpose plastics; these
+  rows describe optical grades, so Waxler is recorded as a measurement of a *different
+  material* and the optical-grade values stand. **But the grade caveat does not rescue
+  the split:** `q11 + 2·q12` in this model is not a measurement of any grade — it is a
+  glass's proportion applied to a polymer. A different grade can move a magnitude; it
+  cannot flip the sign of a hydrostatic response.
 - **The pressure-vitrification term applies the stress-optical rule ~12x beyond its
   measured ceiling.** Luap, Karlina, Schweizer & Venerus, *Rheol. Acta* (2005) find the
   rule holds for monodisperse PS melts to a critical stress of about 2.7 MPa and fails

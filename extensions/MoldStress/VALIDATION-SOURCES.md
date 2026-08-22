@@ -794,11 +794,23 @@ actually use. Both halves matter: the 12% is luck, not validation, and the same
 assumption applied to a COC or COP grade has no reason to be any better than it was
 for PMMA.
 
-**NOT ADOPTED, and the reason is a three-way disagreement rather than caution.** For
-PMMA the glassy difference now has three values: -4.5 Br (Aston polymer-optical-fibre,
-this model's current source), 4.6 unsigned (Hu & Xue 2025, Table 3), and -1.2 Br
-(Waxler, here). For PC: 72-82 Br standard photoelastic literature against Waxler's
-39.2 Br for 1979 Lexan. Adopting Waxler wholesale would move PC's `K_glass` outside
-the band this model's own self-test enforces, [60, 95]. Which source wins is a
-judgement about grade and era, not an arithmetic fix, and it is recorded here rather
-than made silently.
+**NOT ADOPTED - DECIDED 2026-08-22, and the reason is GRADE, not doubt.** Plexiglas 55
+and Lexan are 1979 general-purpose plastics; this model's rows describe optical
+grades. Waxler is therefore recorded as a **general-purpose measurement of a different
+material**, not a competing measurement of the same one, and the optical-grade values
+stay: PC keeps 72 Br from the photoelasticity literature, PMMA keeps -4.5 Br from the
+Aston fibre work. That also dissolves what looked like a three-way disagreement for
+PMMA - -4.5 Aston, 4.6 unsigned Hu & Xue, -1.2 Waxler - into three numbers for three
+different acrylics, only two of which are optical.
+
+**BUT THE GRADE CAVEAT DOES NOT RESCUE THE SPLIT, and that is what the purchase
+bought.** The model's `q11 + 2*q12` is not a measurement of any grade - it is N-BK7's
+proportion applied to a polymer. So the PMMA comparison is not two grades disagreeing
+at +77.7 against -2.1; it is an ASSUMPTION refuted by a measurement, by a factor of 37
+and in sign. A grade difference can plausibly move a magnitude. It cannot flip the
+sign of a hydrostatic response, and there is no grade of acrylic for which a glass's
+proportion is the right answer.
+
+**What survives is exactly what the sweep set out to learn:** the splitting METHOD is
+refuted, the optical-grade DIFFERENCES are unchanged, and polycarbonate's 12%
+agreement is luck that a different grade makes no less lucky.
