@@ -377,6 +377,74 @@ file that owns the question before writing a conclusion in its domain.**
 
 #### Open
 
+- **The frozen-in thermal ORIENTATION channel is wired as of 2026-08-21, opt-in via
+  `-thermal-orientation`, and it computes identically zero.** That is a finding, not
+  a defect in the wiring. `ThermalProfileIncremental` accumulates stress only in
+  nodes already below Tg, and a node's freeze time is by definition when it crossed
+  Tg — so every node's stress history over `[0, tFreeze]` is empty, while optical
+  memory only builds *before* vitrification. **The two windows are disjoint by
+  construction**, and the channel returns 0 at 0 of 161 nodes on case 4 with the
+  grade's measured optical memory present and its cooling history in hand.
+  The mechanism needs a stress acting *during* vitrification — the melt-side cooling
+  stress the source describes — which this model does not compute. No parameter and
+  no better τ(T) changes that.
+  Two further limits, either of which would bite next: only **polycarbonate** carries
+  measured optical memory, so cases 1 and 2 cannot use the channel at all; and the
+  retention rises 0.05→0.95 between 138 °C and 149 °C while the measured τ(T) is
+  stated valid only above ~148 °C — 10 of those 11 degrees are outside it, in a known
+  direction. It is off by default for that reason. It also feeds **out-of-plane
+  only**, since cooling orientation is equibiaxial in the plane, so it could never
+  have closed case 2's in-plane clause. See `ct-reachability.py`, `tau-measured-pc.py`.
+
+- **The K11/K12 split is assumed for every polymer, including the measured one.**
+  What the literature measures is the DIFFERENCE, because that is what a polariscope
+  sees; the individual values are split in N-BK7's proportion. Measured consequence:
+  **retardance is unaffected** — it rides only on the difference and no choice of
+  split moves it — but the **isotropic index shift spans a factor of 21** across
+  plausible splits, and that is the term the density channel is delivered through.
+  Both halves are asserted in `-selftest`.
+
+- **The pressure-vitrification term applies the stress-optical rule ~12x beyond its
+  measured ceiling.** Luap, Karlina, Schweizer & Venerus, *Rheol. Acta* (2005) find the
+  rule holds for monodisperse PS melts to a critical stress of about 2.7 MPa and fails
+  above it, polydispersity lowering that ceiling; the term runs at a deviatoric stress
+  of ~33 MPa. It is **off by default** (`-pressure-vitrification`) and already fails a
+  registered clause when enabled, so this is a documented experiment rather than a
+  shipped defect — but it was recorded only in `GOALS.md` and a code docstring until
+  2026-08-21, and belongs here.
+
+- **Case 2 is ~3.6x low on its in-plane peak, and no single input closes that gap
+  while staying inside its own published bounds** (measured 2026-08-21, before any
+  tuning pass). Gate width — the case's one unsourced input — passes clause (a) only
+  over 4–8 mm, and across that whole window the wall shear stress runs 1.64–3.28 MPa
+  against published amorphous maxima of 0.25–0.50 MPa; the settings closest to
+  physical shear fail the clause worst. The stress-optical coefficient would have to
+  reach 6040 Br against its own published band of [900, 2500]. A hundredfold increase
+  in relaxation time buys +12%. `peak/ceiling` sits at 0.209 and moves only 0.10–0.25
+  across a 14x range of fill time, 100x of relaxation time, 7x of gate width and 8x of
+  grid — so the shortfall is architectural, not an input error. **The deficit is SHAPE,
+  not magnitude:** the model's peak dn is 3.646e-3 against the published 3.680e-3
+  (**0.991x**) while its gapwise mean is 0.281x — it puts nearly the right orientation
+  at the wall and almost none through the middle, a factor of 262 across the gap. The
+  comparison itself is sound: 0 sign changes over 101 stations x 161 nodes, uniform
+  nodes spanning the full thickness, so the clause's quantity is the fringe count's
+  quantity. That shape is what a missing frozen-in thermal **orientation** channel
+  would leave, which two other cases already implicate. **Nothing was tuned:**
+  6 mm would pass, and adopting it would be fitting a criterion registered in advance
+  to prevent exactly that. It is grid-converged on this clause (0.2% from nz 161 to
+  321); the earlier "not grid-converged" note predates the time-grid fix.
+
+- **The flow law is a recognised but dated simplification** (shear-stress-driven with
+  a Maxwell memory, Kamal & Tan-era) against a field that has used full viscoelastic
+  tensors since Baaijens 1991. Packing-stage flow orientation is not modelled.
+
+- **PMMA is the least trustworthy row** in the material table — its stress-optical
+  coefficient changes sign near 144 C while one constant is carried across it.
+
+- **Needs Bob:** click the ribbon entry once in the GUI. Everything here ran headless.
+
+#### Closed recently, kept because the reasoning is the useful part
+
 - **The sag is read in full as of 2026-08-20** — base radius, conic, and even or odd
   aspheric terms, in the standard form and the same one the sibling `AthermalScan`
   evaluates against this API. It reaches the cavity thickness, the parting line and
@@ -401,6 +469,7 @@ file that owns the question before writing a conclusion in its domain.**
   the wall in the middle of the aperture, where a sphere never can; that pinch is now
   scanned for, reported, and refused when it closes, but it is the regime the
   Hele-Shaw gapwise assumption is least happy in.
+
 - **`RejectFlagsNotReadBy` is wired into ALL TEN modes as of 2026-08-21.** Each mode
   publishes the flags it reads, and the self-test derives the set it must refuse by
   subtracting that list from the flag registries — 32 to 58 flags per mode, none
@@ -411,63 +480,13 @@ file that owns the question before writing a conclusion in its domain.**
   flat read-list cannot see a **conditional** read — `-ejecttime` is read only
   inside the `-adhered` branch — so that one is guarded by hand; any other
   conditional read is still unprotected.
+
 - **Exit codes distinguish three outcomes of a `-run`, as of 2026-08-21.** 0 every
   element applied; **66** some applied and some refused, where the before/after is a
   real measurement of the system as LOADED and not of the part; **65** nothing
   applied, where no change is reported at all. 64 stays a usage error. The refused
   elements are named with their materials, and the qualification is printed ABOVE the
   number it qualifies.
-- **The K11/K12 split is assumed for every polymer, including the measured one.**
-  What the literature measures is the DIFFERENCE, because that is what a polariscope
-  sees; the individual values are split in N-BK7's proportion. Measured consequence:
-  **retardance is unaffected** — it rides only on the difference and no choice of
-  split moves it — but the **isotropic index shift spans a factor of 21** across
-  plausible splits, and that is the term the density channel is delivered through.
-  Both halves are asserted in `-selftest`.
-- **Case 2 is ~3.6x low on its in-plane peak, and no single input closes that gap
-  while staying inside its own published bounds** (measured 2026-08-21, before any
-  tuning pass). Gate width — the case's one unsourced input — passes clause (a) only
-  over 4–8 mm, and across that whole window the wall shear stress runs 1.64–3.28 MPa
-  against published amorphous maxima of 0.25–0.50 MPa; the settings closest to
-  physical shear fail the clause worst. The stress-optical coefficient would have to
-  reach 6040 Br against its own published band of [900, 2500]. A hundredfold increase
-  in relaxation time buys +12%. `peak/ceiling` sits at 0.209 and moves only 0.10–0.25
-  across a 14x range of fill time, 100x of relaxation time, 7x of gate width and 8x of
-  grid — so the shortfall is architectural, not an input error. **The deficit is SHAPE,
-  not magnitude:** the model's peak dn is 3.646e-3 against the published 3.680e-3
-  (**0.991x**) while its gapwise mean is 0.281x — it puts nearly the right orientation
-  at the wall and almost none through the middle, a factor of 262 across the gap. The
-  comparison itself is sound: 0 sign changes over 101 stations x 161 nodes, uniform
-  nodes spanning the full thickness, so the clause's quantity is the fringe count's
-  quantity. That shape is what a missing frozen-in thermal **orientation** channel
-  would leave, which two other cases already implicate. **Nothing was tuned:**
-  6 mm would pass, and adopting it would be fitting a criterion registered in advance
-  to prevent exactly that. It is grid-converged on this clause (0.2% from nz 161 to
-  321); the earlier "not grid-converged" note predates the time-grid fix.
-- **The frozen-in thermal ORIENTATION channel is wired as of 2026-08-21, opt-in via
-  `-thermal-orientation`, and it computes identically zero.** That is a finding, not
-  a defect in the wiring. `ThermalProfileIncremental` accumulates stress only in
-  nodes already below Tg, and a node's freeze time is by definition when it crossed
-  Tg — so every node's stress history over `[0, tFreeze]` is empty, while optical
-  memory only builds *before* vitrification. **The two windows are disjoint by
-  construction**, and the channel returns 0 at 0 of 161 nodes on case 4 with the
-  grade's measured optical memory present and its cooling history in hand.
-  The mechanism needs a stress acting *during* vitrification — the melt-side cooling
-  stress the source describes — which this model does not compute. No parameter and
-  no better τ(T) changes that.
-  Two further limits, either of which would bite next: only **polycarbonate** carries
-  measured optical memory, so cases 1 and 2 cannot use the channel at all; and the
-  retention rises 0.05→0.95 between 138 °C and 149 °C while the measured τ(T) is
-  stated valid only above ~148 °C — 10 of those 11 degrees are outside it, in a known
-  direction. It is off by default for that reason. It also feeds **out-of-plane
-  only**, since cooling orientation is equibiaxial in the plane, so it could never
-  have closed case 2's in-plane clause. See `ct-reachability.py`, `tau-measured-pc.py`.
-- **The flow law is a recognised but dated simplification** (shear-stress-driven with
-  a Maxwell memory, Kamal & Tan-era) against a field that has used full viscoelastic
-  tensors since Baaijens 1991. Packing-stage flow orientation is not modelled.
-- **PMMA is the least trustworthy row** in the material table — its stress-optical
-  coefficient changes sign near 144 C while one constant is carried across it.
-- **Needs Bob:** click the ribbon entry once in the GUI. Everything here ran headless.
 
 ### CryoGlass
 
