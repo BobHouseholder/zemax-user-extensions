@@ -433,6 +433,16 @@ file that owns the question before writing a conclusion in its domain.**
   validation, and applied to a COC or COP grade it has no more reason to hold than it
   had for PMMA.
 
+  **The consequence is now reported at the point of use** (2026-08-22). `StarFiles`
+  converts the density index shift into an equivalent hydrostatic stress by *dividing*
+  by `K11 + 2·K12` and writes that into the STAR file — so the assumption was being
+  exported, not merely held. A `-run` now prints, beside every density figure, that the
+  split is unmeasured for that grade, the span of `K11 + 2·K12` across the splits real
+  polymers have actually been measured at, and the fact that **the retardance is
+  unaffected** because it rides on the measured difference. Every grade in the table
+  reports `SplitMeasured = false`, which is the honest value; setting it true for a
+  grade whose constants have been measured silences the caveat for that grade alone.
+
   **The measured values are NOT adopted, and the reason is grade rather than doubt**
   (decided 2026-08-22). Plexiglas 55 and Lexan are 1979 general-purpose plastics; these
   rows describe optical grades, so Waxler is recorded as a measurement of a *different

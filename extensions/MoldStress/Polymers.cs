@@ -78,6 +78,32 @@ namespace MoldStress
         /// split fails loudly.
         /// </summary>
         public double K11Brewster;          // parallel to stress; see above
+
+        /// <summary>
+        /// Has this grade's K11/K12 SPLIT been measured, as opposed to its
+        /// difference? False for every grade in this table, and that is the
+        /// honest value rather than an oversight.
+        ///
+        /// A polariscope sees only K12 - K11. Splitting it requires an absolute
+        /// index measurement - interferometry under uniaxial AND hydrostatic load
+        /// - and this model splits it in N-BK7's proportion instead. On
+        /// 2026-08-22 that assumption was REFUTED by measurement: Waxler,
+        /// Horowitz and Feldman (Appl. Opt. 18(1) 101, 1979) measured both
+        /// polymers they studied, and the hydrostatic combination K11 + 2*K12
+        /// came out +77.7 Br against this model's -2.1 for an acrylic - a factor
+        /// of 37 AND the opposite sign - and +64.6 against +72.0 for a
+        /// polycarbonate, which is luck rather than agreement.
+        ///
+        /// The consequence is not cosmetic. StarFiles converts the density index
+        /// shift to an equivalent hydrostatic stress by DIVIDING by K11 + 2*K12,
+        /// and writes that into the STAR file. So the density channel inherits
+        /// the assumption, and for a grade whose true split resembles the
+        /// acrylic's it would be exported with the wrong SIGN.
+        ///
+        /// Set this true only when a grade's individual constants have been
+        /// measured for THAT grade, and the run stops warning about it.
+        /// </summary>
+        public bool SplitMeasured;
         public string KSource;
         public bool Provisional;            // true => not measured for this grade
 
@@ -226,6 +252,43 @@ namespace MoldStress
         public double WlfD1PaS, WlfD2K, WlfD3KPerPa, WlfA1, WlfA2K;
 
         public double K12Brewster { get { return K11Brewster + KGlassBrewster; } }
+    }
+
+ internal static class SplitUncertainty
+    {
+        /// <summary>
+        /// K11 values that a real optical polymer has been MEASURED to have, in
+        /// Brewsters, from Waxler et al. (1979) - the only source that has
+        /// measured the split for any polymer. Lexan sits near zero and slightly
+        /// negative; Plexiglas 55 is large and positive. That they differ by 31
+        /// Brewsters is the whole point: there is no shared proportion to borrow.
+        /// </summary>
+        internal static readonly double[] MeasuredK11Brewster = { -4.6, 26.7 };
+
+        /// <summary>
+        /// The span of |K11 + 2*K12| this grade could have, holding its MEASURED
+        /// difference fixed and letting the split range over the values real
+        /// polymers have been measured at, plus the value this model assumes.
+        /// Returns the factor between the extremes - 1.0 would mean the density
+        /// channel does not depend on the split at all.
+        ///
+        /// This is the quantity the run reports, so it is computed here once and
+        /// used by the reporter AND the self-test rather than being swept in two
+        /// places that could drift apart.
+        /// </summary>
+        internal static double IsotropicSpan(Polymer p, out double lo, out double hi)
+        {
+            lo = double.MaxValue; hi = 0.0;
+            double kglass = p.KGlassBrewster;
+            foreach (double k11 in new[] { MeasuredK11Brewster[0], MeasuredK11Brewster[1],
+                                           p.K11Brewster, 0.0 })
+            {
+                double iso = Math.Abs(k11 + 2.0 * (k11 + kglass));
+                lo = Math.Min(lo, iso);
+                hi = Math.Max(hi, iso);
+            }
+            return hi / Math.Max(lo, 1e-12);
+        }
     }
 
     internal static class Polymers

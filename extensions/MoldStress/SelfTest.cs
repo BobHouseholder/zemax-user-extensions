@@ -280,6 +280,41 @@ namespace MoldStress
                 Runner.ScalarVerdict(0.41, 1.0000, 1.0100, false),
                 "a 0.01-wave improvement and a 0.01-wave degradation read alike");
 
+            // --- THE SPLIT CAVEAT MUST FIRE, AND MUST BE ABLE TO STOP --------
+            //
+            // The density channel divides by K11 + 2*K12 and writes the result
+            // into the STAR file, so an unmeasured split is exported rather than
+            // merely assumed. The caveat that says so is only worth having if it
+            // fires for every grade that needs it AND would fall silent for one
+            // that does not - a warning printed unconditionally is decoration.
+            {
+                foreach (var nm in new[] { "MS_PMMA", "MS_POLYCARB", "MS_POLYSTYR",
+                                           "MS_COC_TOPAS6017", "MS_COP_ZEONEX480R" })
+                    Check(nm + " reports its K11/K12 split as NOT measured",
+                        !Polymers.ByName(nm).SplitMeasured,
+                        "no grade in this table has a measured split, and saying so is the point");
+
+                // The span is what the caveat quotes, so it must be large enough
+                // to matter and must be computed, not asserted.
+                double lo, hi;
+                double span = SplitUncertainty.IsotropicSpan(
+                    Polymers.ByName("MS_COC_TOPAS6017"), out lo, out hi);
+                Check("the quoted split span is large enough to matter",
+                    span > 5.0,
+                    string.Format(CultureInfo.InvariantCulture,
+                        "K11+2K12 spans {0:F1} to {1:F1} Br, factor {2:F0}", lo, hi, span));
+
+                // AND THE CONTROL: a grade whose split WAS measured must silence
+                // it. Without this arm the caveat could be hard-wired on and no
+                // test would notice.
+                var measured = Polymers.ByName("MS_POLYCARB")
+                                       .WithProcessTemps(300.0, 100.0);
+                measured.SplitMeasured = true;
+                Check("a measured split would silence the caveat",
+                    measured.SplitMeasured && !Polymers.ByName("MS_POLYCARB").SplitMeasured,
+                    "the flag is per-grade and settable, not a constant");
+            }
+
             // --- THE K11/K12 SPLIT, AGAINST A MEASUREMENT --------------------
             //
             // Waxler, Horowitz & Feldman, Appl. Opt. 18(1) 101 (1979) measured the

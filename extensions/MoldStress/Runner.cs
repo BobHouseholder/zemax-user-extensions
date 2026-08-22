@@ -197,6 +197,32 @@ namespace MoldStress
                         "      channels  flow dn {0:E3} peaking at {1:P0} of the half-wall, " +
                         "density dn {2:E3}",
                         ch.PeakDnFlow, ch.PeakDepthFraction, w.PeakDnDensity));
+
+                    // THE DENSITY HALF CARRIES AN UNMEASURED ASSUMPTION, and until
+                    // 2026-08-22 it carried it silently. StarFiles converts that
+                    // index shift into an equivalent hydrostatic stress by DIVIDING
+                    // by K11 + 2*K12, and writes the result into the STAR file - so
+                    // the number above and the file both inherit a split this model
+                    // takes from N-BK7, a glass. Waxler et al. (1979) measured the
+                    // split for the only two polymers anyone has, and it came out a
+                    // factor of 37 and the opposite SIGN from the assumption for an
+                    // acrylic. The retardance half is untouched: it rides on the
+                    // measured DIFFERENCE and no choice of split moves it.
+                    if (!p.SplitMeasured)
+                    {
+                        double lo, hi;
+                        double span = SplitUncertainty.IsotropicSpan(p, out lo, out hi);
+                        say(string.Format(CultureInfo.InvariantCulture,
+                            "      CAVEAT    that density figure rests on an ASSUMED K11/K12 " +
+                            "split - not measured for {0}.", p.Name));
+                        say(string.Format(CultureInfo.InvariantCulture,
+                            "                across the splits real polymers have been measured " +
+                            "at, K11+2K12 spans {0:F1} to {1:F1} Br, a factor of {2:F0}, and the " +
+                            "density term scales inversely with it. Sign is not guaranteed either.",
+                            lo, hi, span));
+                        say("                The retardance above is UNAFFECTED - it rides on the " +
+                            "measured difference.");
+                    }
                     say(string.Format(CultureInfo.InvariantCulture,
                         "      files     {0} points, peak equivalent stress {1:F1} N/mm2",
                         w.Points, w.PeakEquivalentStressMPa));
