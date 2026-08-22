@@ -280,6 +280,38 @@ namespace MoldStress
                 Runner.ScalarVerdict(0.41, 1.0000, 1.0100, false),
                 "a 0.01-wave improvement and a 0.01-wave degradation read alike");
 
+            // --- THE HOST-LAUNCH DETECTOR, both arms -------------------------
+            //
+            // OpticStudio launches ribbon extensions with -zpid/-zplt/-zsid, a
+            // fact this tool ASSUMED away ("a ribbon launch arrives with no
+            // command line at all") until two silent clicks and a launch log
+            // measured it. The detector must accept the measured triple and
+            // refuse everything a human could plausibly type, because routing a
+            // typo into ribbon mode would run the whole chain on the open system
+            // when the user asked for something else.
+            {
+                Check("the measured OpticStudio launch triple is detected",
+                    Program.IsHostLaunch(new[] { "-zpid={14212}", "-zplt={Extension}", "-zsid={100003}" }),
+                    "the exact argv from launch-log.txt, 2026-08-22 14:53:39Z");
+
+                Check("a single host marker is enough",
+                    Program.IsHostLaunch(new[] { "-zsid={100001}" }),
+                    "future OpticStudio versions may trim the set");
+
+                Check("an empty command line is NOT a host launch",
+                    !Program.IsHostLaunch(new string[0]),
+                    "empty is its own case, handled separately in Main");
+
+                Check("a normal CLI invocation is not a host launch",
+                    !Program.IsHostLaunch(new[] { "-selftest" })
+                    && !Program.IsHostLaunch(new[] { "-run", "-file", "x.zmx" }),
+                    "must stay on the strict CLI path");
+
+                Check("a host marker mixed with anything else is refused",
+                    !Program.IsHostLaunch(new[] { "-zpid={1}", "-run" }),
+                    "a mixed line is a human invocation with a typo");
+            }
+
             // --- THE SPLIT CAVEAT MUST FIRE, AND MUST BE ABLE TO STOP --------
             //
             // The density channel divides by K11 + 2*K12 and writes the result

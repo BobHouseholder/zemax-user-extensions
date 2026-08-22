@@ -52,13 +52,19 @@ namespace MoldStress
                     return 0;
                 }
 
-                // A RIBBON LAUNCH ARRIVES WITH NO COMMAND LINE AT ALL.
-                // OpticStudio offers no way to supply one, so an extension whose
-                // no-argument path prints usage does nothing when its button is
-                // pressed - which is what this one did, while the README
-                // advertised ribbon operation. With no arguments and no mode,
-                // attach to the open system and run the whole chain on it.
-                if (args.Length == 0)
+                // A RIBBON LAUNCH DOES NOT ARRIVE WITH AN EMPTY COMMAND LINE.
+                // This block previously said it did - an assumption, and it cost
+                // two silent clicks on 2026-08-22 before the launch log measured
+                // the truth: OpticStudio passes exactly
+                //
+                //     -zpid={14212} -zplt={Extension} -zsid={100003}
+                //
+                // (its own process id, the launch type, and a session id). Those
+                // arguments sailed past the empty-args test into the
+                // unknown-argument refusal, which printed usage to a console that
+                // does not exist and exited 64. The sibling AthermalScan has
+                // parsed this exact triple as "host launched" all along.
+                if (args.Length == 0 || IsHostLaunch(args))
                     return Runner.Run(new[] { "-ribbon" });
 
                 int badArg = RejectUnknownArgs(args);
@@ -91,6 +97,28 @@ namespace MoldStress
                 Console.Error.WriteLine("MoldStress: " + ex.Message);
                 return 1;
             }
+        }
+
+        /// <summary>
+        /// TRUE when every argument is one of the -zpid / -zplt / -zsid markers
+        /// OpticStudio attaches when IT launches an extension from the ribbon
+        /// (measured 2026-08-22, %TEMP%\moldstress\launch-log.txt; AthermalScan
+        /// documents the same triple). ALL arguments must match: a command line
+        /// that mixes a host marker with anything else is a human invocation
+        /// with a typo, and belongs to the strict CLI path that refuses it.
+        /// </summary>
+        internal static bool IsHostLaunch(string[] args)
+        {
+            if (args == null || args.Length == 0) return false;
+            foreach (var a in args)
+            {
+                string t = (a ?? "").TrimStart('-', '/');
+                bool host = t.StartsWith("zpid", StringComparison.OrdinalIgnoreCase)
+                         || t.StartsWith("zplt", StringComparison.OrdinalIgnoreCase)
+                         || t.StartsWith("zsid", StringComparison.OrdinalIgnoreCase);
+                if (!host) return false;
+            }
+            return true;
         }
 
         /// <summary>The one flag -writecatalog reads. It is `-out`, not
