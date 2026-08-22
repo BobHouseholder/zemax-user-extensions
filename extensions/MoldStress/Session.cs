@@ -283,6 +283,27 @@ namespace MoldStress
             return v;
         }
 
+        /// <summary>Every distinct non-empty material in the LDE, guarded row by
+        /// row like every other reader here. Exists so the no-mouldable-element
+        /// report can say what the lens HAS instead of only what it lacks.</summary>
+        public static List<string> MaterialsInUse(ZOSAPI.IOpticalSystem sys)
+        {
+            var found = new List<string>();
+            try
+            {
+                var lde = sys.LDE;
+                for (int i = 1; i < lde.NumberOfSurfaces - 1; i++)
+                {
+                    string m;
+                    try { m = (lde.GetSurfaceAt(i).Material ?? "").Trim(); }
+                    catch { continue; }
+                    if (m.Length > 0 && !found.Contains(m)) found.Add(m);
+                }
+            }
+            catch { }
+            return found;
+        }
+
         public static void Describe(MouldedElement e)
         {
             Console.WriteLine(string.Format(

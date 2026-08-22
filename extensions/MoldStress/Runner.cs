@@ -44,7 +44,33 @@ namespace MoldStress
             if (badForMode != 0) return badForMode;
 
             Session.Locate();
-            return RunConnected(args);
+
+            // A RIBBON RUN HAS NO CONSOLE, so an exception that reaches Main's
+            // catch prints to a stderr nobody can see and the click appears to do
+            // nothing - which is exactly what the first real ribbon click did on
+            // 2026-08-22. Every failure a ribbon run can produce must end in an
+            // OPENED report, including the ones thrown before an output directory
+            // is known; those go to %TEMP%\moldstress.
+            if (!Program.Has(args, "-ribbon")) return RunConnected(args);
+            try { return RunConnected(args); }
+            catch (Exception ex)
+            {
+                string dir = Path.Combine(Path.GetTempPath(), "moldstress");
+                string rep = Path.Combine(dir, "moldstress_report.txt");
+                try
+                {
+                    Directory.CreateDirectory(dir);
+                    File.WriteAllText(rep,
+                        "MoldStress could not run:\r\n\r\n  " + ex.Message + "\r\n\r\n" +
+                        "If OpticStudio was not waiting for an extension, start this from\r\n" +
+                        "the Programming ribbon. If the message names the licence, note that\r\n" +
+                        "STAR (and so this tool) requires an Enterprise-level licence.\r\n");
+                    System.Diagnostics.Process.Start(
+                        new System.Diagnostics.ProcessStartInfo(rep) { UseShellExecute = true });
+                }
+                catch { }
+                return 1;
+            }
         }
 
         [System.Runtime.CompilerServices.MethodImpl(
@@ -73,6 +99,26 @@ namespace MoldStress
                             ? Path.Combine(Path.GetTempPath(), "x.zmx") : sys.SystemFile),
                         "moldstress");
 
+                // EVERY return below goes through this, so a refusal is exactly
+                // as visible as a success. Before 2026-08-22 the report was
+                // written only on the one path that reached the end, and the
+                // first real ribbon click took a path that did not.
+                Func<int, int> finish = code =>
+                {
+                    try
+                    {
+                        Directory.CreateDirectory(outDir);
+                        string rep = Path.Combine(outDir, "moldstress_report.txt");
+                        File.WriteAllText(rep, log.ToString());
+                        Console.WriteLine("  report: " + rep);
+                        if (Program.Has(args, "-ribbon") && !Program.Has(args, "-quiet"))
+                            System.Diagnostics.Process.Start(
+                                new System.Diagnostics.ProcessStartInfo(rep) { UseShellExecute = true });
+                    }
+                    catch { }
+                    return code;
+                };
+
                 var extra = (Program.Value(args, "-materials") ?? "")
                     .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
                 var els = Session.FindElements(sys, extra);
@@ -85,7 +131,22 @@ namespace MoldStress
                     "  process: fill {0:F2} s, pack {1:F1} MPa for {2:F1} s",
                     proc.FillTimeS, proc.PackPressureMPa, proc.PackTimeS));
                 say("");
-                if (els.Count == 0) { say("  no mouldable element found."); return 0; }
+                if (els.Count == 0)
+                {
+                    // The likeliest first experience of this tool: a click on a
+                    // lens whose materials are ordinary glasses. Saying only "no
+                    // mouldable element" names the lack; the fix needs the list.
+                    say("  NO MOULDABLE ELEMENT FOUND, so nothing was analysed.");
+                    var used = Session.MaterialsInUse(sys);
+                    say("  this system's materials: " +
+                        (used.Count == 0 ? "(none)" : string.Join(", ", used.ToArray())));
+                    say("  MoldStress only recognises its own polymer rows: " +
+                        string.Join(", ", Polymers.All.Select(q => q.Name).ToArray()) + ".");
+                    say("  To analyse an element: run -writecatalog once, add MOLDSTRESS to");
+                    say("  the system's Material Catalogs, set the element's glass to one of");
+                    say("  the rows above, and press the ribbon button again.");
+                    return finish(NothingApplied);
+                }
 
                 // --- NON-SPHERICAL SURFACES ARE REFUSED -----------------------
                 //
@@ -120,7 +181,7 @@ namespace MoldStress
                         say("  freeze history and the geometry written into STAR. Pass");
                         say("  -allow-nonspherical to proceed anyway if you know the departure");
                         say("  is negligible for your part.");
-                        return Program.UsageError;
+                        return finish(Program.UsageError);
                     }
                     say("");
                 }
@@ -137,7 +198,7 @@ namespace MoldStress
                     say(string.Format(CultureInfo.InvariantCulture,
                         "  REFUSED: surfaces {0}-{1} leave no wall - thickness {2:F4} mm " +
                         "at r = {3:F3} mm.", x.FrontSurface, x.BackSurface, hMin, rMin));
-                    return Program.UsageError;
+                    return finish(Program.UsageError);
                 }
 
                 // --- baseline, measured before anything is loaded --------------
@@ -406,25 +467,10 @@ namespace MoldStress
                     say("  between On and Difference, which shows this change directly.");
                 }
 
-                string report = Path.Combine(outDir, "moldstress_report.txt");
-                Directory.CreateDirectory(outDir);
-                File.WriteAllText(report, log.ToString());
-                Console.WriteLine("  report: " + report);
-
-                // The console window closes with the process on a ribbon run, so
-                // the report is opened for the user - the convention every other
-                // extension in this repo follows. -quiet suppresses it.
-                if (Program.Has(args, "-ribbon") && !Program.Has(args, "-quiet"))
-                {
-                    try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(report) { UseShellExecute = true }); }
-                    catch { }
-                }
-                // Three outcomes, three codes. A partial run is not a failure -
-                // it did everything it could and its files are good - but it is
-                // not a complete answer either, and a script that treats exit 0
-                // as "the part was analysed" would be wrong.
-                if (deltaRefused) return NothingApplied;
-                return partial != null ? PartialApplication : 0;
+                // Three outcomes, three codes; the report write and the ribbon
+                // open both live in finish(), shared with every refusal above.
+                if (deltaRefused) return finish(NothingApplied);
+                return finish(partial != null ? PartialApplication : 0);
             }
             finally
             {
