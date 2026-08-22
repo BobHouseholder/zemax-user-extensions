@@ -692,8 +692,12 @@ profile is the opposite of the aspheric paper priced on 2026-08-21 and refused: 
 was a five-page design-method paper whose named experimental quantity was shrinkage,
 with birefringence a by-product. This is a four-page NBS measurement paper whose
 entire subject IS the constants, listed in its own abstract. The risk that it does
-not contain what is needed is close to zero. **Price not obtained** - the Optica
-page did not render on either route tried; get it before buying.
+not contain what is needed is close to zero.
+
+**PRICED 2026-08-22: USD $35 non-member, USD $15 Optica member.** Quoted verbatim
+from Optica's own Librarian Resource Center - "The cost is $35USD for non-Optica
+members and $15USD for Optica members" - after the article page itself refused to
+render a price on two routes. Whether the member rate applies is Bob's to say.
 
 What it would settle: the model splits every polymer's K in N-BK7's proportion, and
 the measured consequence is already recorded - retardance is invariant, the isotropic

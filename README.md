@@ -420,8 +420,8 @@ file that owns the question before writing a conclusion in its domain.**
   it has been found.** Waxler, Horowitz & Feldman, *Appl. Opt.* **18**(1) 101 (1979)
   is a four-page NBS measurement paper whose abstract names `q11, q12, p11, p12` for
   **Plexiglas 55 (PMMA) and Lexan (PC)** as its deliverables — precisely the
-  individual constants this model splits by analogy. Closed access, price not yet
-  obtained, and **recommended to buy**: unlike the aspheric paper refused on
+  individual constants this model splits by analogy. Closed access, **USD $35
+  non-member / $15 Optica member**, and **recommended to buy**: unlike the aspheric paper refused on
   2026-08-21, the quantities needed are the paper's own subject rather than a
   by-product. A retrieval that returned its Table I is being treated as fabricated —
   the same response called the article inaccessible and no citing source reproduces
