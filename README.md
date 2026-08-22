@@ -400,17 +400,22 @@ file that owns the question before writing a conclusion in its domain.**
   channel at all; and the retention transition sits 10 of its 11 degrees below the
   measured τ(T)'s stated validity floor. It also feeds **out-of-plane only**, since
   cooling orientation is equibiaxial in the plane.
-- **`λ = η₀/G` is the most suspicious quantity in the model, and this repo has already
-  measured it wrong.** `tau-measured-pc.py` puts it **1e6 to 1e7× longer** than
-  polycarbonate's real optical retardation time near Tg — a melt viscosity divided by a
-  plateau modulus, evaluated far below the range it was fitted in. It is not a corner:
-  the **flow channel's Maxwell memory** runs on it, and so does the **melt-side cooling
-  stress** added 2026-08-21. Both of the model's two largest remaining deficits sit
-  downstream of it. Note the direction differs by channel — too long means too little
-  relaxation, so the melt-side stress is over-stated while the flow memory is too
-  retentive — so it cannot be corrected by one scale factor, and `-lambdascale` moving
-  the answer by only 12% says the model is not simply mis-scaled here either.
+- **`λ = η₀/G` is measurably wrong and measurably NOT the lever.** `tau-measured-pc.py`
+  puts it **1e6–1e7× longer** than polycarbonate's real optical retardation time near
+  Tg — a melt viscosity divided by a plateau modulus, evaluated far below the range it
+  was fitted in. Both remaining deficits sit downstream of it, so it looked like the
+  next thing to fix. **Swept 2026-08-22 across ten orders of magnitude and it is not:**
 
+  | `-lambdascale` | 1e-6 | 1e-4 | 1e-2 | 1 | 1e2 | 1e4 |
+  |---|---|---|---|---|---|---|
+  | case 2 in-plane peak | 0.26x | 0.26x | 0.26x | **0.28x** | 0.31x | 0.32x |
+
+  A factor of 1.22 for a factor of 1e10 in the input — saturated at both ends. And the
+  correction runs the wrong way: the measurement says λ is too LONG, so the fix is
+  SHORTER, which takes case 2 from 0.28x to 0.26x. Fixing λ makes the failing case
+  worse. It remains wrong, and it still matters to the melt-side cooling stress, whose
+  magnitude it over-states — but it is not what is holding either registered deficit
+  down, and no work on it should be started expecting that.
 - **The K11/K12 split is assumed for every polymer, including the measured one.**
   What the literature measures is the DIFFERENCE, because that is what a polariscope
   sees; the individual values are split in N-BK7's proportion. Measured consequence:
