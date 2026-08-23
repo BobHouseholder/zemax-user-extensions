@@ -280,6 +280,37 @@ namespace MoldStress
                 Runner.ScalarVerdict(0.41, 1.0000, 1.0100, false),
                 "a 0.01-wave improvement and a 0.01-wave degradation read alike");
 
+            // --- THE SAMPLING-ADEQUACY NUMBER, both arms ---------------------
+            //
+            // The number the run prints must MOVE when the grid degrades and
+            // read zero on a field any grid captures - otherwise it decorates.
+            {
+                var rs = new double[201];
+                var curved = new double[201];
+                var flat = new double[201];
+                for (int i = 0; i <= 200; i++)
+                {
+                    rs[i] = i / 200.0 * 15.0;
+                    curved[i] = Math.Sin(rs[i] / 15.0 * Math.PI);   // one arch
+                    flat[i] = 3.0;
+                }
+                var coarse = new double[] { 0.0, 7.5, 15.0 };
+                var fine = new double[16];
+                for (int i = 0; i < 16; i++) fine[i] = 15.0 * i / 15.0;
+
+                double eCoarse = StarFiles.SamplingErrorPct(rs, curved, coarse);
+                double eFine = StarFiles.SamplingErrorPct(rs, curved, fine);
+                Check("a coarse grid on a curved field reports a LARGE error",
+                    eCoarse > 10.0, string.Format(CultureInfo.InvariantCulture,
+                        "{0:F1}% for 3 rings over one arch", eCoarse));
+                Check("a fine grid reports a small one - the number MOVES",
+                    eFine < 1.0 && eFine < eCoarse / 10.0,
+                    string.Format(CultureInfo.InvariantCulture,
+                        "{0:F2}% for 16 rings against {1:F1}% for 3", eFine, eCoarse));
+                SelfTest.Near("a uniform field reads exactly zero",
+                    StarFiles.SamplingErrorPct(rs, flat, coarse), 0.0, 1e-12);
+            }
+
             // --- FIELD-GRADED RING RADII, both arms --------------------------
             //
             // The metric is half geometry, half field change, so the two limits

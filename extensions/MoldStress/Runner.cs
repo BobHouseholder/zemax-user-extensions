@@ -375,6 +375,11 @@ namespace MoldStress
                         "      files     {0} stress points, {1} index points, " +
                         "peak equivalent stress {2:F1} N/mm2",
                         w.Points, w.IndexPoints, w.PeakEquivalentStressMPa));
+                    say(string.Format(CultureInfo.InvariantCulture,
+                        "      sampling  ring grid captures the density field to {0:F2}% of " +
+                        "its span (radial midpoint test{1})",
+                        w.SamplingErrorPct,
+                        w.SamplingErrorPct == 0.0 ? "; field is uniform" : ""));
 
                     // --- load it -----------------------------------------------
                     var surf = sys.LDE.GetSurfaceAt(e.FrontSurface);

@@ -33,6 +33,12 @@ namespace MoldStress
         {
             public string StressPath, IndexPath;
             public int IndexPoints;
+
+            /// <summary>Worst radial-midpoint interpolation error of the written
+            /// ring grid, as a percentage of the field's span; 0 for a uniform
+            /// field. The number that answers "is this sampling good?" with a
+            /// measurement instead of a judgment.</summary>
+            public double SamplingErrorPct;
             public int Points;
             public double PeakEquivalentStressMPa;
             public double PeakDnFlow;
@@ -65,6 +71,38 @@ namespace MoldStress
         /// than a callback, so it is pure and the self-test can feed it analytic
         /// fields.
         /// </summary>
+        /// <summary>
+        /// How badly linear interpolation between the chosen rings misses the
+        /// field at ring midpoints, as a percentage of the field's span. The
+        /// fine samples stand in for truth; the rings' own values are read off
+        /// the same samples, so the number measures the RING PLACEMENT, not the
+        /// sampler. Returns 0 for a field with no span - a uniform field is
+        /// captured perfectly by any grid, and reporting NaN there would read
+        /// as a defect.
+        /// </summary>
+        public static double SamplingErrorPct(double[] rFine, double[] vFine, double[] ringR)
+        {
+            Func<double, double> f = r =>
+            {
+                int i0, i1; double t;
+                StationLerp(rFine, r, out i0, out i1, out t);
+                return Lerp(vFine[i0], vFine[i1], t);
+            };
+            double lo = double.MaxValue, hi = -double.MaxValue;
+            foreach (double v in vFine) { lo = Math.Min(lo, v); hi = Math.Max(hi, v); }
+            double span = hi - lo;
+            if (span <= 0) return 0.0;
+
+            double worst = 0.0;
+            for (int i = 1; i < ringR.Length; i++)
+            {
+                double mid = 0.5 * (ringR[i - 1] + ringR[i]);
+                double approx = 0.5 * (f(ringR[i - 1]) + f(ringR[i]));
+                worst = Math.Max(worst, Math.Abs(f(mid) - approx));
+            }
+            return 100.0 * worst / span;
+        }
+
         public static double[] GradedRadii(double[] rSample, double[] vSample, int nRings)
         {
             int m = rSample.Length;
@@ -208,6 +246,7 @@ namespace MoldStress
                 vFine[q] = worst;
             }
             var ringR = GradedRadii(rFine, vFine, nRadial);
+            w.SamplingErrorPct = SamplingErrorPct(rFine, vFine, ringR);
 
             for (int ir = 0; ir < nRadial; ir++)
             {
