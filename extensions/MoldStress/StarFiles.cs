@@ -32,6 +32,7 @@ namespace MoldStress
         public sealed class Written
         {
             public string StressPath, IndexPath;
+            public int IndexPoints;
             public int Points;
             public double PeakEquivalentStressMPa;
             public double PeakDnFlow;
@@ -60,7 +61,7 @@ namespace MoldStress
         public static Written Write(MouldedElement e, Polymer p, Channels c,
                                     FillField fill, FreezeHistory freeze,
                                     string directory, int nRadial = 17, int nAzimuth = 24,
-                                    int nzExport = 0)
+                                    int nzExport = 0, int indexZPlanes = 0)
         {
             var ci = CultureInfo.InvariantCulture;
             var stress = new StringBuilder();
@@ -121,6 +122,21 @@ namespace MoldStress
             // whenever the two radii differ.
             double rExport = e.ExportSemiDiameterMm > 0
                 ? Math.Max(e.ExportSemiDiameterMm, e.SemiDiameterMm) : e.SemiDiameterMm;
+            // THE INDEX FILE'S OWN z-GRID, in index-only mode. The density
+            // index field is CONSTANT through the thickness by construction - it
+            // is a per-station pressure term - so carrying it at 41 wall-
+            // clustered depths is pure redundancy: the same number 41 times per
+            // column, a 10x bigger file, a slower Refit, and a loader view that
+            // IMPLIES thickness structure the field does not have. A few planes
+            // keep the fitted volume covering the lens; the wall clustering
+            // stays for the STRESS file, whose flow-birefringence field really
+            // does peak at 95% of the half-wall.
+            var indexKs = new System.Collections.Generic.HashSet<int>();
+            if (indexZPlanes > 1 && indexZPlanes < zIdx.Length)
+                for (int j = 0; j < indexZPlanes; j++)
+                    indexKs.Add(zIdx[(int)Math.Round(
+                        j * (zIdx.Length - 1) / (double)(indexZPlanes - 1))]);
+
             for (int ir = 0; ir < nRadial; ir++)
             {
                 double r = rExport * ir / (nRadial - 1.0);
@@ -183,8 +199,12 @@ namespace MoldStress
                             x, y, zLocal, sxx + sigH, syy + sigH, sigH, sxy, 0.0, 0.0));
 
                         double nHere = p.Nd + c.DnDensity[iS, k];
-                        index.AppendLine(string.Format(ci,
-                            "{0:E9} {1:E9} {2:E9} {3:E9}", x, y, zLocal, nHere));
+                        if (indexKs.Count == 0 || indexKs.Contains(k))
+                        {
+                            index.AppendLine(string.Format(ci,
+                                "{0:E9} {1:E9} {2:E9} {3:E9}", x, y, zLocal, nHere));
+                            w.IndexPoints++;
+                        }
 
                         w.Points++;
                         w.PeakEquivalentStressMPa = Math.Max(w.PeakEquivalentStressMPa, Math.Abs(sigEq));

@@ -327,7 +327,8 @@ namespace MoldStress
                     var freeze = FreezeHistory.Build(Math.Max(e.EdgeThicknessMm, 0.2), p, proc,
                                                      nzPhys, 10 * nzPhys);
                     var ch = Channels.Build(e, p, proc, fill, freeze);
-                    var w = StarFiles.Write(e, p, ch, fill, freeze, outDir, 17, 24, nzExport);
+                    var w = StarFiles.Write(e, p, ch, fill, freeze, outDir, 17, 24, nzExport,
+                                            indexOnly ? 4 : 0);
                     written.Add(w);
 
                     Session.Describe(e);
@@ -371,8 +372,9 @@ namespace MoldStress
                             "measured difference.");
                     }
                     say(string.Format(CultureInfo.InvariantCulture,
-                        "      files     {0} points, peak equivalent stress {1:F1} N/mm2",
-                        w.Points, w.PeakEquivalentStressMPa));
+                        "      files     {0} stress points, {1} index points, " +
+                        "peak equivalent stress {2:F1} N/mm2",
+                        w.Points, w.IndexPoints, w.PeakEquivalentStressMPa));
 
                     // --- load it -----------------------------------------------
                     var surf = sys.LDE.GetSurfaceAt(e.FrontSurface);
