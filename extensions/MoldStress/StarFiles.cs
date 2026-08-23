@@ -52,6 +52,52 @@ namespace MoldStress
         /// see the profile, thick ones stop paying for resolution the field
         /// does not carry.
         /// </summary>
+        /// <summary>
+        /// Ring radii graded by the FIELD rather than spaced uniformly. The
+        /// metric blends geometry and field change half-and-half: uniform-dr
+        /// oversamples the axis region and undersamples the rim, where both the
+        /// gate and the steepest pressure gradient live, while pure equal-dn
+        /// would pile every ring at the gate and leave the flat side of the part
+        /// geometrically unsampled. Endpoints are always included, and a flat
+        /// field degrades gracefully to uniform spacing.
+        ///
+        /// Takes fine SAMPLES of a representative field value per radius rather
+        /// than a callback, so it is pure and the self-test can feed it analytic
+        /// fields.
+        /// </summary>
+        public static double[] GradedRadii(double[] rSample, double[] vSample, int nRings)
+        {
+            int m = rSample.Length;
+            if (nRings < 2 || m < 2) return new[] { rSample[0], rSample[m - 1] };
+            double span = 0.0;
+            for (int i = 1; i < m; i++)
+                span += Math.Abs(vSample[i] - vSample[i - 1]);
+            double R = rSample[m - 1] - rSample[0];
+
+            var cum = new double[m];
+            for (int i = 1; i < m; i++)
+            {
+                double geo = (rSample[i] - rSample[i - 1]) / Math.Max(R, 1e-30);
+                double fld = span > 0
+                    ? Math.Abs(vSample[i] - vSample[i - 1]) / span : 0.0;
+                cum[i] = cum[i - 1] + 0.5 * geo + 0.5 * fld;
+            }
+
+            var radii = new double[nRings];
+            radii[0] = rSample[0];
+            radii[nRings - 1] = rSample[m - 1];
+            int j = 1;
+            for (int q = 1; q < nRings - 1; q++)
+            {
+                double target = cum[m - 1] * q / (double)(nRings - 1);
+                while (j < m - 1 && cum[j] < target) j++;
+                double d = cum[j] - cum[j - 1];
+                double t = d > 0 ? (target - cum[j - 1]) / d : 0.0;
+                radii[q] = rSample[j - 1] + t * (rSample[j] - rSample[j - 1]);
+            }
+            return radii;
+        }
+
         public static double GrinStepFor(double centreThicknessMm)
         {
             double s = centreThicknessMm / 10.0;
@@ -137,9 +183,35 @@ namespace MoldStress
                     indexKs.Add(zIdx[(int)Math.Round(
                         j * (zIdx.Length - 1) / (double)(indexZPlanes - 1))]);
 
+            // RING RADII GRADED BY THE FIELD (2026-08-22). The representative
+            // value per radius is the worst-over-azimuth |density dn| - the
+            // index-only field, and in full mode still the smooth in-plane
+            // component that varies along the flow path.
+            var rFine = new double[97];
+            var vFine = new double[97];
+            for (int q = 0; q < 97; q++)
+            {
+                rFine[q] = rExport * q / 96.0;
+                double rf = Math.Min(rFine[q], e.SemiDiameterMm);
+                double worst = 0.0;
+                for (int ia = 0; ia < nAzimuth; ia++)
+                {
+                    double th = 2.0 * Math.PI * ia / nAzimuth;
+                    double sq, fxq, fyq;
+                    FlowDirection(e, rf * Math.Cos(th), rf * Math.Sin(th),
+                                  out fxq, out fyq, out sq);
+                    int q0, q1; double qt;
+                    StationLerp(fill.S, sq, out q0, out q1, out qt);
+                    worst = Math.Max(worst,
+                        Math.Abs(Lerp(c.DnDensity[q0, 0], c.DnDensity[q1, 0], qt)));
+                }
+                vFine[q] = worst;
+            }
+            var ringR = GradedRadii(rFine, vFine, nRadial);
+
             for (int ir = 0; ir < nRadial; ir++)
             {
-                double r = rExport * ir / (nRadial - 1.0);
+                double r = ringR[ir];
                 double rField = Math.Min(r, e.SemiDiameterMm);
                 int nAz = ir == 0 ? 1 : nAzimuth;
                 for (int ia = 0; ia < nAz; ia++)

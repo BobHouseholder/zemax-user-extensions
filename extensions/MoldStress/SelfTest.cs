@@ -280,6 +280,44 @@ namespace MoldStress
                 Runner.ScalarVerdict(0.41, 1.0000, 1.0100, false),
                 "a 0.01-wave improvement and a 0.01-wave degradation read alike");
 
+            // --- FIELD-GRADED RING RADII, both arms --------------------------
+            //
+            // The metric is half geometry, half field change, so the two limits
+            // are the arms: a FLAT field must give uniform rings (else the
+            // grading has broken plain coverage), and a STEP field must pull
+            // rings toward the step (else the grading is decoration).
+            {
+                var rs = new double[101];
+                var flat = new double[101];
+                var step = new double[101];
+                for (int i = 0; i <= 100; i++)
+                {
+                    rs[i] = i / 100.0 * 15.0;
+                    flat[i] = 7.0;                          // no field variation
+                    step[i] = rs[i] < 12.0 ? 0.0 : 1.0;     // all change at r=12..15
+                }
+
+                var u = StarFiles.GradedRadii(rs, flat, 6);
+                SelfTest.Near("a flat field grades to uniform rings",
+                    u[1], 3.0, 1e-9);
+                SelfTest.Near("...across the whole span",
+                    u[4], 12.0, 1e-9);
+
+                var g = StarFiles.GradedRadii(rs, step, 6);
+                Check("a step field pulls rings toward the step",
+                    g[3] > 11.0 && g[2] > 7.0,
+                    string.Format(CultureInfo.InvariantCulture,
+                        "rings at {0:F2}, {1:F2}, {2:F2}, {3:F2} for a step at 12",
+                        g[1], g[2], g[3], g[4]));
+                Check("endpoints are always kept",
+                    g[0] == 0.0 && g[5] == 15.0,
+                    "coverage of axis and rim is not negotiable");
+                bool mono = true;
+                for (int i = 1; i < 6; i++) if (g[i] <= g[i - 1]) mono = false;
+                Check("graded radii are strictly increasing",
+                    mono, "a duplicate ring would silently halve the sampling");
+            }
+
             // --- STATION INTERPOLATION at export, both arms ------------------
             //
             // Nearest-node lookup turned the fill solve's smooth 101-station
