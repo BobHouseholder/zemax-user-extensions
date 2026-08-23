@@ -280,6 +280,35 @@ namespace MoldStress
                 Runner.ScalarVerdict(0.41, 1.0000, 1.0100, false),
                 "a 0.01-wave improvement and a 0.01-wave degradation read alike");
 
+            // --- STATION INTERPOLATION at export, both arms ------------------
+            //
+            // Nearest-node lookup turned the fill solve's smooth 101-station
+            // fields into staircases at the ~17 export radii, and the spline fit
+            // reproduced each step edge as spurious gradient. The replacement
+            // must interpolate exactly AND still return exact values at the
+            // stations themselves, or it trades one artifact for another.
+            {
+                var S = new double[] { 0.0, 1.0, 3.0, 6.0 };
+                int a0, a1; double t;
+
+                StarFiles.StationLerp(S, 2.0, out a0, out a1, out t);
+                SelfTest.Near("midway between stations blends at t = 0.5",
+                    StarFiles.Lerp(10.0, 20.0, t), 15.0, 1e-12);
+                Check("...from the bracketing pair",
+                    a0 == 1 && a1 == 2, string.Format("[{0},{1}] t={2:F3}", a0, a1, t));
+
+                StarFiles.StationLerp(S, 3.0, out a0, out a1, out t);
+                SelfTest.Near("a value AT a station is returned exactly",
+                    StarFiles.Lerp(7.0, 99.0, t), 7.0, 1e-12);
+
+                StarFiles.StationLerp(S, -5.0, out a0, out a1, out t);
+                Check("below the first station clamps, not extrapolates",
+                    a0 == 0 && a1 == 0 && t == 0.0, "clamped to station 0");
+                StarFiles.StationLerp(S, 50.0, out a0, out a1, out t);
+                Check("beyond the last station clamps, not extrapolates",
+                    a0 == 3 && a1 == 3 && t == 0.0, "clamped to the last station");
+            }
+
             // --- THE GRIN STEP, both arms ------------------------------------
             //
             // STAR traces direct-index data as a GRIN medium, so the step is

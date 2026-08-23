@@ -152,7 +152,13 @@ namespace MoldStress
                     // Path coordinate from the gate, and the local flow direction.
                     double s, fx, fy;
                     FlowDirection(e, xf, yf, out fx, out fy, out s);
-                    int iS = NearestNode(fill.S, s);
+                    // INTERPOLATED, not nearest-node, since 2026-08-22. The fill
+                    // solve carries 101 stations; nearest-node at ~17 export radii
+                    // turned its smooth fields into small staircases, and the
+                    // spline fit then faithfully reproduced each step edge as
+                    // spurious gradient wiggle - an artifact the solver never had.
+                    int iS0, iS1; double tS;
+                    StationLerp(fill.S, s, out iS0, out iS1, out tS);
 
                     double h = e.ThicknessAt(rField);
                     // The SAME shape the cavity was solved on, conic and
@@ -166,9 +172,9 @@ namespace MoldStress
                         double zMid = freeze.Z[k] * (h / freeze.ThicknessMm);   // scale to local wall
                         double zLocal = zFront + 0.5 * h + zMid;
 
-                        double dnFlow = c.DnFlow[iS, k];
+                        double dnFlow = Lerp(c.DnFlow[iS0, k], c.DnFlow[iS1, k], tS);
                         double sigEq = dnFlow / kDiff;                 // N/mm^2
-                        double sigTh = c.SigmaThermalMPa[iS, k];
+                        double sigTh = Lerp(c.SigmaThermalMPa[iS0, k], c.SigmaThermalMPa[iS1, k], tS);
 
                         // Flow frame: parallel to flow, and transverse in plane.
                         double sPar = sigEq + sigTh;
@@ -192,13 +198,14 @@ namespace MoldStress
                         // layers. A hydrostatic stress shifts the index without
                         // splitting it - dn = (K11 + 2*K12)*sigma - so the same
                         // channel carries both effects and neither is lost.
-                        double sigH = c.DnDensity[iS, k] / kIso;
+                        double dnDen = Lerp(c.DnDensity[iS0, k], c.DnDensity[iS1, k], tS);
+                        double sigH = dnDen / kIso;
 
                         stress.AppendLine(string.Format(ci,
                             "{0:E9} {1:E9} {2:E9} {3:E9} {4:E9} {5:E9} {6:E9} {7:E9} {8:E9}",
                             x, y, zLocal, sxx + sigH, syy + sigH, sigH, sxy, 0.0, 0.0));
 
-                        double nHere = p.Nd + c.DnDensity[iS, k];
+                        double nHere = p.Nd + dnDen;
                         if (indexKs.Count == 0 || indexKs.Contains(k))
                         {
                             index.AppendLine(string.Format(ci,
@@ -209,7 +216,7 @@ namespace MoldStress
                         w.Points++;
                         w.PeakEquivalentStressMPa = Math.Max(w.PeakEquivalentStressMPa, Math.Abs(sigEq));
                         w.PeakDnFlow = Math.Max(w.PeakDnFlow, Math.Abs(dnFlow));
-                        w.PeakDnDensity = Math.Max(w.PeakDnDensity, Math.Abs(c.DnDensity[iS, k]));
+                        w.PeakDnDensity = Math.Max(w.PeakDnDensity, Math.Abs(dnDen));
                     }
                 }
             }
@@ -250,6 +257,30 @@ namespace MoldStress
                 double dd = Math.Max(s, 1e-9);
                 fx = dx / dd; fy = dy / dd;                 // away from the gate
             }
+        }
+
+        /// <summary>Bracketing indices and blend factor for linear interpolation
+        /// over a sorted station array, clamped at both ends. Internal so the
+        /// self-test can hold both arms against it.</summary>
+        internal static void StationLerp(double[] S, double s, out int i0, out int i1, out double t)
+        {
+            if (s <= S[0]) { i0 = i1 = 0; t = 0.0; return; }
+            int n = S.Length;
+            if (s >= S[n - 1]) { i0 = i1 = n - 1; t = 0.0; return; }
+            int lo = 0, hi = n - 1;
+            while (hi - lo > 1)
+            {
+                int mid = (lo + hi) / 2;
+                if (S[mid] <= s) lo = mid; else hi = mid;
+            }
+            i0 = lo; i1 = hi;
+            double d = S[hi] - S[lo];
+            t = d > 0 ? (s - S[lo]) / d : 0.0;
+        }
+
+        internal static double Lerp(double a, double b, double t)
+        {
+            return a + (b - a) * t;
         }
 
         private static int NearestNode(double[] arr, double v)
