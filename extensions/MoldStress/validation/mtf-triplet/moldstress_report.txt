@@ -1,0 +1,70 @@
+  [paths redacted to <workdir> / <zemax-docs> for the public repo;
+   otherwise this is the run's own output, verbatim]
+
+  wrote <zemax-docs>\Glasscat\MOLDSTRESS.AGF
+  working copy <workdir>\plastic-triplet-MoldStress.zmx (original untouched)
+  attached the MOLDSTRESS material catalogue
+  surface 1: PMMA -> MS_PMMA  (constants are MS_PMMA's, a substitution rather than an identification)
+  surface 3: POLYSTYR -> MS_POLYSTYR  (constants are MS_POLYSTYR's, a substitution rather than an identification)
+  surface 6: PMMA -> MS_PMMA  (constants are MS_PMMA's, a substitution rather than an identification)
+  3 surface(s) converted; re-scanning the copy
+MoldStress
+  ESTIMATE - not a mould-flow simulation, not validated against a moulded part
+  system: <workdir>\plastic-triplet-MoldStress.zmx
+  process: fill 0.60 s, pack 60.0 MPa for 3.0 s
+
+  baseline RMS wavefront error: 0.041198 waves
+
+  INDEX-ONLY MODE (default): only the refractive-index change from
+  moulding is computed and applied, through STAR's direct-index route.
+  No stress, no birefringence, no retardance. Pass -full for those.
+
+      export   to the MECHANICAL semi-diameter, 5.413 mm (clear aperture 4.203); beyond the clear aperture the rim's values are carried outward, not solved
+      fill      gate pressure 1.51 MPa, viscosity 1.49E+003 Pa.s, 157 mm3/s
+      freeze    core at 1.40 s, skin 70.0 C at freeze-off
+      channels  flow dn 2.697E-004 peaking at 85 % of the half-wall, density dn 1.094E-004
+      files     15015 stress points, 1540 index points, peak equivalent stress 56.8 N/mm2
+      sampling  ring grid captures the density field to 1.39% of its span (radial midpoint test)
+      STAR      index 1540 points accepted (direct index; no stress applied); GRIN step 0.50 mm, ~5 steps/ray
+      STAR      stress 0/15015 points accepted (code 0), index 1540
+
+      export   to the MECHANICAL semi-diameter, 4.843 mm (clear aperture 2.696); beyond the clear aperture the rim's values are carried outward, not solved
+      fill      gate pressure 0.03 MPa, viscosity 2.95E+003 Pa.s, 189 mm3/s
+      freeze    core at 44.84 s, skin 50.0 C at freeze-off
+      channels  flow dn 1.077E-004 peaking at 97 % of the half-wall, density dn 2.993E-006
+      files     15015 stress points, 1540 index points, peak equivalent stress 11.2 N/mm2
+      sampling  ring grid captures the density field to 1.75% of its span (radial midpoint test)
+      STAR      index 1540 points accepted (direct index; no stress applied); GRIN step 0.50 mm, ~10 steps/ray
+      STAR      stress 0/15015 points accepted (code 0), index 1540
+
+      export   to the MECHANICAL semi-diameter, 5.126 mm (clear aperture 3.305); beyond the clear aperture the rim's values are carried outward, not solved
+      fill      gate pressure 0.30 MPa, viscosity 1.65E+003 Pa.s, 128 mm3/s
+      freeze    core at 12.25 s, skin 70.0 C at freeze-off
+      channels  flow dn 1.835E-006 peaking at 94 % of the half-wall, density dn 2.198E-005
+      files     15015 stress points, 1540 index points, peak equivalent stress 0.6 N/mm2
+      sampling  ring grid captures the density field to 0.49% of its span (radial midpoint test)
+      STAR      index 1540 points accepted (direct index; no stress applied); GRIN step 0.50 mm, ~4 steps/ray
+      STAR      stress 0/15015 points accepted (code 0), index 1540
+
+  WAVEFRONT - what any system sees
+    original materials         0.230687 waves RMS (before substitution)
+    baseline                   0.041198 waves RMS
+    with moulding effects      0.688820 waves RMS
+    change                     +0.647622 waves (+1572.0%)
+
+  POLARISATION - what a birefringent system sees
+    NOT COMPUTED, by design. Index-only mode applies the density index
+    change and nothing else - no stress tensor, no birefringence, no
+    retardance. On the one real lens where both were measured, peak
+    retardance was 585x the wavefront change, so a polarisation-
+    sensitive system needs the full run: pass -full.
+
+  Files are in <workdir>/ms
+
+  NOTE: with STAR index data loaded, FFT-type analyses (MTF, PSF)
+  trace every ray through the index volume and can take MINUTES on
+  a multi-element system at high sampling. If a window seems hung,
+  check CPU in Task Manager: pegged means computing - let it finish
+  or lower the analysis sampling. Idle means genuinely stuck.
+  In OpticStudio, any analysis window's STAR Effects setting switches
+  between On and Difference, which shows this change directly.

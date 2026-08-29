@@ -377,6 +377,43 @@ file that owns the question before writing a conclusion in its domain.**
 
 #### Open
 
+- **The `-run` headline is not the moulding effect on a lens whose image plane is
+  on a solve, and the direct-index route costs the material's dispersion.** Both
+  found 2026-08-29 on a purpose-built all-plastic triplet (PMMA / POLYSTYR / PMMA,
+  EFL 30 mm, F/4.5, ±9°, F-d-C; spherical, mouldable thicknesses, 1 mm flange). The
+  run itself was clean — three surfaces converted, 1540 index points per element,
+  every point accepted, exit 0 — and it reported **+1572%** wavefront, on-axis FFT
+  MTF at 40 lp/mm falling 0.816 → 0.102. Measured against controls, the moulding
+  effect is **0.0801 → 0.0836 waves** and worst-case ΔMTF at 40 lp/mm is **0.026,
+  mixed in sign**. Two separable causes, neither of them moulding:
+  1. **The file's marginal-ray-height solve moved the image plane 211 µm.** Paraxial
+     EFFL reads 30.0096 → 29.7147 mm (−0.98%) with the index data loaded, and the
+     solve follows it. **Real rays do not**: a through-focus scan on a shared 5 µm
+     grid puts best focus at −25 µm in BOTH states, differing by 0.003 waves at the
+     minimum. Pinning the plane collapses the reported change to nothing.
+     *The paraxial shift itself is unexplained and is the open item.* It tracks the
+     data — a uniform cloud produces −0.0001 mm — but it is ~18× larger than a smooth
+     reading of the field supports (the field is <2e-5 across the whole clear
+     aperture; its ±1.09e-4 extremes sit at r > 4.2 mm, at and beyond the 4.41 mm
+     clear aperture), and scaling the field by 0.1 moves EFFL by 0.155 of the full
+     amount where first order demands exactly 0.100. Near-axis behaviour of the MBA
+     fit is the suspect; not demonstrated.
+  2. **STAR's DirectRefractiveIndex route applies one index at every wavelength.**
+     StarFiles writes absolute `Nd + dn`, i.e. the d-line, so the element loses its
+     own dispersion. Isolated by a NULL cloud (`n ≡ Nd`, physically a no-op): on axis
+     it is exact at the d-line (0.0801 → 0.0801) and moves both ends
+     (F 0.0412 → 0.0968, C 0.1080 → 0.0717). Not integration error — identical to
+     four decimals across GRIN steps 1.0 → 0.02 mm, a 50× range. No delta form exists
+     on this route: `IndexDataType` is read-only and reports `DirectRefractiveIndex`;
+     the switchable `PhysicsBasedIndex` is the stress/temperature route. So on this
+     route, carrying dn costs the dispersion — which the 2026-08-22 conclusion
+     "absolute index is correct" did not know, and which that conclusion should now
+     be read against: absolute is the only form the route accepts, not the form that
+     leaves a polychromatic system undisturbed.
+  **What this does not touch:** index-only mode, so nothing here bears on stress
+  birefringence or retardance. Report and scripts:
+  `https://claude.ai/code/artifact/f3599f59-7086-4aa4-a7c3-ec85eff16648`.
+
 - **The frozen-in thermal ORIENTATION channel is wired and now NON-ZERO** as of
   2026-08-21, opt-in via `-thermal-orientation` and off by default. It was
   structurally null on first wiring — the model's thermal stress accumulates only in
