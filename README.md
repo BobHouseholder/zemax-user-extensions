@@ -571,6 +571,29 @@ file that owns the question before writing a conclusion in its domain.**
 
 #### Closed recently, kept because the reasoning is the useful part
 
+- **THE SUSPECTED RUN-TIME REGRESSION WAS NOT ONE - MEASURED 2026-08-29.** The
+  2026-08-29 reporting work appeared to make `-run` three times slower on the
+  same lens: an early Cooke run took ~4 minutes and every later one took 12-17.
+  Two causes were proposed and both were wrong - first that two processes were
+  contending (they were, once, but the pattern outlived it), then that the new
+  measurement code had added work (it does not run inside the element loop).
+
+  Settled by building the pre-batch commit and timing both binaries on the same
+  lens, back to back, one process at a time:
+
+  | build | wall time |
+  |---|---|
+  | `fa61f4c`, before the reporting work | **787 s** |
+  | `d730088`, after it | **806 s** |
+
+  2.4% apart, which is noise. **The reporting work costs nothing.** What remains
+  unexplained is the OUTLIER in the other direction - why one early run took
+  4 minutes - and it is deliberately left unexplained rather than given a third
+  theory. The depth-shape cache was checked and is in-process only, so it cannot
+  carry state between runs. Anyone timing this tool should take 13 minutes for a
+  three-element system as the expectation and treat a 4-minute run as the thing
+  needing explanation.
+
 - **THE GENERATED CATALOGUE HAD INVERTED DISPERSION - FIXED 2026-08-29**
   (`265e826`). Every MS_* row had index RISING with wavelength: MS_PMMA at
   Vd -80.6 against real PMMA's +57.4, MS_POLYSTYR -43.5 against +30.9. Found
