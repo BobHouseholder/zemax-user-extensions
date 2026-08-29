@@ -264,6 +264,31 @@ namespace MoldStress
                 double baseWfe = Metric(sys);
                 say(string.Format(CultureInfo.InvariantCulture,
                     "  baseline RMS wavefront error: {0:F6} waves", baseWfe));
+
+                // WHERE THE DESIGN PUT THE IMAGE PLANE, recorded before any data
+                // is loaded, because the file may move it afterwards by itself.
+                //
+                // A lens whose last airspace carries a focus solve - a marginal
+                // ray height solve is the usual one - re-solves that airspace the
+                // moment the index data lands. The baseline and the loaded system
+                // are then measured at DIFFERENT image planes, and the difference
+                // between them is part optics and part refocusing with no way to
+                // separate the two from the two numbers. Measured 2026-08-29 on a
+                // plastic Cooke triplet: the solve moved the plane 325 um, which
+                // is 250 um PAST the real best focus, and the reported change went
+                // from 0.010 waves to 0.331. Both numbers are real; only one of
+                // them is a moulding effect.
+                int imgPrev = sys.LDE.NumberOfSurfaces - 2;
+                double planeDesign = double.NaN;
+                string planeSolve = null;
+                try
+                {
+                    planeDesign = sys.LDE.GetSurfaceAt(imgPrev).Thickness;
+                    var sd = sys.LDE.GetSurfaceAt(imgPrev).ThicknessCell.GetSolveData();
+                    if (sd != null && sd.Type != ZOSAPI.Editors.SolveType.Fixed)
+                        planeSolve = sd.Type.ToString();
+                }
+                catch { }
                 say("");
 
                 // INDEX-ONLY IS THE DEFAULT, at Bob's direction, 2026-08-22
@@ -495,7 +520,33 @@ namespace MoldStress
                     say("");
                 }
 
-                double loadedWfe = Metric(sys);
+                // THE FIRST READ IS AT WHATEVER PLANE THE FILE CHOSE. If a solve
+                // moved it, this is what the user sees on opening the copy - and it
+                // is NOT the moulding effect on its own.
+                double movedWfe = Metric(sys);
+                double planeLoaded = double.NaN;
+                try { planeLoaded = sys.LDE.GetSurfaceAt(imgPrev).Thickness; }
+                catch { }
+                double planeShiftMm = planeLoaded - planeDesign;
+
+                // THE SECOND READ IS AT THE PLANE THE BASELINE WAS MEASURED AT.
+                // Pin the airspace and put it back where the design had it, so the
+                // only difference between this read and the baseline is the index
+                // data. This is the number the report calls the moulding effect.
+                bool planePinned = false;
+                if (!double.IsNaN(planeDesign) && Math.Abs(planeShiftMm) > 0.0)
+                {
+                    try
+                    {
+                        var cell = sys.LDE.GetSurfaceAt(imgPrev).ThicknessCell;
+                        cell.MakeSolveFixed();
+                        sys.LDE.GetSurfaceAt(imgPrev).Thickness = planeDesign;
+                        planePinned = true;
+                    }
+                    catch { }
+                }
+                double loadedWfe = planePinned ? Metric(sys) : movedWfe;
+
                 string noDelta = NoDeltaReason(elementsWithPoints, elementsApplied,
                                                baseWfe, loadedWfe);
                 bool deltaRefused = noDelta != null;
@@ -546,6 +597,52 @@ namespace MoldStress
                     say(string.Format(CultureInfo.InvariantCulture,
                         "    change                     {0:+0.000000;-0.000000} waves ({1:+0.0;-0.0}%)",
                         loadedWfe - baseWfe, 100.0 * (loadedWfe - baseWfe) / baseWfe));
+                    if (planePinned)
+                        say("    measured at the SAME image plane as the baseline, so this is "
+                            + "optics and not refocusing - see IMAGE PLANE below");
+                }
+                say("");
+
+                // --- the focus shift, reported as its own quantity -------------
+                say("  IMAGE PLANE - what this file's own focus solve does");
+                string planeCase = PlaneCase(planeDesign, planeShiftMm,
+                                             planeSolve, planePinned);
+                if (planeCase == "unread")
+                {
+                    say("    NOT READ. The last airspace could not be inspected, so this run");
+                    say("    cannot say whether the image plane moved. Treat the wavefront");
+                    say("    change above as possibly including a refocus.");
+                }
+                else if (planeCase == "fixed")
+                {
+                    say("    the image plane is FIXED in this file and did not move, so the");
+                    say("    change above is measured at one plane throughout.");
+                }
+                else if (planeCase == "unpinned")
+                {
+                    say(string.Format(CultureInfo.InvariantCulture,
+                        "    a {0} solve is on surface {1} and the plane moved {2:+0.0;-0.0} um,",
+                        planeSolve ?? "thickness", imgPrev, planeShiftMm * 1000.0));
+                    say("    but PINNING IT FAILED, so the change above still mixes the two.");
+                    say("    Do not quote it as the moulding effect.");
+                }
+                else
+                {
+                    say(string.Format(CultureInfo.InvariantCulture,
+                        "    a {0} solve on surface {1} moves the image plane {2:+0.0;-0.0} um",
+                        planeSolve ?? "thickness", imgPrev, planeShiftMm * 1000.0));
+                    say(string.Format(CultureInfo.InvariantCulture,
+                        "    at that moved plane the wavefront reads {0:F6} waves RMS,",
+                        movedWfe));
+                    say(string.Format(CultureInfo.InvariantCulture,
+                        "    which is {0:+0.000000;-0.000000} waves against the baseline - "
+                        + "but {1:F6} of that",
+                        movedWfe - baseWfe, Math.Abs(movedWfe - loadedWfe)));
+                    say("    is DEFOCUS, and a refocus removes it. The solve is following a");
+                    say("    PARAXIAL shift; on the one lens where both were measured, real");
+                    say("    rays put best focus in the same place before and after moulding.");
+                    say("    A fixed-focus assembly still has to hold this shift; an");
+                    say("    adjustable one does not.");
                 }
                 say("");
 
@@ -788,6 +885,24 @@ namespace MoldStress
             if (double.IsInfinity(waves)) return "infinite";
             if (waves == 0.0) return "exactly 0.000000 waves";
             return string.Format(CultureInfo.InvariantCulture, "{0:F6} waves", waves);
+        }
+
+        /// <summary>
+        /// Which of four things to say about the image plane. The FORMATTING
+        /// stays at the call site; this is the choice, so it can be tested.
+        ///
+        /// The four are not decoration - they carry different obligations:
+        /// "unread" means the run cannot promise the wavefront change is free of
+        /// refocusing; "unpinned" means it positively is NOT free of it and the
+        /// number must not be quoted; "fixed" and "pinned" both mean it is.
+        /// </summary>
+        internal static string PlaneCase(double planeDesign, double planeShiftMm,
+                                         string planeSolve, bool planePinned)
+        {
+            if (double.IsNaN(planeDesign)) return "unread";
+            if (planeSolve == null && planeShiftMm == 0.0) return "fixed";
+            if (planeShiftMm == 0.0) return "fixed";
+            return planePinned ? "pinned" : "unpinned";
         }
 
         private static double Metric(ZOSAPI.IOpticalSystem sys)

@@ -280,6 +280,33 @@ namespace MoldStress
                 Runner.ScalarVerdict(0.41, 1.0000, 1.0100, false),
                 "a 0.01-wave improvement and a 0.01-wave degradation read alike");
 
+            // --- THE IMAGE-PLANE CASE, all four branches ---------------------
+            //
+            // Added 2026-08-29. The wavefront change this tool prints is only a
+            // moulding effect if both reads happened at the SAME image plane, and
+            // a lens whose last airspace carries a focus solve moves that plane
+            // the moment index data lands. Each branch carries a different
+            // obligation, so each is asserted rather than the happy one only.
+            Check("an unreadable plane is reported as unreadable, not as fixed",
+                Runner.PlaneCase(double.NaN, 0.0, "MarginalRayHeight", false) == "unread",
+                "a run that cannot see the plane must not promise the change is clean");
+            Check("no solve and no movement is 'fixed'",
+                Runner.PlaneCase(30.8026, 0.0, null, false) == "fixed",
+                "nothing to pin, nothing to warn about");
+            Check("a solve that did not actually move the plane is still 'fixed'",
+                Runner.PlaneCase(30.8026, 0.0, "MarginalRayHeight", false) == "fixed",
+                "a solve is only a problem when it MOVES the plane");
+            Check("a plane that moved and was pinned is 'pinned'",
+                Runner.PlaneCase(30.8026, -0.3249, "MarginalRayHeight", true) == "pinned",
+                "the measured case: 325 um on the plastic Cooke triplet");
+            Check("a plane that moved and could NOT be pinned is 'unpinned'",
+                Runner.PlaneCase(30.8026, -0.3249, "MarginalRayHeight", false) == "unpinned",
+                "this is the one that must refuse to call the change a moulding effect");
+            Check("pinned and unpinned are different verdicts on the same shift",
+                Runner.PlaneCase(30.8026, -0.3249, "MarginalRayHeight", true) !=
+                Runner.PlaneCase(30.8026, -0.3249, "MarginalRayHeight", false),
+                "if these agreed, the pinning flag would be decoration");
+
             // --- THE SAMPLING-ADEQUACY NUMBER, both arms ---------------------
             //
             // The number the run prints must MOVE when the grid degrades and
