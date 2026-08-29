@@ -392,12 +392,31 @@ file that owns the question before writing a conclusion in its domain.**
      grid puts best focus at −25 µm in BOTH states, differing by 0.003 waves at the
      minimum. Pinning the plane collapses the reported change to nothing.
      *The paraxial shift itself is unexplained and is the open item.* It tracks the
-     data — a uniform cloud produces −0.0001 mm — but it is ~18× larger than a smooth
+     data — a uniform cloud produces −0.0000 mm — but it is ~18× larger than a smooth
      reading of the field supports (the field is <2e-5 across the whole clear
      aperture; its ±1.09e-4 extremes sit at r > 4.2 mm, at and beyond the 4.41 mm
-     clear aperture), and scaling the field by 0.1 moves EFFL by 0.155 of the full
+     clear aperture), and scaling the field by 0.1 moves EFFL by 0.065 of the full
      amount where first order demands exactly 0.100. Near-axis behaviour of the MBA
      fit is the suspect; not demonstrated.
+     **RE-DERIVED 2026-08-29 AFTER THE CATALOGUE FIX, and the catalogue is ruled
+     out.** The whole three-arm probe was re-run at `265e826`, because its original
+     evidence was taken against the inverted-dispersion rows. The shift is
+     unchanged to three digits: FULL moves EFFL −0.987% against −0.983% before,
+     and the NULL arm still moves nothing. The exported field is materially the
+     same: I claimed byte-identical and CHECKED, and it is not — the corrected
+     dispersion moves ray heights slightly, so the automatic semi-diameters and
+     hence the export grid move with them (up to 12.6 um radially on element 3,
+     0.2% of its radius). But the Δn VALUES change by at most 1.6e-7, which is
+     0.02%, 0.09% and 0.51% of each element's field span. The anomaly acts on
+     the same field to within half a percent. **What DID change is the non-linearity, and it changed sign:**
+     the TENTH/FULL ratio was 0.155 (super-linear) before the fix and is 0.065
+     (sub-linear) after, on a field that moved by under 0.51%. A first-order
+     effect gives 0.100
+     either way, so the departure is real in both runs but its DIRECTION is not
+     robust to the material model — which is itself evidence against a physical
+     first-order mechanism and for something in the fit. Still not demonstrated,
+     and now the sharper question: what makes a paraxial trace through this fit
+     depend on the host material's dispersion at all?
   2. **STAR's DirectRefractiveIndex route applies one index at every wavelength.**
      StarFiles writes absolute `Nd + dn`, i.e. the d-line, so the element loses its
      own dispersion. Isolated by a NULL cloud (`n = Nd` everywhere, physically a
