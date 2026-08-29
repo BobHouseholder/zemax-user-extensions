@@ -280,6 +280,45 @@ namespace MoldStress
                 Runner.ScalarVerdict(0.41, 1.0000, 1.0100, false),
                 "a 0.01-wave improvement and a 0.01-wave degradation read alike");
 
+            // --- THE CATALOGUE'S OWN DISPERSION FIT --------------------------
+            //
+            // The generated catalogue shipped with INVERTED dispersion until
+            // 2026-08-29. These assert the fit delivers what the row declares -
+            // not merely that the sign is now right, because correcting the sign
+            // alone still left Vd at +80.6 against a declared +57.4.
+            foreach (var pol in Polymers.All)
+            {
+                double b1, c1;
+                CatalogWriter.FitSellmeier(pol.Nd, pol.Vd, out b1, out c1);
+                double nF = CatalogWriter.IndexAt(b1, c1, CatalogWriter.LambdaF);
+                double nD = CatalogWriter.IndexAt(b1, c1, CatalogWriter.LambdaD);
+                double nC = CatalogWriter.IndexAt(b1, c1, CatalogWriter.LambdaC);
+                Check(pol.Name + ": Sellmeier c1 is POSITIVE",
+                    c1 > 0.0, string.Format(CultureInfo.InvariantCulture,
+                        "{0:E4} um^2 - a negative c1 is what inverted the curve", c1));
+                Check(pol.Name + ": index FALLS with wavelength",
+                    nF > nD && nD > nC, string.Format(CultureInfo.InvariantCulture,
+                        "{0:F6} > {1:F6} > {2:F6}", nF, nD, nC));
+                SelfTest.Near(pol.Name + ": fit reproduces its own nd",
+                    nD, pol.Nd, 1e-6);
+                SelfTest.Near(pol.Name + ": fit reproduces its own Vd",
+                    (nD - 1.0) / (nF - nC), pol.Vd, 0.01);
+            }
+            // The value the OLD code produced, kept as a regression anchor: if a
+            // future edit reintroduces it, this fires rather than shipping again.
+            {
+                double b1, c1;
+                CatalogWriter.FitSellmeier(1.4917, 57.4, out b1, out c1);
+                Check("PMMA no longer fits to the shipped c1 = -0.008001",
+                    Math.Abs(c1 - (-0.008001)) > 1e-4,
+                    string.Format(CultureInfo.InvariantCulture,
+                        "now {0:F6}; the 2026-08-29 defect was -0.008001", c1));
+                Check("...nor to the sign-only fix, which left Vd at +80.6",
+                    Math.Abs(c1 - 0.007574) > 1e-4,
+                    string.Format(CultureInfo.InvariantCulture,
+                        "now {0:F6}; fixing the algebra alone gave +0.007574", c1));
+            }
+
             // --- ABBE SIGN FROM THE SYSTEM'S OWN INDICES ---------------------
             //
             // Added 2026-08-29, and it is not hypothetical: the MOULDSTRESS

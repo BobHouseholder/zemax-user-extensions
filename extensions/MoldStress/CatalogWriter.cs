@@ -82,11 +82,8 @@ namespace MoldStress
                 // exists for its BD record - the design should carry the real
                 // material for its index, and MoldStress says so on every run.
                 double nd = p.Nd, vd = p.Vd;
-                double nF = nd + (nd - 1.0) / (2.0 * vd);
-                double nC = nd - (nd - 1.0) / (2.0 * vd);
-                // Two-term Sellmeier through (nC,0.6563), (nd,0.5876), (nF,0.4861)
                 double b1, c1;
-                FitSellmeier(nd, nF, nC, out b1, out c1);
+                FitSellmeier(nd, vd, out b1, out c1);
 
                 sb.AppendLine(string.Format(ci,
                     "NM {0} 2 0 {1:F6} {2:F4} 0 0 0", p.Name, nd, vd));
@@ -111,16 +108,76 @@ namespace MoldStress
             return path;
         }
 
-        /// <summary>Two-term Sellmeier through the d/F/C indices.</summary>
-        private static void FitSellmeier(double nd, double nF, double nC,
-                                         out double b1, out double c1)
+        /// <summary>
+        /// One-term Sellmeier reproducing the two things an nd/vd row promises:
+        /// the index at d, and the Abbe number. n^2 - 1 = b1 * L / (L - c1).
+        ///
+        /// REWRITTEN 2026-08-29 after the shipped catalogue was found carrying
+        /// INVERTED dispersion - MS_PMMA at Vd -80.6 against real PMMA's +57.4,
+        /// index RISING with wavelength, which no transparent polymer does. Two
+        /// defects, and the second is why fixing the first is not enough:
+        ///
+        ///   (a) The old solve was wrong twice in one line - flipped numerator
+        ///       sign, and a denominator pairing yf with Lf instead of the cross
+        ///       terms - giving c1 = -0.008001 for PMMA where the same fit done
+        ///       correctly gives +0.007574. A negative c1 is what inverts the
+        ///       curve.
+        ///
+        ///   (b) It fitted through nF and nC reconstructed as nd +/- (nd-1)/(2vd),
+        ///       which places nd exactly MIDWAY between them. Real dispersion is
+        ///       curved and nd sits nearer C - 2.35:1 for PMMA - so even the
+        ///       corrected algebra returns Vd +80.6 against the +57.4 declared on
+        ///       the same row. The row would have disagreed with itself.
+        ///
+        /// So the reconstruction is gone. b1 follows in closed form from the nd
+        /// constraint; c1 is bisected until the fitted nF - nC equals (nd-1)/vd.
+        /// The spread rises monotonically in c1 - zero at c1 = 0, where the medium
+        /// is dispersionless, and unbounded as c1 approaches Lf - so the root is
+        /// bracketed by construction and 100 halvings resolve it to ~1e-31.
+        ///
+        /// This is a single-resonance fit anchored on two numbers, not a
+        /// measured dispersion curve. Against the MISC catalogue's own PMMA it
+        /// lands within ~1e-4 at F and ~2e-5 at C, which is the same order as
+        /// the moulding index change it carries - stated here because that is
+        /// the honest limit of an nd/vd row, and it is why the run refuses
+        /// polychromatic results it cannot stand behind.
+        /// </summary>
+        internal static void FitSellmeier(double nd, double vd,
+                                          out double b1, out double c1)
         {
-            // n^2 - 1 = b1 * L / (L - c1), L = lambda^2
-            double Ld = 0.5876 * 0.5876, Lf = 0.4861 * 0.4861;
-            double yd = nd * nd - 1.0, yf = nF * nF - 1.0;
-            // Solve the two equations for b1 and c1.
-            c1 = (Ld * Lf * (yf - yd)) / (yf * Lf - yd * Ld);
+            double Ld = LambdaD * LambdaD;
+            double Lf = LambdaF * LambdaF;
+            double Lc = LambdaC * LambdaC;
+            double yd = nd * nd - 1.0;
+            double target = (nd - 1.0) / vd;          // the required nF - nC
+
+            double lo = 0.0, hi = 0.999 * Lf;
+            for (int i = 0; i < 100; i++)
+            {
+                double mid = 0.5 * (lo + hi);
+                double b = yd * (Ld - mid) / Ld;
+                double nFmid = Math.Sqrt(1.0 + b * Lf / (Lf - mid));
+                double nCmid = Math.Sqrt(1.0 + b * Lc / (Lc - mid));
+                if (nFmid - nCmid < target) lo = mid; else hi = mid;
+            }
+            c1 = 0.5 * (lo + hi);
             b1 = yd * (Ld - c1) / Ld;
+        }
+
+        /// <summary>The d, F and C lines, in microns. Named because the fit and
+        /// its self-tests must use the SAME three, and the old code carried
+        /// 0.5876/0.4861 rounded inline while the systems it fitted for used the
+        /// full values.</summary>
+        internal const double LambdaD = 0.5875618;
+        internal const double LambdaF = 0.4861327;
+        internal const double LambdaC = 0.6562725;
+
+        /// <summary>Index at a wavelength from a fitted pair, so a caller can
+        /// check the fit rather than trust it.</summary>
+        internal static double IndexAt(double b1, double c1, double lambdaUm)
+        {
+            double L = lambdaUm * lambdaUm;
+            return Math.Sqrt(1.0 + b1 * L / (L - c1));
         }
 
         /// <summary>
