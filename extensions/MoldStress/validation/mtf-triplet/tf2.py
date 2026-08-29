@@ -6,10 +6,10 @@ edge, so its reported minimum was the edge of the window, not a minimum - and
 the solve's -325 um landed off the plot entirely. A minimum found at the end of
 a scan range is a statement about the range.
 """
-import glob, json, os, re
+import glob, json, os, re, sys
 from zos import ZOSAPI, connect, HERE
 
-MS = os.path.join(HERE, "ms2")
+MS = os.path.join(HERE, sys.argv[1] if len(sys.argv) > 1 else "ms2")
 BASE = os.path.join(HERE, "plastic-cooke-MoldStress.zmx")
 E = ZOSAPI.Editors.MFE.MeritOperandType
 FIELDS = [0.0, 0.7, 1.0]

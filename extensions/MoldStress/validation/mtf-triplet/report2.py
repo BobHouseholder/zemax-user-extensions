@@ -6,6 +6,7 @@ fig2/*.png (figures.py), ms2/moldstress_report.txt (MoldStress.exe).
   python report2.py [--artifact out.html]
 """
 import base64, json, os, sys
+from provenance import stamp
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FIG = os.path.join(HERE, "fig2")
@@ -49,6 +50,7 @@ SUM = {"headline": HL, "form": {k: {"powers": ["+" if e["power"] > 0 else "-"
                   for k in ("poly_solve_base", "poly_solve_mould",
                             "poly_pin_base", "poly_pin_null", "poly_pin_mould",
                             "mono_pin_base", "mono_pin_null", "mono_pin_mould")}}
+SUM["provenance"] = stamp()
 json.dump(SUM, open(os.path.join(HERE, "summary2.json"), "w"), indent=1)
 
 

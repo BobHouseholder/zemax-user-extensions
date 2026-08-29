@@ -13,18 +13,18 @@ first one around.
 
 | | on-axis MTF @ 40 lp/mm | on-axis RMS wavefront |
 |---|---|---|
-| **article 2**, as `-run` reports it | 0.496 → **0.155** | 0.1551 → 0.4865 waves |
+| **article 2**, as `-run` reports it | 0.563 → **0.086** | 0.1551 → 0.4242 waves |
 | **article 2**, like for like | 0.585 → **0.579** | 0.1551 → 0.1647 waves |
-| **article 1**, as `-run` reports it | 0.816 → **0.102** | 0.0412 → 0.6888 waves |
-| **article 1**, like for like | 0.820 → **0.818** | 0.0801 → 0.0836 waves |
+| **article 1**, as `-run` reports it | 0.749 → **0.104** | 0.0801 → 0.5727 waves |
+| **article 1**, like for like | 0.820 → **0.818** | 0.0801 → 0.0837 waves |
 
 "Like for like" means the image plane held still and the measurement taken at
 the d-line, the one wavelength where the null control below is a no-op.
 
 Two causes, neither of them moulding:
 
-1. **The file's marginal-ray-height solve moves the image plane** — 211 µm on
-   article 1, 325 µm on article 2 — following a paraxial `EFFL` shift (−0.98%
+1. **The file's marginal-ray-height solve moves the image plane** — 212 µm on
+   article 1, 294 µm on article 2 — following a paraxial `EFFL` shift (−0.98%
    and −0.66%). Real rays do not: on a through-focus scan over a shared grid,
    both states minimise in the same place (−25 µm article 1, −75 µm article 2),
    differing by 0.003 and 0.005 waves at the minimum. On article 2 the solve
@@ -36,11 +36,10 @@ Two causes, neither of them moulding:
 
 2. **STAR's `DirectRefractiveIndex` route applies one index at every
    wavelength.** `StarFiles` writes absolute `Nd + dn` — the d-line — so the
-   element loses its own dispersion. The NULL control isolates it: at the d-line
-   it sits 2.8e-5 waves (article 1) and 2e-7 waves (article 2) from the
-   baseline, while moving the band ends 2,000x and 1,300,000x further
-   (article 2: F 0.4022 → 0.1875, C 0.0648 → 0.1389). Not exact — that was
-   an overclaim, caught 2026-08-29 by asserting this README against the data.
+   element loses its own dispersion. The NULL control isolates it: at the
+   d-line it sits 8.7e-11 waves (article 1) and 3.2e-11 waves (article 2) from the
+   baseline — numerically zero — while moving the band ends to
+   F 0.1322 → 0.1875 and C 0.2257 → 0.1389 on article 2.
    Not integration error — identical to four decimals across GRIN steps
    1.0 → 0.02 mm. No delta form exists on this route: `IndexDataType` is
    read-only and reports `DirectRefractiveIndex`; `PhysicsBasedIndex` is the
@@ -143,22 +142,31 @@ hard-coded predecessor, kept because article 1's figures were made with it. The
 rewrite happened because article 1's elements sat at surfaces 1-2/3-4/6-7 and
 article 2's at 1-2/3-4/5-6, and that was one edit waiting to be forgotten.
 
-## A correction, kept because the method is the reusable part
+## Two corrections, kept because the method is the reusable part
 
 `checkreadme.py` asserts every number above against `summary*.json` and
-`form.json`. Running it the first time failed two claims:
+`form.json`. Running it the first time failed two claims, and a later run
+superseded one of the corrections in turn.
 
-- **The NULL cloud is not an *exact* no-op at the d-line.** It is 2.8e-5 waves
-  (article 1) and 2e-7 (article 2) away. Both print as identical at four
-  decimals, which is why "exact" got written. The control is decisive because
-  those residuals are 2,000x and 1,300,000x smaller than what the cloud does at
-  the band ends — a ratio, not a zero.
-- **One published number was wrong.** `report.py` carried the three control
-  triples as literals typed out of a terminal, and the C-line moulding value
-  read 0.0852 where the measurement is 0.0749. It had already been published in
-  that state. `ctl1.py` now re-measures them into `ctl1.json`, and both the
-  figure and the report read that file.
+- **One published number was simply wrong.** `report.py` carried the three
+  control triples as literals typed out of a terminal, and the C-line moulding
+  value read 0.0852 where the measurement is 0.0749. It had already been
+  published in a figure, in the report's argument, and in a README. `ctl1.py`
+  now re-measures them into `ctl1.json`, and both the figure and the report read
+  that file.
 
-The general rule is in the report format already — patch the run script to emit
-a summary file rather than copying numbers out of the chat — and this is what
-happens when the report obeys it and the *figure* and the *README* do not.
+- **"The NULL cloud is an EXACT no-op at the d-line" was called an overclaim,
+  and then turned out to be true.** The first check measured a residual of
+  2.8e-5 waves and the claim was duly softened. That residual was a symptom of
+  the inverted-dispersion catalogue bug found the same day: with the catalogue
+  fixed it is **8.7e-11** (article 1) and **3.2e-11** (article 2) — numerically zero.
+  The lesson is not "the original claim was fine". It is that a measurement
+  taken through a broken instrument can make a TRUE claim look false, and the
+  correction was right to make on the evidence available.
+
+- **And neither check could see the third problem.** `checkreadme.py` passed
+  clean on this study while every polychromatic number in it was invalid,
+  because the README and the summary files were consistently stale — it
+  verifies doc-vs-data, not data-vs-reality. The summaries now carry a
+  `provenance` block naming the tool commit and the catalogue coefficients in
+  force, so staleness is at least visible. Generated at `0d811a8`.

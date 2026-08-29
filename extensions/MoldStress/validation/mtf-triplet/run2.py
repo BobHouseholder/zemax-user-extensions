@@ -13,10 +13,10 @@ forgotten.
   tf_*              through focus on a shared grid
   ctl               per-wavelength: no data / NULL cloud / moulding
 """
-import glob, json, os, re, time
+import glob, json, os, re, sys, time
 from zos import ZOSAPI, connect, HERE
 
-MS = os.path.join(HERE, "ms2")
+MS = os.path.join(HERE, sys.argv[1] if len(sys.argv) > 1 else "ms2")
 CTL = os.path.join(HERE, "ctl2")
 os.makedirs(CTL, exist_ok=True)
 BASE = os.path.join(HERE, "plastic-cooke-MoldStress.zmx")

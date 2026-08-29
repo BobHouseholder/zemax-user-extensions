@@ -8,6 +8,7 @@ a conversation.
   python report.py --artifact out.html  -> body only, for the Artifact host
 """
 import base64, json, os, sys
+from provenance import stamp
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FIG = os.path.join(HERE, "fig")
@@ -76,6 +77,7 @@ def build_summary():
         "image_plane_move_um": (R["poly_solve_mould"]["bfl"]
                                 - R["poly_solve_base"]["bfl"]) * 1000,
     }
+    s["provenance"] = stamp()
     with open(os.path.join(HERE, "summary.json"), "w") as fh:
         json.dump(s, fh, indent=1)
     return s
