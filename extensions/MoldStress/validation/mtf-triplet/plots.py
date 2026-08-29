@@ -124,7 +124,7 @@ def mtf_panels():
          "AS THE TOOL REPORTS IT\nimage plane on the file's focus solve, F-d-C"),
         (axes[1], "mono_pin_base", "mono_pin_mould",
          "LIKE FOR LIKE\nimage plane pinned, d-line "
-         "(where the null control is exact)"),
+         "(where the null control is a no-op)"),
     ]
     for ax, kb, km, title in cases:
         for fi in range(3):
@@ -228,9 +228,11 @@ def field_map():
 def control():
     fig, ax = plt.subplots(figsize=(6.2, 3.7))
     waves = ["0.486 $\\mu$m (F)", "0.588 $\\mu$m (d)", "0.656 $\\mu$m (C)"]
-    nodata = [0.0412, 0.0801, 0.1080]
-    null = [0.0968, 0.0801, 0.0717]
-    full = [0.1011, 0.0836, 0.0852]
+    # READ, never typed. These were literals transcribed out of a terminal
+    # until 2026-08-29, and one of them - the C-line moulding value - was
+    # wrong by 0.010 waves and had already been published in that state.
+    _c = json.load(open(os.path.join(HERE, "ctl1.json")))
+    nodata, null, full = _c["no_data"], _c["null"], _c["full"]
     x = np.arange(3)
     w = .27
     ax.bar(x - w, nodata, w, label="no data loaded", color="#2a78d6")
@@ -243,8 +245,12 @@ def control():
     ax.set_title("The null control: a uniform index cloud should change\n"
                  "NOTHING, and only at the d-line does it", fontsize=9)
     ax.legend(fontsize=7.5, loc="upper left")
-    ax.set_ylim(0, .138)
-    ax.annotate("identical to 'no data':\nno-op", xy=(1.0, .0805), xytext=(1.42, .045),
+    ax.set_ylim(0, max(max(nodata), max(null), max(full)) * 1.42)
+    dd = abs(nodata[1] - null[1])
+    ends = max(abs(nodata[0] - null[0]), abs(nodata[2] - null[2]))
+    ax.annotate("d-line: %.0e waves\napart. The band ends\nmove %.0fx more"
+                % (dd, ends / dd),
+                xy=(1.0 - .27 / 2, null[1]), xytext=(0.36, .010),
                 ha="left", fontsize=7.5, color=INK,
                 arrowprops=dict(arrowstyle="->", color=INK, lw=1))
     fig.tight_layout()

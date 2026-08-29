@@ -12,6 +12,14 @@ import base64, json, os, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 FIG = os.path.join(HERE, "fig")
 R = json.load(open(os.path.join(HERE, "results.json")))
+# READ, never typed. These three triples were literals transcribed out of a
+# terminal until 2026-08-29, when a check against the measurement found the
+# C-line moulding value wrong by 0.010 waves - and already published.
+_c = json.load(open(os.path.join(HERE, "ctl1.json")))
+_CTL = {"no_data": _c["no_data"], "null": _c["null"],
+        "moulding": _c["full"], "dline_residual": _c["dline_null_delta"]}
+_ENDS = max(abs(_CTL["no_data"][0] - _CTL["null"][0]),
+            abs(_CTL["no_data"][2] - _CTL["null"][2]))
 FIELDS = ["0.0 deg", "6.3 deg", "9.0 deg"]
 FREQS = [10, 20, 30, 40, 60]
 
@@ -43,10 +51,10 @@ def build_summary():
                 "process": "fill 0.60 s, pack 60.0 MPa for 3.0 s"},
         "states": {},
         "mtf": {},
-        "control_rwre_axis": {
-            "no_data":  [0.0412, 0.0801, 0.1080],
-            "null":     [0.0968, 0.0801, 0.0717],
-            "moulding": [0.1011, 0.0836, 0.0852]},
+        # READ from ctl1.json, never typed. Carried as literals until
+        # 2026-08-29, at which point a check against the measurement found
+        # the C-line moulding value wrong by 0.010 waves - published.
+        "control_rwre_axis": _CTL,
         "through_focus": {
             k: {"best_um": min(R[k]["curve"], key=lambda c: c["rwre"][0])["d"] * 1000,
                 "best_waves": min(c["rwre"][0] for c in R[k]["curve"])}
@@ -211,10 +219,11 @@ A('<p class="sub">A three-element PMMA / polystyrene objective, '
   % (sysd["efl_mm"], sysd["fno"], sysd["hfov_deg"], S["run"]["index_points_total"]))
 A("</header>")
 
+A('<blockquote><p><strong>Superseded as a test article, not as a finding.</strong> The lens on this page was found by GLOBAL optimisation and is not manufacturable: element powers + &minus; &minus; rather than a Cooke’s + &minus; +, a 0.50&nbsp;mm airgap, and a 62.9&deg; surface slope. Both findings below were reproduced on a proper, mouldable plastic Cooke triplet &mdash; see <a href="https://claude.ai/code/artifact/7c77a26a-b761-4f43-8ece-d6677bbc1bbd">Plastic Cooke Triplet</a>. The controls and probes on this page (GRIN-step convergence, the <code>IndexDataType</code> enumeration) were run here and are not repeated there.</p></blockquote>')
 A('<p class="lede">The tool ran end to end and reported the moulded lens as '
   "destroyed &mdash; on-axis MTF at 40&nbsp;lp/mm falling from "
   "<strong>%.3f to %.3f</strong>. Holding the image plane still and measuring "
-  "at the one wavelength where a null control is exact, the same run gives "
+  "at the one wavelength where the null control is a no-op, the same run gives "
   "<strong>%.3f to %.3f</strong>. Almost the entire reported loss is an image "
   "plane that moved %.0f&nbsp;&micro;m, and a dispersion artefact in STAR's "
   "direct-index route &mdash; neither of which is moulding.</p>"
@@ -300,10 +309,12 @@ A('<div class="scroll">'
   + mtf_table("mono_pin_base", "mono_pin_mould", "mono_pin_null") + "</div>")
 A('<p class="meta">The <em>null</em> row is a control: an index cloud whose '
   "every point is exactly the material&rsquo;s own N<sub>d</sub>, so it is "
-  "physically a no-op. At the d-line it reproduces the baseline to every "
-  "printed digit, which is what makes the <em>after</em> row here readable as "
-  "the moulding effect and nothing else. The largest change at 40&nbsp;lp/mm "
-  "is 0.026 in modulation, and it is not all in one direction.")
+  "physically a no-op. At the d-line it sits %.1e waves from the baseline "
+  "while moving the band ends %.0f&times; further, which is what makes the "
+  "<em>after</em> row here readable as the moulding effect and nothing else. "
+  "The largest change at 40&nbsp;lp/mm is 0.026 in modulation, and it is not "
+  "all in one direction." % (_CTL["dline_residual"],
+                             _ENDS / _CTL["dline_residual"]))
 
 A('<div class="scroll">'
   + scalar_table(
@@ -338,14 +349,15 @@ A("<h3>2. STAR&rsquo;s direct-index route discards the material&rsquo;s "
   "dispersion</h3>")
 A(figure("control.png",
          "The null control across the band. A uniform cloud should change "
-         "nothing at any wavelength. It changes nothing at the d-line and "
-         "moves both ends."))
+         "nothing at any wavelength. At the d-line it very nearly does not; "
+         "at both ends it plainly does."))
 A("<p>MoldStress writes absolute index, n = N<sub>d</sub> + &Delta;n, which "
   "is a single value per point &mdash; the d-line. STAR applies it at every "
   "wavelength, so the element loses its own dispersion. The null control "
-  "isolates this exactly: on axis it reads %.4f waves at the d-line against "
-  "the baseline&rsquo;s %.4f &mdash; identical &mdash; while F moves "
-  "%.4f&nbsp;&rarr;&nbsp;%.4f and C moves %.4f&nbsp;&rarr;&nbsp;%.4f.</p>"
+  "isolates it: on axis it reads %.6f waves at the d-line against the "
+  "baseline&rsquo;s %.6f &mdash; a residual of 2.8&times;10<sup>&minus;5</sup> "
+  "&mdash; while F moves %.4f&nbsp;&rarr;&nbsp;%.4f and C moves "
+  "%.4f&nbsp;&rarr;&nbsp;%.4f, three orders of magnitude further.</p>"
   % (S["control_rwre_axis"]["null"][1], S["control_rwre_axis"]["no_data"][1],
      S["control_rwre_axis"]["no_data"][0], S["control_rwre_axis"]["null"][0],
      S["control_rwre_axis"]["no_data"][2], S["control_rwre_axis"]["null"][2]))

@@ -400,16 +400,35 @@ file that owns the question before writing a conclusion in its domain.**
      fit is the suspect; not demonstrated.
   2. **STAR's DirectRefractiveIndex route applies one index at every wavelength.**
      StarFiles writes absolute `Nd + dn`, i.e. the d-line, so the element loses its
-     own dispersion. Isolated by a NULL cloud (`n ≡ Nd`, physically a no-op): on axis
-     it is exact at the d-line (0.0801 → 0.0801) and moves both ends
-     (F 0.0412 → 0.0968, C 0.1080 → 0.0717). Not integration error — identical to
-     four decimals across GRIN steps 1.0 → 0.02 mm, a 50× range. No delta form exists
-     on this route: `IndexDataType` is read-only and reports `DirectRefractiveIndex`;
-     the switchable `PhysicsBasedIndex` is the stress/temperature route. So on this
-     route, carrying dn costs the dispersion — which the 2026-08-22 conclusion
+     own dispersion. Isolated by a NULL cloud (`n = Nd` everywhere, physically a
+     no-op): at the d-line it sits 2.8e-5 waves from the baseline while moving the
+     band ends ~2,000x further (F 0.0412 -> 0.0968, C 0.1080 -> 0.0717). It is NOT
+     exact at the d-line - that was an overclaim, corrected 2026-08-29 when the
+     validation README was machine-checked against its own data; the control is
+     decisive because of the ratio, not a zero. Not integration error - identical to
+     four decimals across GRIN steps 1.0 -> 0.02 mm, a 50x range. No delta form
+     exists on this route: `IndexDataType` is read-only and reports
+     `DirectRefractiveIndex`; the switchable `PhysicsBasedIndex` is the
+     stress/temperature route. So on this route, carrying dn costs the dispersion — which the 2026-08-22 conclusion
      "absolute index is correct" did not know, and which that conclusion should now
      be read against: absolute is the only form the route accepts, not the form that
      leaves a polychromatic system undisturbed.
+
+  **REPRODUCED ON A SECOND, MANUFACTURABLE ARTICLE, 2026-08-29.** The first
+  article was found by GLOBAL optimisation and was not a Cooke triplet at all -
+  element powers + - - , a meniscus middle element, a 0.50 mm airgap and a 62.9 deg
+  surface slope. Bob rejected it on sight. The replacement is the shipped glass
+  Cooke (`Samples/Sequential/Objectives/Cooke 40 degree field.zmx`) scaled 0.8 and
+  transcribed into PMMA/POLYSTYR, with the form held by explicit curvature-sign
+  constraints and LOCAL optimisation only, and injection-moulding limits as merit
+  operands. It passes every moulding check. Both findings reproduce on it: the
+  solve moves the plane 325 um (250 um PAST the real best focus) while real rays
+  minimise at -75 um in both states, and the NULL cloud is a no-op at the d-line to
+  2e-7 waves while moving the band ends 1.3e6x further. So neither finding is an
+  artefact of an odd lens. A glass twin at the identical spec (`glass-cooke.zmx`)
+  isolates what going all-plastic costs: RMS wavefront 0.013/0.137/0.204 waves
+  against 0.156/0.245/0.199.
+
   **What this does not touch:** index-only mode, so nothing here bears on stress
   birefringence or retardance. Report and scripts:
   `https://claude.ai/code/artifact/f3599f59-7086-4aa4-a7c3-ec85eff16648`.
