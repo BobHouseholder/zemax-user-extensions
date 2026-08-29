@@ -289,6 +289,51 @@ namespace MoldStress
                         planeSolve = sd.Type.ToString();
                 }
                 catch { }
+
+                // WHAT HAPPENS AT WAVELENGTHS OTHER THAN THE d-LINE, measured
+                // before anything is loaded, because two separate things are
+                // wrong there and neither is visible in the wavefront number.
+                //
+                // StarFiles writes ONE index per point - p.Nd, the d-line - and
+                // STAR's direct-index route applies it at EVERY wavelength, so a
+                // converted element loses its own dispersion. Isolated 2026-08-29
+                // with a NULL cloud (every point exactly Nd, physically a no-op):
+                // it left the d-line untouched and moved F and C by three orders
+                // of magnitude more than the moulding change it carried.
+                var waveUm = new List<double>();
+                try
+                {
+                    var wlAll = sys.SystemData.Wavelengths;
+                    for (int i = 1; i <= wlAll.NumberOfWavelengths; i++)
+                        waveUm.Add(wlAll.GetWavelength(i).Wavelength);
+                }
+                catch { }
+                int dLineIdx = -1;
+                {
+                    double best = double.MaxValue;
+                    for (int i = 0; i < waveUm.Count; i++)
+                    {
+                        double g = Math.Abs(waveUm[i] - 0.5875618);
+                        if (g < best) { best = g; dLineIdx = i; }
+                    }
+                }
+                var indexByElement = new Dictionary<int, double[]>();
+                var dnByElement = new Dictionary<int, double>();
+                foreach (var eD in els)
+                {
+                    var n = new double[waveUm.Count];
+                    for (int i = 0; i < n.Length; i++)
+                    {
+                        try
+                        {
+                            n[i] = sys.MFE.GetOperandValue(
+                                ZOSAPI.Editors.MFE.MeritOperandType.INDX,
+                                eD.FrontSurface, i + 1, 0, 0, 0, 0, 0, 0);
+                        }
+                        catch { n[i] = double.NaN; }
+                    }
+                    indexByElement[eD.FrontSurface] = n;
+                }
                 say("");
 
                 // INDEX-ONLY IS THE DEFAULT, at Bob's direction, 2026-08-22
@@ -373,6 +418,7 @@ namespace MoldStress
                         "      channels  flow dn {0:E3} peaking at {1:P0} of the half-wall, " +
                         "density dn {2:E3}",
                         ch.PeakDnFlow, ch.PeakDepthFraction, w.PeakDnDensity));
+                    dnByElement[e.FrontSurface] = w.PeakDnDensity;
 
                     // THE DENSITY HALF CARRIES AN UNMEASURED ASSUMPTION - but
                     // ONLY on the stress-tensor route, where StarFiles divides the
@@ -646,6 +692,82 @@ namespace MoldStress
                 }
                 say("");
 
+                if (waveUm.Count > 1 && dLineIdx >= 0)
+                {
+                    // The inversion check is on the MATERIAL's own indices, so
+                    // this block corrects itself when the catalogue is fixed
+                    // instead of becoming a claim nobody re-tests.
+                    var inverted = new List<string>();
+                    foreach (var eD in els)
+                    {
+                        double[] n;
+                        if (!indexByElement.TryGetValue(eD.FrontSurface, out n)) continue;
+                        double vd = Vd(n, waveUm, dLineIdx);
+                        if (!double.IsNaN(vd) && vd < 0.0)
+                            inverted.Add(string.Format(CultureInfo.InvariantCulture,
+                                "{0} (Vd {1:F1})", eD.Material, vd));
+                    }
+
+                    say("  DISPERSION - what this run is worth away from the d-line");
+                    if (inverted.Count > 0)
+                    {
+                        say("    REFUSE THE POLYCHROMATIC RESULT. The material rows themselves");
+                        say("    carry the WRONG SIGN of dispersion - index RISING with");
+                        say("    wavelength - so the baseline is wrong at every wavelength but");
+                        say(string.Format(CultureInfo.InvariantCulture,
+                            "    {0:F4} um, before any moulding data is loaded:",
+                            waveUm[dLineIdx]));
+                        foreach (var s2 in inverted) say("      " + s2);
+                        say("    A real optical polymer has Vd positive (PMMA +57.4, polystyrene");
+                        say("    +30.9). This is a defect in the generated MOULDSTRESS catalogue,");
+                        say("    not in the lens: CatalogWriter fits the Sellmeier c1 negative.");
+                        say("    Until it is fixed, use ONE wavelength - both this and the");
+                        say("    substitution below vanish at the d-line, where the row is");
+                        say("    anchored on nd exactly.");
+                        say("");
+                    }
+                    if (indexOnly && elementsApplied > 0)
+                    {
+                        say(string.Format(CultureInfo.InvariantCulture,
+                            "    STAR's direct-index route is MONOCHROMATIC: it applies one"));
+                        say(string.Format(CultureInfo.InvariantCulture,
+                            "    index per point at all {0} wavelengths, and this run wrote the",
+                            waveUm.Count));
+                        say(string.Format(CultureInfo.InvariantCulture,
+                            "    {0:F4} um value, so each element ALSO loses its own dispersion",
+                            waveUm[dLineIdx]));
+                        say("    on loading. That substitution is an index error:");
+                        foreach (var eD in els)
+                        {
+                            double[] n;
+                            double dn;
+                            if (!indexByElement.TryGetValue(eD.FrontSurface, out n)) continue;
+                            if (!dnByElement.TryGetValue(eD.FrontSurface, out dn)) continue;
+                            say(string.Format(CultureInfo.InvariantCulture,
+                                "      surfaces {0}-{1}  {2}   moulding dn {3:E2}",
+                                eD.FrontSurface, eD.BackSurface, eD.Material, dn));
+                            for (int i = 0; i < waveUm.Count; i++)
+                            {
+                                if (double.IsNaN(n[i]) || double.IsNaN(n[dLineIdx])) continue;
+                                double err = n[dLineIdx] - n[i];
+                                string tag = (i == dLineIdx)
+                                    ? "   <- written at this wavelength"
+                                    : (dn > 0 ? string.Format(CultureInfo.InvariantCulture,
+                                        "   {0:F0}x the moulding change", Math.Abs(err) / dn)
+                                      : "");
+                                say(string.Format(CultureInfo.InvariantCulture,
+                                    "        {0:F4} um  imposed error {1:+0.000000;-0.000000}{2}",
+                                    waveUm[i], err, tag));
+                            }
+                        }
+                        say("    This is a property of STAR's route, not of this tool's physics:");
+                        say("    IndexDataType is read-only, and the switchable PhysicsBasedIndex");
+                        say("    route is the stress/temperature one, which would reintroduce the");
+                        say("    K11/K12 split Waxler 1979 refuted.");
+                    }
+                    say("");
+                }
+
                 say("  POLARISATION - what a birefringent system sees");
                 if (indexOnly)
                 {
@@ -903,6 +1025,31 @@ namespace MoldStress
             if (planeSolve == null && planeShiftMm == 0.0) return "fixed";
             if (planeShiftMm == 0.0) return "fixed";
             return planePinned ? "pinned" : "unpinned";
+        }
+
+        /// <summary>
+        /// Abbe number from indices already read off the system, so the
+        /// dispersion check is on what the LENS actually has rather than on what
+        /// a catalogue header claims. NaN when the band is too narrow to divide
+        /// by - never a fabricated large number.
+        ///
+        /// Negative means the index RISES with wavelength, which no transparent
+        /// optical polymer does in the visible. Found 2026-08-29 in this tool's
+        /// own generated catalogue.
+        /// </summary>
+        internal static double Vd(double[] n, List<double> waveUm, int dIdx)
+        {
+            if (n == null || waveUm == null || n.Length != waveUm.Count) return double.NaN;
+            if (n.Length < 2 || dIdx < 0 || dIdx >= n.Length) return double.NaN;
+            int shortest = 0, longest = 0;
+            for (int i = 0; i < waveUm.Count; i++)
+            {
+                if (waveUm[i] < waveUm[shortest]) shortest = i;
+                if (waveUm[i] > waveUm[longest]) longest = i;
+            }
+            double span = n[shortest] - n[longest];
+            if (double.IsNaN(span) || Math.Abs(span) < 1e-9) return double.NaN;
+            return (n[dIdx] - 1.0) / span;
         }
 
         private static double Metric(ZOSAPI.IOpticalSystem sys)

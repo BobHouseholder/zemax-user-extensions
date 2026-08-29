@@ -377,6 +377,52 @@ file that owns the question before writing a conclusion in its domain.**
 
 #### Open
 
+- **THE GENERATED MOULDSTRESS CATALOGUE HAS INVERTED DISPERSION.** Found
+  2026-08-29 while documenting a different dispersion problem, confirmed by
+  measurement and by re-deriving the shipped coefficients from the faulty
+  formula. Every MS_* row has index RISING with wavelength, which no transparent
+  optical polymer does:
+
+  | material | n(0.486) | n(0.588) | n(0.656) | Vd |
+  |---|---|---|---|---|
+  | `PMMA` (MISC) | 1.497761 | 1.491756 | 1.489200 | **+57.4** |
+  | `MS_PMMA` | 1.487451 | 1.491699 | 1.493552 | **-80.6** |
+  | `POLYSTYR` (MISC) | 1.604079 | 1.590481 | 1.584949 | **+30.9** |
+  | `MS_POLYSTYR` | 1.581080 | 1.590497 | 1.594651 | **-43.5** |
+
+  **The cause is two errors in one line.** `CatalogWriter.FitSellmeier` solves
+  `n^2 - 1 = b1*L/(L - c1)` through the d and F points and writes
+
+  ```
+  c1 = Ld*Lf*(yf - yd) / (yf*Lf - yd*Ld)     // shipped
+  c1 = Ld*Lf*(yd - yf) / (yd*Lf - yf*Ld)     // correct
+  ```
+
+  The numerator's sign is flipped AND the denominator pairs `yf` with `Lf`
+  instead of the cross terms. For PMMA that gives `c1 = -0.008001` where the
+  correct solve gives `+0.007570`; a negative `c1` makes the index rise with
+  wavelength. Both shipped `CD` coefficients (`1.253557451057E+000`,
+  `-8.000386964709E-003`) were reproduced by hand from the faulty formula, so
+  this is confirmed rather than suspected.
+
+  **What it invalidates:** every polychromatic result on a converted lens, at
+  every wavelength except the d-line, INCLUDING the baseline before any moulding
+  data is loaded. It is why both validation articles showed a large
+  "original materials -> baseline" jump (0.174 -> 0.402 waves on the Cooke) that
+  was under-diagnosed at the time as the two-coefficient fit merely *differing*.
+  It does NOT affect: the d-line, where the row is anchored on `nd` exactly and
+  agrees with the real material to 5.7e-5; the moulding physics, which is
+  index-independent; or any of the stress/birefringence constants.
+
+  **NOT FIXED, and deliberately.** Correcting it changes every MS_* index and
+  therefore every published baseline in
+  `extensions/MoldStress/validation/mtf-triplet/`, which is a decision rather
+  than a chore. What the tool does instead, as of 2026-08-29, is DETECT the
+  inversion from the material's own indices at run time and refuse the
+  polychromatic result - so the warning disappears by itself when the row is
+  fixed, instead of becoming a stale claim. `Runner.Vd` plus 5 self-tests, one
+  of which asserts the defect still reproduces so a fix has to clear it.
+
 - **The `-run` headline is not the moulding effect on a lens whose image plane is
   on a solve, and the direct-index route costs the material's dispersion.** Both
   found 2026-08-29 on a purpose-built all-plastic triplet (PMMA / POLYSTYR / PMMA,

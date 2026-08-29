@@ -280,6 +280,36 @@ namespace MoldStress
                 Runner.ScalarVerdict(0.41, 1.0000, 1.0100, false),
                 "a 0.01-wave improvement and a 0.01-wave degradation read alike");
 
+            // --- ABBE SIGN FROM THE SYSTEM'S OWN INDICES ---------------------
+            //
+            // Added 2026-08-29, and it is not hypothetical: the MOULDSTRESS
+            // catalogue this tool GENERATES was found carrying inverted
+            // dispersion, MS_PMMA at Vd -80.6 against real PMMA's +57.4. The
+            // check has to read the sign off measured indices, so it stops
+            // firing by itself once the catalogue is fixed.
+            {
+                var band = new List<double> { 0.4861, 0.5876, 0.6563 };
+                // real PMMA, from the MISC catalogue
+                var good = new double[] { 1.497761, 1.491756, 1.489200 };
+                // MS_PMMA as generated on 2026-08-29
+                var bad = new double[] { 1.487451, 1.491699, 1.493552 };
+                SelfTest.Near("real PMMA reads its catalogue Abbe number",
+                    Runner.Vd(good, band, 1), 57.44, 0.05);
+                Check("a normal material reads POSITIVE Vd",
+                    Runner.Vd(good, band, 1) > 0.0, "index falls with wavelength");
+                Check("the generated MS_PMMA row reads NEGATIVE Vd",
+                    Runner.Vd(bad, band, 1) < 0.0,
+                    string.Format(CultureInfo.InvariantCulture,
+                        "{0:F1} - this is the defect, asserted so a fix must clear it",
+                        Runner.Vd(bad, band, 1)));
+                Check("the two arms disagree in SIGN, not just in value",
+                    (Runner.Vd(good, band, 1) > 0.0) != (Runner.Vd(bad, band, 1) > 0.0),
+                    "a check that cannot separate these would pass on both");
+                Check("a flat band gives NaN, never a fabricated number",
+                    double.IsNaN(Runner.Vd(new double[] { 1.5, 1.5, 1.5 }, band, 1)),
+                    "dividing by a zero span must refuse, not return infinity");
+            }
+
             // --- THE IMAGE-PLANE CASE, all four branches ---------------------
             //
             // Added 2026-08-29. The wavefront change this tool prints is only a
