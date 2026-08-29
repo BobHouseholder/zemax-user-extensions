@@ -294,6 +294,13 @@ namespace MoldStress
                 }
                 catch { }
 
+                // WHERE REAL RAYS FOCUS NOW, before any data is loaded. Cheap -
+                // there is no index volume to step through yet - and it is half
+                // of the only question that matters about the solve's shift:
+                // does it correspond to anything real rays do.
+                double baseBestMm = double.NaN, baseBestWaves = double.NaN;
+                bool baseBestAtEdge = false, baseBestFlat = false;
+
                 // WHAT HAPPENS AT WAVELENGTHS OTHER THAN THE d-LINE, measured
                 // before anything is loaded, because two separate things are
                 // wrong there and neither is visible in the wavefront number.
@@ -338,6 +345,18 @@ namespace MoldStress
                     }
                     indexByElement[eD.FrontSurface] = n;
                 }
+
+                // WHERE REAL RAYS FOCUS NOW, before any data is loaded, at the
+                // d-line - the wavelength the index data is written at, and the
+                // only one where a focus shift means moulding rather than the
+                // direct-index route's dispersion flattening.
+                if (!double.IsNaN(planeDesign))
+                    baseBestMm = BestFocusOffsetMm(sys, imgPrev,
+                                                   (dLineIdx >= 0) ? dLineIdx + 1 : 1,
+                                                   planeDesign, 0.30, 25,
+                                                   out baseBestAtEdge,
+                                                   out baseBestFlat,
+                                                   out baseBestWaves);
                 say("");
 
                 // INDEX-ONLY IS THE DEFAULT, at Bob's direction, 2026-08-22
@@ -618,6 +637,20 @@ namespace MoldStress
                     }
                 }
 
+                // AND WHERE THEY FOCUS WITH THE DATA IN. Same range, same
+                // sampling, same metric - a scan is only comparable to another
+                // scan on the same grid, which is why both are done here rather
+                // than left to whatever the user reaches for.
+                double mouldBestMm = double.NaN, mouldBestWaves = double.NaN;
+                bool mouldBestAtEdge = false, mouldBestFlat = false;
+                int focusWave = (dLineIdx >= 0) ? dLineIdx + 1 : 1;
+                if (!double.IsNaN(planeDesign))
+                    mouldBestMm = BestFocusOffsetMm(sys, imgPrev, focusWave,
+                                                    planeDesign, 0.30, 25,
+                                                    out mouldBestAtEdge,
+                                                    out mouldBestFlat,
+                                                    out mouldBestWaves);
+
                 string noDelta = NoDeltaReason(elementsWithPoints, elementsApplied,
                                                baseWfe, loadedWfe);
                 bool deltaRefused = noDelta != null;
@@ -709,11 +742,72 @@ namespace MoldStress
                         "    which is {0:+0.000000;-0.000000} waves against the baseline - "
                         + "but {1:F6} of that",
                         movedWfe - baseWfe, Math.Abs(movedWfe - loadedWfe)));
-                    say("    is DEFOCUS, and a refocus removes it. The solve is following a");
-                    say("    PARAXIAL shift; on the one lens where both were measured, real");
-                    say("    rays put best focus in the same place before and after moulding.");
-                    say("    A fixed-focus assembly still has to hold this shift; an");
-                    say("    adjustable one does not.");
+                    say("    is DEFOCUS, and a refocus removes it.");
+                    say("");
+                    // MEASURED ON THIS LENS, not quoted from another one.
+                    if (double.IsNaN(baseBestMm) || double.IsNaN(mouldBestMm))
+                    {
+                        say("    Real-ray best focus could NOT be scanned on this system, so");
+                        say("    whether the solve's shift corresponds to anything real rays");
+                        say("    do is unknown here. On the two lenses where it was measured,");
+                        say("    it did not.");
+                    }
+                    else if (baseBestFlat || mouldBestFlat)
+                    {
+                        say("    Real-ray best focus could not be scanned: the image plane did");
+                        say("    not move across the whole range, so the curve is flat and its");
+                        say("    minimum is meaningless. That is an instrument failure, not a");
+                        say("    result - most likely a solve holding the plane.");
+                    }
+                    else if (baseBestAtEdge || mouldBestAtEdge)
+                    {
+                        say(string.Format(CultureInfo.InvariantCulture,
+                            "    Real-ray best focus is NOT BRACKETED by the +/-300 um scan " +
+                            "({0:+0.0;-0.0} and {1:+0.0;-0.0} um sit on its edge), so no " +
+                            "shift is reported:", baseBestMm * 1000.0, mouldBestMm * 1000.0));
+                        say("    a minimum found at the end of a range is a statement about");
+                        say("    the range. Scan wider before quoting it.");
+                    }
+                    else
+                    {
+                        say(string.Format(CultureInfo.InvariantCulture,
+                            "    REAL RAYS, scanned on this lens: best focus {0:+0.0;-0.0} um " +
+                            "before", baseBestMm * 1000.0));
+                        say(string.Format(CultureInfo.InvariantCulture,
+                            "    and {0:+0.0;-0.0} um after - a real shift of {1:+0.0;-0.0} um, " +
+                            "against the solve's {2:+0.0;-0.0} um.",
+                            mouldBestMm * 1000.0,
+                            (mouldBestMm - baseBestMm) * 1000.0, planeShiftMm * 1000.0));
+                        // SIGNED. An equal-and-opposite shift is not agreement,
+                        // and the first version called -294 um against +275 um
+                        // "94 % - real rays DO follow it" because it compared
+                        // magnitudes.
+                        double ratio = Math.Abs(planeShiftMm) > 0
+                            ? (mouldBestMm - baseBestMm) / planeShiftMm
+                            : double.NaN;
+                        if (double.IsNaN(ratio))
+                            say("    The solve did not move the plane, so there is nothing to " +
+                                "compare.");
+                        else if (ratio < -0.05)
+                            say(string.Format(CultureInfo.InvariantCulture,
+                                "    Real rays move the OTHER WAY ({0:P0} of the solve's " +
+                                "shift), so the", ratio)
+                                + " solve is not merely overshooting - it is wrong in sign.");
+                        else if (ratio < 0.25)
+                            say(string.Format(CultureInfo.InvariantCulture,
+                                "    The solve is chasing a PARAXIAL shift real rays do not " +
+                                "follow ({0:P0} of it).", ratio));
+                        else if (ratio < 0.75)
+                            say(string.Format(CultureInfo.InvariantCulture,
+                                "    Real rays follow PART of it ({0:P0}); the rest is " +
+                                "paraxial only.", ratio));
+                        else
+                            say(string.Format(CultureInfo.InvariantCulture,
+                                "    Real rays DO follow it ({0:P0}), so this is a genuine " +
+                                "refocus.", ratio));
+                    }
+                    say("    A fixed-focus assembly has to hold whichever of these is real;");
+                    say("    an adjustable one does not.");
                 }
                 say("");
 
@@ -1075,6 +1169,111 @@ namespace MoldStress
             double span = n[shortest] - n[longest];
             if (double.IsNaN(span) || Math.Abs(span) < 1e-9) return double.NaN;
             return (n[dIdx] - 1.0) / span;
+        }
+
+        /// <summary>
+        /// Where real rays actually focus, by scanning the image plane and
+        /// reading the metric at each position. Returns the offset in mm from
+        /// the plane's current position; NaN if it could not be measured.
+        ///
+        /// `atEdge` is not a detail. A minimum found at the end of a scan range
+        /// is a statement about the RANGE, and this project shipped exactly that
+        /// mistake on 2026-08-29 - a through-focus scan run over +/-60 um whose
+        /// curves were still falling at the edge, reported as a minimum, and
+        /// only caught because the number looked too round. The caller must say
+        /// "not bracketed" rather than quote an edge.
+        ///
+        /// The plane is restored before returning, so this is a measurement and
+        /// not an edit.
+        /// </summary>
+        private static double BestFocusOffsetMm(ZOSAPI.IOpticalSystem sys, int imgPrev,
+                                                int wave, double originMm,
+                                                double halfRangeMm, int samples,
+                                                out bool atEdge, out bool flat,
+                                                out double bestMetric)
+        {
+            atEdge = false;
+            flat = false;
+            bestMetric = double.NaN;
+            double best = double.NaN;
+            try
+            {
+                var row = sys.LDE.GetSurfaceAt(imgPrev);
+                var cell = row.ThicknessCell;
+
+                // PIN IT HERE. The first version set Thickness on a surface whose
+                // focus solve was still live, so the solve put it straight back
+                // and every sample read the same number - a flat curve whose
+                // "minimum" is its first sample, which then reads as an edge.
+                // The scan owns its own pinning now rather than depending on
+                // where the caller sits in the pin/restore dance.
+                ZOSAPI.Editors.ISolveData saved = null;
+                try
+                {
+                    saved = cell.GetSolveData();
+                    if (saved != null && saved.Type == ZOSAPI.Editors.SolveType.Fixed)
+                        saved = null;
+                    cell.MakeSolveFixed();
+                }
+                catch { }
+
+                // THE ORIGIN IS GIVEN, NOT TAKEN FROM WHEREVER THE PLANE
+                // HAPPENS TO BE. The moulded scan runs after the solve has been
+                // restored, so `row.Thickness` there is the SOLVED plane - 294 um
+                // from where the baseline scan was centred. Two scans on
+                // different zeros produce offsets that cannot be subtracted, and
+                // the first version subtracted them anyway.
+                double restore = row.Thickness;
+                double t0 = originMm;
+                int bestIdx = -1;
+                double lo = double.MaxValue, hi = -double.MaxValue;
+                int seen = 0;
+                for (int i = 0; i < samples; i++)
+                {
+                    double d = -halfRangeMm + 2.0 * halfRangeMm * i / (samples - 1.0);
+                    row.Thickness = t0 + d;
+                    double m = MetricAt(sys, wave);
+                    if (double.IsNaN(m) || m <= 0.0) continue;
+                    seen++;
+                    lo = Math.Min(lo, m);
+                    hi = Math.Max(hi, m);
+                    if (double.IsNaN(bestMetric) || m < bestMetric)
+                    {
+                        bestMetric = m;
+                        best = d;
+                        bestIdx = i;
+                    }
+                }
+                row.Thickness = restore;
+                if (saved != null)
+                {
+                    try { cell.SetSolveData(saved); } catch { }
+                }
+
+                // A SCAN THAT CANNOT MOVE ITS VARIABLE IS NOT A MEASUREMENT.
+                // Zero span across the whole range means the plane never moved -
+                // an instrument failure, and a different thing from a minimum
+                // that sits outside the range.
+                flat = (seen < 2) || (hi - lo) <= 0.0;
+                atEdge = (bestIdx == 0 || bestIdx == samples - 1);
+            }
+            catch { return double.NaN; }
+            return best;
+        }
+
+        /// <summary>The metric at a chosen wavelength. Metric() is wavelength 1;
+        /// the focus scan needs the d-line, where the direct-index route's
+        /// dispersion flattening is absent and a focus shift means moulding.
+        /// </summary>
+        private static double MetricAt(ZOSAPI.IOpticalSystem sys, int wave)
+        {
+            try
+            {
+                return sys.MFE.GetOperandValue(
+                    ZOSAPI.Editors.MFE.MeritOperandType.RWRE, 4, wave,
+                    0, 0, 0, 0, 0, 0);
+            }
+            catch { return double.NaN; }
         }
 
         private static double Metric(ZOSAPI.IOpticalSystem sys)
