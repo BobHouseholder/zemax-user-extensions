@@ -417,14 +417,25 @@ file that owns the question before writing a conclusion in its domain.**
      first-order mechanism and for something in the fit. Still not demonstrated,
      and now the sharper question: what makes a paraxial trace through this fit
      depend on the host material's dispersion at all?
+     **AND THE TOOL NOW MEASURES THIS ON EVERY RUN**, since `e4b4110`, so the
+     question is asked of the user's own lens rather than quoted at them from
+     these two. `-run` scans real-ray best focus before and after — both at the
+     d-line, both centred on the design plane — and prints the real shift beside
+     the solve's. On the Cooke: −75 µm before, −75 µm after, against the solve's
+     −294 µm, i.e. the solve chases a paraxial shift real rays do not follow at
+     all (0%).
   2. **STAR's DirectRefractiveIndex route applies one index at every wavelength.**
      StarFiles writes absolute `Nd + dn`, i.e. the d-line, so the element loses its
      own dispersion. Isolated by a NULL cloud (`n = Nd` everywhere, physically a
-     no-op): at the d-line it sits 2.8e-5 waves from the baseline while moving the
-     band ends ~2,000x further (F 0.0412 -> 0.0968, C 0.1080 -> 0.0717). It is NOT
-     exact at the d-line - that was an overclaim, corrected 2026-08-29 when the
-     validation README was machine-checked against its own data; the control is
-     decisive because of the ratio, not a zero. Not integration error - identical to
+     no-op): at the d-line it sits **8.7e-11** waves from the baseline - numerically
+     zero - while moving the band ends by 0.05 to 0.09 waves. **The correction to
+     that number was itself corrected.** It was first measured at 2.8e-5 and the
+     "exact" claim was duly softened as an overclaim; that residual turned out to
+     be a symptom of the inverted-dispersion catalogue bug found the same day, and
+     with the catalogue fixed the original claim is true. The lesson kept is not
+     "it was fine all along" - it is that a measurement taken through a broken
+     instrument can make a TRUE claim look false, and softening it was still right
+     on the evidence then available. Not integration error - identical to
      four decimals across GRIN steps 1.0 -> 0.02 mm, a 50x range. No delta form
      exists on this route: `IndexDataType` is read-only and reports
      `DirectRefractiveIndex`; the switchable `PhysicsBasedIndex` is the
