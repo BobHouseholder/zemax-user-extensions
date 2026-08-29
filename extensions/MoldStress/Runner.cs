@@ -281,12 +281,16 @@ namespace MoldStress
                 int imgPrev = sys.LDE.NumberOfSurfaces - 2;
                 double planeDesign = double.NaN;
                 string planeSolve = null;
+                ZOSAPI.Editors.ISolveData planeSolveData = null;
                 try
                 {
                     planeDesign = sys.LDE.GetSurfaceAt(imgPrev).Thickness;
-                    var sd = sys.LDE.GetSurfaceAt(imgPrev).ThicknessCell.GetSolveData();
-                    if (sd != null && sd.Type != ZOSAPI.Editors.SolveType.Fixed)
-                        planeSolve = sd.Type.ToString();
+                    planeSolveData = sys.LDE.GetSurfaceAt(imgPrev).ThicknessCell.GetSolveData();
+                    if (planeSolveData != null &&
+                        planeSolveData.Type != ZOSAPI.Editors.SolveType.Fixed)
+                        planeSolve = planeSolveData.Type.ToString();
+                    else
+                        planeSolveData = null;
                 }
                 catch { }
 
@@ -592,6 +596,27 @@ namespace MoldStress
                     catch { }
                 }
                 double loadedWfe = planePinned ? Metric(sys) : movedWfe;
+
+                // PUT IT BACK. MakeSolveFixed deleted the user's solve to take the
+                // measurement; on the -prepare path that edit lands in the
+                // -MoldStress sibling, but `-run` with no -file attaches to a
+                // RUNNING OpticStudio and measures the live system. A measurement
+                // tool does not get to edit the thing it measures.
+                if (planePinned && planeSolveData != null)
+                {
+                    try
+                    {
+                        sys.LDE.GetSurfaceAt(imgPrev).ThicknessCell
+                           .SetSolveData(planeSolveData);
+                    }
+                    catch (Exception ex)
+                    {
+                        say("  WARNING: the image-plane solve on surface "
+                            + imgPrev + " was pinned for the measurement and could "
+                            + "NOT be restored (" + ex.Message + "). This system now "
+                            + "has a fixed last airspace where it had a solve.");
+                    }
+                }
 
                 string noDelta = NoDeltaReason(elementsWithPoints, elementsApplied,
                                                baseWfe, loadedWfe);
