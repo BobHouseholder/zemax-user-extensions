@@ -377,52 +377,6 @@ file that owns the question before writing a conclusion in its domain.**
 
 #### Open
 
-- **THE GENERATED MOULDSTRESS CATALOGUE HAS INVERTED DISPERSION.** Found
-  2026-08-29 while documenting a different dispersion problem, confirmed by
-  measurement and by re-deriving the shipped coefficients from the faulty
-  formula. Every MS_* row has index RISING with wavelength, which no transparent
-  optical polymer does:
-
-  | material | n(0.486) | n(0.588) | n(0.656) | Vd |
-  |---|---|---|---|---|
-  | `PMMA` (MISC) | 1.497761 | 1.491756 | 1.489200 | **+57.4** |
-  | `MS_PMMA` | 1.487451 | 1.491699 | 1.493552 | **-80.6** |
-  | `POLYSTYR` (MISC) | 1.604079 | 1.590481 | 1.584949 | **+30.9** |
-  | `MS_POLYSTYR` | 1.581080 | 1.590497 | 1.594651 | **-43.5** |
-
-  **The cause is two errors in one line.** `CatalogWriter.FitSellmeier` solves
-  `n^2 - 1 = b1*L/(L - c1)` through the d and F points and writes
-
-  ```
-  c1 = Ld*Lf*(yf - yd) / (yf*Lf - yd*Ld)     // shipped
-  c1 = Ld*Lf*(yd - yf) / (yd*Lf - yf*Ld)     // correct
-  ```
-
-  The numerator's sign is flipped AND the denominator pairs `yf` with `Lf`
-  instead of the cross terms. For PMMA that gives `c1 = -0.008001` where the
-  correct solve gives `+0.007570`; a negative `c1` makes the index rise with
-  wavelength. Both shipped `CD` coefficients (`1.253557451057E+000`,
-  `-8.000386964709E-003`) were reproduced by hand from the faulty formula, so
-  this is confirmed rather than suspected.
-
-  **What it invalidates:** every polychromatic result on a converted lens, at
-  every wavelength except the d-line, INCLUDING the baseline before any moulding
-  data is loaded. It is why both validation articles showed a large
-  "original materials -> baseline" jump (0.174 -> 0.402 waves on the Cooke) that
-  was under-diagnosed at the time as the two-coefficient fit merely *differing*.
-  It does NOT affect: the d-line, where the row is anchored on `nd` exactly and
-  agrees with the real material to 5.7e-5; the moulding physics, which is
-  index-independent; or any of the stress/birefringence constants.
-
-  **NOT FIXED, and deliberately.** Correcting it changes every MS_* index and
-  therefore every published baseline in
-  `extensions/MoldStress/validation/mtf-triplet/`, which is a decision rather
-  than a chore. What the tool does instead, as of 2026-08-29, is DETECT the
-  inversion from the material's own indices at run time and refuse the
-  polychromatic result - so the warning disappears by itself when the row is
-  fixed, instead of becoming a stale claim. `Runner.Vd` plus 5 self-tests, one
-  of which asserts the defect still reproduces so a fix has to clear it.
-
 - **The `-run` headline is not the moulding effect on a lens whose image plane is
   on a solve, and the direct-index route costs the material's dispersion.** Both
   found 2026-08-29 on a purpose-built all-plastic triplet (PMMA / POLYSTYR / PMMA,
@@ -597,6 +551,53 @@ file that owns the question before writing a conclusion in its domain.**
 - **Needs Bob:** click the ribbon entry once in the GUI. Everything here ran headless.
 
 #### Closed recently, kept because the reasoning is the useful part
+
+- **THE GENERATED CATALOGUE HAD INVERTED DISPERSION - FIXED 2026-08-29**
+  (`265e826`). Every MS_* row had index RISING with wavelength: MS_PMMA at
+  Vd -80.6 against real PMMA's +57.4, MS_POLYSTYR -43.5 against +30.9. Found
+  while documenting a *different* dispersion problem, by probing the material
+  the tool generates against the catalogue material it substitutes for.
+
+  **It was two defects, and that is the part worth keeping.** The first was
+  arithmetic - `FitSellmeier` had a flipped numerator sign AND a denominator
+  pairing `yf` with `Lf` instead of the cross terms, giving `c1 = -0.008001`
+  where the same fit done correctly gives `+0.007574`; a negative `c1` inverts
+  the curve. **Fixing only that would have shipped a second wrong answer**: the
+  routine also reconstructed nF and nC as `nd +/- (nd-1)/(2*vd)`, which places
+  nd exactly MIDWAY between them, and real dispersion is curved - for PMMA nd
+  sits 2.35:1 toward C. The corrected algebra alone returns Vd **+80.6** against
+  the +57.4 declared on the same row, so the row would have disagreed with
+  itself. Caught by computing what the "fix" delivered before writing it in.
+
+  The reconstruction is gone. The fit now reproduces the two things an nd/vd row
+  actually promises: `b1` in closed form from the nd constraint, `c1` bisected
+  until the fitted nF - nC equals `(nd-1)/vd`.
+
+  | material | n(0.486) | n(0.588) | n(0.656) | Vd |
+  |---|---|---|---|---|
+  | `PMMA` (MISC) | 1.497761 | 1.491756 | 1.489200 | +57.44 |
+  | `MS_PMMA` | 1.497720 | 1.491700 | 1.489154 | **+57.40** |
+  | `POLYSTYR` (MISC) | 1.604079 | 1.590481 | 1.584949 | +30.87 |
+  | `MS_POLYSTYR` | 1.603992 | 1.590500 | 1.584882 | **+30.90** |
+
+  Every index within ~6e-5 of the real material, against errors up to 9.4e-3
+  before. 22 new self-tests assert, per material, that the fit reproduces its
+  own nd and its own Vd - not merely that the sign is right - plus two
+  regression anchors that fire if either the shipped `-0.008001` or the
+  sign-only `+0.007574` ever returns. The run's own inversion warning, added the
+  same day, now stops firing: that was the falsifiable check and it passed.
+
+  **What it invalidated.** Both the broken and the fixed fit reproduce nd
+  EXACTLY, so d-line results are unchanged - the "like for like" MTF comparison
+  in `validation/mtf-triplet/` still stands, because it was deliberately taken
+  at the d-line. The POLYCHROMATIC numbers there are superseded: the F and C
+  bars of the null-control chart, the "original materials -> baseline" jump
+  (0.174 -> 0.402 waves, now 0.174 -> 0.132), and every `poly_*` state. Both
+  FINDINGS survive - the image-plane artifact was shown at the d-line and by
+  real-ray through-focus, and the direct-index route's monochromatic behaviour
+  is a property of the route - but their magnitudes at F and C are not to be
+  quoted. **The validation reports and their published artifacts still carry the
+  superseded numbers and have not yet been corrected.**
 
 - **The sag is read in full as of 2026-08-20** — base radius, conic, and even or odd
   aspheric terms, in the standard form and the same one the sibling `AthermalScan`
