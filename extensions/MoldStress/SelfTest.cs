@@ -1309,6 +1309,93 @@ namespace MoldStress
                 Check("datum= is an accepted key alongside the rest", ok5,
                       ok5 ? el4.Gate.ToString() : "refused");
 
+                // --- FAN GATE, and the L/t threshold that replaced 12 mm ------
+                var elf = fresh();
+                double edgeWidth = elf.Gate.WidthMm;
+                string t6 = System.IO.Path.GetTempFileName();
+                System.IO.File.WriteAllText(t6, "surface=3 kind=fan\n");
+                try { Gating.ApplyOverrides(new[] { elf }, t6); }
+                finally { System.IO.File.Delete(t6); }
+                Check("kind=fan is accepted",
+                      elf.Gate.Kind == GateKind.FanEdge, elf.Gate.ToString());
+                // THE ONE THAT MATTERS. The fill model reads WidthMm, not Kind,
+                // so a fan that kept the edge width would produce bit-identical
+                // output and the option would be decorative.
+                Check("...and it RESIZES the gate, so it is not an edge gate relabelled",
+                      elf.Gate.WidthMm > edgeWidth,
+                      string.Format("fan {0:F3} mm vs edge {1:F3} mm",
+                                    elf.Gate.WidthMm, edgeWidth));
+
+                // An explicit width must still win over the kind's default.
+                var elw = fresh();
+                string t7 = System.IO.Path.GetTempFileName();
+                System.IO.File.WriteAllText(t7, "surface=3 kind=fan width=1.25\n");
+                try { Gating.ApplyOverrides(new[] { elw }, t7); }
+                finally { System.IO.File.Delete(t7); }
+                Near("an explicit width beats the kind's own default",
+                     elw.Gate.WidthMm, 1.25, 1e-12);
+
+                // L/t REPLACES THE BARE 12 mm DIAMETER TEST. The point of the
+                // change is that thickness now counts, so the discriminating
+                // case is two parts of the SAME diameter and different walls -
+                // which the old rule could not tell apart at all.
+                var thick = new MouldedElement
+                {
+                    FrontSurface = 3, CentreThicknessMm = 8.0, SemiDiameterMm = 12.0,
+                    FrontRadiusMm = 200.0, BackRadiusMm = -200.0,
+                };
+                thick.EdgeThicknessMm = thick.ThicknessAt(thick.SemiDiameterMm);
+                // 0.08 mm, not the 0.20 this fixture first used: at 0.20 the
+                // ratio is 120, which is UNDER the 150 limit, so the fixture
+                // failed rather than the rule. 24 mm across a 0.08 mm wall is
+                // L/t = 300 and unambiguous.
+                var wafer = new MouldedElement
+                {
+                    FrontSurface = 3, CentreThicknessMm = 0.08, SemiDiameterMm = 12.0,
+                    FrontRadiusMm = 0.0, BackRadiusMm = 0.0,
+                };
+                wafer.EdgeThicknessMm = wafer.ThicknessAt(wafer.SemiDiameterMm);
+                double lThick = Gating.FlowLengthRatio(thick);
+                double lWafer = Gating.FlowLengthRatio(wafer);
+                Check("L/t separates two parts of the SAME diameter",
+                      lWafer > lThick * 10.0,
+                      string.Format("wafer L/t {0:F0} vs thick lens L/t {1:F1}, both 24 mm across",
+                                    lWafer, lThick));
+                Check("the thick one still gets an edge gate",
+                      Gating.DefaultGate(thick).Kind == GateKind.EdgeRadial,
+                      string.Format("L/t {0:F1} under the {1:F0} limit",
+                                    lThick, Gating.RingFlowLengthRatio));
+                Check("the thin one gets a ring, which the 12 mm rule could not have decided",
+                      Gating.DefaultGate(wafer).Kind == GateKind.RingAllRound,
+                      string.Format("L/t {0:F0} over the {1:F0} limit",
+                                    lWafer, Gating.RingFlowLengthRatio));
+
+                // AND THE PUBLISHED TRIPLET MUST NOT MOVE. Every number in the
+                // validation study was taken with all three elements edge-gated;
+                // if the new rule reclassified any of them the study would need
+                // re-running, so this is a regression guard, not a nicety.
+                double[][] triplet = {
+                    new[] { 4.000, 11.00271, -83.76109, 4.918 },
+                    new[] { 1.200, -13.97735, 9.00465, 2.391 },
+                    new[] { 4.000, 24.77427, -11.70778, 4.274 },
+                };
+                bool allEdge = true;
+                string ratios = "";
+                foreach (var t in triplet)
+                {
+                    var m = new MouldedElement
+                    {
+                        FrontSurface = 3, CentreThicknessMm = t[0],
+                        FrontRadiusMm = t[1], BackRadiusMm = t[2], SemiDiameterMm = t[3],
+                    };
+                    m.EdgeThicknessMm = m.ThicknessAt(m.SemiDiameterMm);
+                    allEdge &= Gating.DefaultGate(m).Kind == GateKind.EdgeRadial;
+                    ratios += string.Format(CultureInfo.InvariantCulture,
+                                            "{0:F1} ", Gating.FlowLengthRatio(m));
+                }
+                Check("the validation triplet is STILL all edge-gated under L/t",
+                      allEdge, "L/t = " + ratios.Trim() + ", all under "
+                               + Gating.RingFlowLengthRatio.ToString("F0", CultureInfo.InvariantCulture));
             }
         }
 

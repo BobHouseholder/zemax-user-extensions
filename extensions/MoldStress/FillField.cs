@@ -694,6 +694,18 @@ namespace MoldStress
                     // width at the half-way chord and closes again.
                     r = Math.Abs(e.SemiDiameterMm - s);
                     w = 2.0 * Math.Sqrt(Math.Max(e.SemiDiameterMm * e.SemiDiameterMm - r * r, 1e-12));
+                    // A FAN GATE RUNS THE SAME LAW; WHAT DIFFERS IS THE WIDTH.
+                    //
+                    // FanEdge falls here deliberately rather than getting a
+                    // branch of its own. Once the melt is inside the cavity the
+                    // CAVITY sets the front shape, and a fan does not change the
+                    // cavity - it widens in the runner, so the front enters
+                    // already spread instead of at the land. The chord law below
+                    // is near zero at s = 0 and is floored at the gate width, so
+                    // that entry width is exactly what the floor carries, and a
+                    // wider gate lowers the shear rate over the first stretch and
+                    // leaves the far field alone. Giving the fan its own formula
+                    // here would be inventing physics the cavity does not have.
                     w = Math.Max(w, e.Gate.WidthMm);
                 }
                 f.Width[i] = w;

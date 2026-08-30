@@ -185,7 +185,17 @@ namespace MoldStress
         }
     }
 
-    internal enum GateKind { EdgeRadial, RingAllRound, FilmEdge }
+    /// <summary>
+    /// FanEdge added 2026-08-29. It is the gate the one comparative study on a
+    /// real lens actually chose: Nagy et al. (PMC11360770) put six geometries on
+    /// a 16.5 mm planoconvex PC lens and picked a fan on peak shear stress,
+    /// 0.46 MPa against 0.93 MPa for a point gate. It is NOT the default here,
+    /// deliberately - that study measured sink marks and deformation and states
+    /// plainly that "optical properties were not examined", so there is no
+    /// measured optical ground to move every number in this project onto.
+    /// Available under `kind=fan`; the default stays EdgeRadial.
+    /// </summary>
+    internal enum GateKind { EdgeRadial, RingAllRound, FilmEdge, FanEdge }
 
     internal sealed class GateSpec
     {
@@ -276,10 +286,97 @@ namespace MoldStress
     {
         public const double DefaultAzimuthDeg = 0.0;
 
+        /// <summary>
+        /// FLOW LENGTH OVER WALL THICKNESS, the ratio a moulder actually judges
+        /// "will one gate fill this?" by. Above the limit the melt front is
+        /// expected to freeze before it arrives and a rim ring is preferred to a
+        /// single point.
+        ///
+        /// THIS NUMBER IS NOT SOURCED, and neither was what it replaced. Sweep 5
+        /// (2026-08-29) went looking and found that gate guidance for imaging
+        /// lenses is qualitative where it is optical and quantitative only where
+        /// it is general moulding practice; nothing measured pins a threshold for
+        /// an optical part. What changed is the SHAPE of the rule, not its
+        /// pedigree: the old test was `SemiDiameterMm > 12.0`, an absolute size
+        /// that says a 12 mm part of any thickness fills the same way, which is
+        /// the one thing L/t makes obviously false. 150 is the middle of the
+        /// range trade sources quote for easy-flow thermoplastics.
+        ///
+        /// It is deliberately loose enough not to disturb any published result:
+        /// the validation triplet runs L/t of 3.0, 3.2 and 2.5, and both rules
+        /// call all three an edge gate. The reference cases set their gates
+        /// explicitly and never reach this code.
+        /// </summary>
+        public const double RingFlowLengthRatio = 150.0;
+
+        /// <summary>
+        /// L/t for a single rim gate: rim to rim over the mean wall. The mean is
+        /// taken over AREA rather than radius, because the outer annuli carry
+        /// most of the part and a radius-average would be dominated by a centre
+        /// the melt reaches last.
+        /// </summary>
+        public static double FlowLengthRatio(MouldedElement e)
+        {
+            double semi = Math.Max(e.SemiDiameterMm, 1e-6);
+            double area = 0.0, vol = 0.0;
+            const int n = 200;
+            for (int i = 0; i < n; i++)
+            {
+                double r0 = semi * i / n, r1 = semi * (i + 1) / n;
+                double rm = 0.5 * (r0 + r1);
+                double da = Math.PI * (r1 * r1 - r0 * r0);
+                area += da;
+                vol += e.ThicknessAt(rm) * da;
+            }
+            double tMean = (area > 0.0) ? vol / area : e.CentreThicknessMm;
+            if (!(tMean > 1e-9)) return double.PositiveInfinity;
+            return (2.0 * semi) / tMean;
+        }
+
+        /// <summary>
+        /// The width each kind gets when nobody has specified one. Split out of
+        /// DefaultGate so that changing the KIND in a config file resizes the
+        /// gate the same way, rather than leaving an edge gate's width on a fan.
+        ///
+        /// Sourcing, honestly: the edge and ring rules are the ones this project
+        /// has always used and sweep 5 could not find a source for either. The
+        /// fan rule is new and is no better sourced - a quarter of the part
+        /// width is ordinary fan practice and nothing measured pins it for an
+        /// optical part. What IS defensible is the ORDER: a fan must be wider
+        /// than the edge gate it replaces or it is not a fan, and the floor below
+        /// enforces exactly that and nothing more.
+        /// </summary>
+        public static double DefaultWidthFor(GateKind kind, MouldedElement e, double landMm)
+        {
+            switch (kind)
+            {
+                case GateKind.RingAllRound:
+                    return 2.0 * Math.PI * e.SemiDiameterMm;
+                case GateKind.FilmEdge:
+                    // A film gate spans the edge it sits on.
+                    return 2.0 * e.SemiDiameterMm;
+                case GateKind.FanEdge:
+                    // STRICTLY WIDER THAN THE EDGE GATE IT REPLACES. The first
+                    // version of this read `max(0.5 * semi, 3 * land)` and the
+                    // self-test caught it: on a small thick-edged lens - semi 8,
+                    // land 1.43 - half the semi-diameter is 4.00 and the edge
+                    // gate is 4.29, so the fan came out IDENTICAL and `kind=fan`
+                    // would have been an edge gate under another name. Doubling
+                    // the edge width is the floor; the part-width term only takes
+                    // over on parts big enough for it to matter.
+                    return Math.Max(0.5 * e.SemiDiameterMm, 2.0 * 3.0 * landMm);
+                default:
+                    return 3.0 * landMm;
+            }
+        }
+
         public static GateSpec DefaultGate(MouldedElement e)
         {
             double edge = Math.Max(e.EdgeThicknessMm, 0.1);
-            bool ringPreferred = e.SemiDiameterMm > 12.0;   // large parts fill unevenly from a point
+            // WAS `SemiDiameterMm > 12.0`. A bare diameter cannot distinguish a
+            // 24 mm plate 1 mm thick, which one point gate will not fill, from a
+            // 24 mm lens 8 mm thick, which it will.
+            bool ringPreferred = FlowLengthRatio(e) > RingFlowLengthRatio;
 
             return new GateSpec
             {
@@ -294,7 +391,8 @@ namespace MoldStress
                 // wall, and a width a few times its own depth so it freezes after
                 // the cavity rather than before it.
                 ThicknessMm = 0.6 * edge,
-                WidthMm = ringPreferred ? 2 * Math.PI * e.SemiDiameterMm : 3.0 * 0.6 * edge,
+                WidthMm = DefaultWidthFor(
+                    ringPreferred ? GateKind.RingAllRound : GateKind.EdgeRadial, e, 0.6 * edge),
                 IsDefault = true,
             };
         }
@@ -380,6 +478,15 @@ namespace MoldStress
                 {
                     el.Gate.Kind = ParseKind(tmp, lineNo);
                     el.Gate.IsDefault = false;
+                    // CHANGING THE KIND HAS TO RESIZE THE GATE, or `kind=fan` is
+                    // an edge gate wearing a different name: the fill model reads
+                    // WidthMm, not Kind, so a fan that kept the edge width would
+                    // produce bit-identical output and the option would be a lie.
+                    // An explicit width= on the same line still wins - not by
+                    // ordering, which would be fragile, but because the resize is
+                    // skipped outright when the line carries one.
+                    if (!kv.ContainsKey("width"))
+                        el.Gate.WidthMm = DefaultWidthFor(el.Gate.Kind, el, el.Gate.ThicknessMm);
                 }
                 if (kv.TryGetValue("datum", out tmp))
                 {
@@ -409,9 +516,10 @@ namespace MoldStress
                 case "edge": return GateKind.EdgeRadial;
                 case "ring": return GateKind.RingAllRound;
                 case "film": return GateKind.FilmEdge;
+                case "fan": return GateKind.FanEdge;
                 default:
                     throw new FormatException("gate config line " + lineNo +
-                        ": kind must be edge, ring or film");
+                        ": kind must be edge, ring, film or fan");
             }
         }
 
