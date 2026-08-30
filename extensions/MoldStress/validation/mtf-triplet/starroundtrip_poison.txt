@@ -1,0 +1,52 @@
+==============================================================================
+A. INDEX IDENTITY - a uniform field must come back unchanged
+==============================================================================
+    probing at z = 3.125, where the cloud has 385 points out to r = 6.676
+ok   every identity probe sits inside the data                  0 of 4 outside
+    (0.0, 0.0, 3.1) -> 1.492700000
+    (1.7, 0.0, 3.1) -> 1.492700000
+    (0.0, 3.3, 3.1) -> 1.492700000
+    (3.3, 3.3, 3.1) -> 1.492700000
+FAIL a uniform index field round-trips                          worst |read - written| = 1.00e-03 over 4 probes
+
+==============================================================================
+B. INDEX RAMP - a known quadratic must come back with the same curvature
+==============================================================================
+    a = 1.0e-05 written -> 2.0492e-05 read   ratio 2.0492   (7 probes, worst point error 36.679 of a*r^2)
+    a = 1.0e-07 written -> 2.0492e-07 read   ratio 2.0492   (7 probes, worst point error 36.679 of a*r^2)
+ok   the ramp probes stayed inside the data                     7 probes survived the domain guard
+FAIL a 1e-5 ramp round-trips to 10%                             ratio 2.0492 (worst point error 36.679 of a*r^2)
+ok   the fit is LINEAR in amplitude over two decades            ratios 2.0492 and 2.0492
+    NOTE the 1e-7 ratio is reported, not gated - the fit's noise floor
+         was measured 2026-08-29 to change SIGN below a peak dn of ~1e-6
+
+==============================================================================
+C. DISPERSION - does the route REPLACE the index or PERTURB it?
+==============================================================================
+    unloaded     F 5.990880301  d 5.966800350  C 5.956615491
+    STAR n0      F 5.966800350  d 5.966800350  C 5.966800350
+    STAR n0+d    F 5.966800350  d 5.966800350  C 5.966800350
+    write +1e-02   -> dOPTH  F +0.000e+00  d +0.000e+00  C +0.000e+00
+    load n0 vs off -> dOPTH  F -2.408e-02  d +5.480e-13  C +1.018e-02
+FAIL the RAY TRACE responds to the STAR index field             largest dOPTH for a 1e-02 write = 0.000e+00 mm
+FAIL STAR's contribution is applied identically at every wavelength spread 0.000e+00 mm on a response of 0.000e+00 mm
+    verdict: the direct-index route REPLACES - the material's dispersion is DISCARDED
+ok   the index route has a coherent wavelength behaviour        REPLACES - the material's dispersion is DISCARDED
+
+==============================================================================
+D. STRESS -> BIREFRINGENCE - does the catalogue coupling round-trip?
+==============================================================================
+    import code 0, 15015 points accepted
+    written  sigma_xx = 10.0 N/mm2, K11-K12 = 4.500e-06
+    expected 0.481215 rad/mm at the d-line
+    read     0.962429 rad/mm over 869 points
+ok   the import accepted every point                            15015 of 15015
+FAIL stress -> birefringence round-trips to 1%                  read/expected = 2.0000
+
+10 claims across 4 arms, 5 FAILED   [POISONED RUN - failures are the point]
+  FAILED: a uniform index field round-trips
+  FAILED: a 1e-5 ramp round-trips to 10%
+  FAILED: the RAY TRACE responds to the STAR index field
+  FAILED: STAR's contribution is applied identically at every wavelength
+  FAILED: stress -> birefringence round-trips to 1%
+wrote starroundtrip.json
