@@ -814,3 +814,101 @@ proportion is the right answer.
 **What survives is exactly what the sweep set out to learn:** the splitting METHOD is
 refuted, the optical-grade DIFFERENCES are unchanged, and polycarbonate's 12%
 agreement is luck that a different grade makes no less lucky.
+
+## Sweep 5 (2026-08-29) - gate TYPE and LOCATION for imaging lenses
+
+Prompted by a question about the gate geometry the tool assumes. Required
+ingredients, fixed before searching: (1) imaging optics specifically, judged on
+wavefront/MTF/birefringence rather than on general part quality; (2) a gate TYPE
+recommendation with a reason; (3) a gate LOCATION relative to the clear aperture;
+(4) an OPTICAL consequence, measured; (5) a dimensioning rule against the part
+wall.
+
+**THE FINDING: no accessible source gives all five, and the split is systematic.**
+The optics-specific sources give type and location with an optical rationale and
+NO dimensions. The dimensioning rules come from general moulding practice with no
+optical measurement attached. The one study that compared six gate geometries on a
+real lens measured **sink marks and deformation, not birefringence, and says so
+itself**. So gate guidance for imaging lenses is, in the reachable literature,
+qualitative where it is optical and quantitative only where it is geometric.
+
+**That bears directly on this tool: `Gating.cs` cites nothing.** The 12 mm
+ring-vs-edge threshold, the 0.6 land factor and the 1.8 width factor carry no
+source string, unlike every constant in `Polymers.cs`. This sweep did not find one
+for them, and that is now a recorded result rather than an open question.
+
+### READ
+
+- **Nagy et al., *Study of Injection Molding Process to Improve Geometrical
+  Quality of Thick-Walled Polycarbonate Optical Lenses by Reducing Sink Marks*,
+  PMC11360770** (READ, open access). Six gate geometries compared on a 16.5 mm
+  planoconvex PC lens - point, sub-gate, three-point, fan, two film types. **Fan
+  gate chosen**, on peak shear stress **0.46 MPa against 0.93 MPa for a point
+  gate** and a longer effective packing phase. Gate thickness 2 mm vs 3 mm tested,
+  **3 mm preferred**; a larger gate cross-section consistently gave a shallower
+  sink mark. Gate placed on the **planar non-optical face**, with the stated rule
+  that "the gate mark does not interfere with the functional surface".
+  **DISPOSITION: USABLE for gate TYPE and for the direction of the sizing rule.
+  CLOSED on ingredient (4)** - the authors state "optical properties were not
+  examined, and further research on residual stress and birefringence effects is
+  needed". Also note the part is 16.5 mm thick, far outside this tool's plate-like
+  envelope.
+
+- **US 5,975,882, *Molded optical component with gate stubs removed from
+  peripheral rim portions*** (READ, via Google Patents after the USPTO PDF 403'd).
+  The gate opens into the **circumferential portion of the outer rim**. The reason
+  is not optical: the rim carries the **reference surface** that seats the lens in
+  its holder, and the gate-cut tool must be kept off it - "should the reference
+  surface be damaged by a cutter blade in a gate-cut operation, the resulting
+  surface flaw could make it difficult to assemble the optical component into an
+  optically aligned position". **DISPOSITION: USABLE for LOCATION.** It supplies a
+  constraint this project had not considered at all: gate azimuth is set by the
+  MOUNTING DATUM, not only by the clear aperture. No dimensions given.
+
+- **US 8,964,313, *Plastic optical element and method of making the same*** (READ,
+  same route). Claims a formed angle at the lens centre **>= 90 and <= 180
+  degrees**, and states that in that range "the effect of the combination of the
+  birefringences near the gate corresponding parts is suppressed", most effectively
+  at **180 degrees**, i.e. gates diametrically opposed. **DISPOSITION: USABLE for
+  AZIMUTH, with a caveat** - it is about a MULTI-gate arrangement, and this tool
+  models exactly one gate, so the claim cannot currently be exercised. No gate
+  thickness or width is specified; the patent says only that gate volume should be
+  minimised.
+
+### SNIPPET - not read, and not counted as coverage
+
+- **Zhang et al. (?), *Injection molding of high-precision optical lenses: A
+  review*, ScienceDirect S0141635922000319.** The single most likely source for all
+  five ingredients. **403 from ScienceDirect twice; Semantic Scholar returned 429.**
+  NOT READ. **DISPOSITION: OPEN, and the best remaining lead** - chase via a
+  library proxy or the authors' institutional copy before any further searching.
+- ***Gate design optimization in the injection molding of the optical lens*,
+  ResearchGate 289064062.** Request-PDF only, no full text. NOT READ. Title is
+  exactly on point; **DISPOSITION: OPEN, second lead.**
+- **Grey optimization of injection molding processing of plastic optical lens...,
+  Microsystem Technologies (2018).** Abstract only. NOT READ.
+- **Film-gate dimensioning, 0.2-0.6 mm thickness with a 0.6-1 mm land** - trade
+  guides, general moulding, no optics. SNIPPET. Useful only as an order-of-magnitude
+  cross-check on the tool's 0.6 x edge-thickness land.
+- **"Gate into the thick section, flow thick to thin"** - general moulding rule,
+  multiple trade sources, SNIPPET. Load-bearing anyway; see recommendation 2 below.
+
+### CLOSED
+
+- **US 6,183,830** (already on file, READ in sweep 3) - 120 mm DVD substrate,
+  centre-gated radial. **CLOSED for this question**: a disc gated through a centre
+  hole is a geometry an imaging lens does not have, and the tool has no centre-gate
+  kind precisely because a lens cannot be gated through its aperture.
+
+### The two data points this project already held
+
+Both are imaging lenses and both are **edge-gated at the rim**, which corroborates
+the tool's default kind:
+
+| source | part | gate |
+|---|---|---|
+| case 2, Zeonex 480R | plano-convex, 32 mm dia, 2 mm thick | edge gate on the Y axis, land **0.8 mm** |
+| Hu & Xue 2025, PMMA | asphere, 38 mm effective, CT 11 / ET 2 | single edge gate at the rim |
+
+Case 2's 0.8 mm land on a 2 mm-thick part is the only published gate DIMENSION
+this project holds for an optical part.
