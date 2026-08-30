@@ -498,6 +498,15 @@ file that owns the question before writing a conclusion in its domain.**
      be read against: absolute is the only form the route accepts, not the form that
      leaves a polychromatic system undisturbed.
 
+     **THIS IS NOW MEASURED ON EVERY RUN, not once by hand** (2026-08-30,
+     `validation/mtf-triplet/starroundtrip.py` arm C). Loading a uniform index
+     collapses the ray-traced optical path at F, d and C onto the d-line value
+     exactly - F shortens by 24.1 um, C lengthens by 10.2 um, d moves by
+     5.5e-13 - so the route REPLACES the index rather than perturbing it. Write
+     that arm with `INDX` and it can never fail: differencing two loaded states
+     1e-2 apart moves `INDX` by exactly zero, because the operand cannot see the
+     STAR contribution at all. It has to be a quantity the ray experiences.
+
   **REPRODUCED ON A SECOND, MANUFACTURABLE ARTICLE, 2026-08-29.** The first
   article was found by GLOBAL optimisation and was not a Cooke triplet at all -
   element powers + - - , a meniscus middle element, a 0.50 mm airgap and a 62.9 deg
