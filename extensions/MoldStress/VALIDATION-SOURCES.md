@@ -832,10 +832,22 @@ real lens measured **sink marks and deformation, not birefringence, and says so
 itself**. So gate guidance for imaging lenses is, in the reachable literature,
 qualitative where it is optical and quantitative only where it is geometric.
 
-**That bears directly on this tool: `Gating.cs` cites nothing.** The 12 mm
-ring-vs-edge threshold, the 0.6 land factor and the 1.8 width factor carry no
-source string, unlike every constant in `Polymers.cs`. This sweep did not find one
-for them, and that is now a recorded result rather than an open question.
+**That bears directly on this tool: `Gating.cs` cited nothing** when this sweep
+ran. The 12 mm ring-vs-edge threshold, the 0.6 land factor and the 1.8 width
+factor carried no source string, unlike every constant in `Polymers.cs`.
+
+**PARTLY CORRECTED THE SAME DAY, by acting on this sweep** — `2bba005`,
+`0ec2f6c`, `4baa9d9`. The file now cites US 5,975,882 for placing the gate
+against the mounting datum and Nagy et al. (PMC11360770) for the fan gate, and
+the 12 mm threshold is gone, replaced by a flow-length-to-thickness ratio. **What
+did NOT change is the pedigree of the numbers**: the L/t limit of 150 is as
+unsourced as the 12 mm it replaced, and the fan width rule is new and unsourced
+too. Both say so in their own doc comments. What improved is the SHAPE of the
+rules and the fact that two of them now name where they came from.
+
+**Still uncited, deliberately: the 0.6 land factor and the 1.8 width factor.**
+See `memory/rejected.md` (ClaudeOS) for why they were left alone rather than
+tuned toward case 2's 0.8 mm datum.
 
 ### READ
 
@@ -880,11 +892,11 @@ for them, and that is now a recorded result rather than an open question.
 - **Zhang et al. (?), *Injection molding of high-precision optical lenses: A
   review*, ScienceDirect S0141635922000319.** The single most likely source for all
   five ingredients. **403 from ScienceDirect twice; Semantic Scholar returned 429.**
-  NOT READ. **DISPOSITION: OPEN, and the best remaining lead** - chase via a
+  NOT READ. **DISPOSITION: BLOCKED** - barrier: ScienceDirect 403 twice, Semantic Scholar 429. Next route: a library proxy or the authors institutional copy. Still the best remaining lead - chase via a
   library proxy or the authors' institutional copy before any further searching.
 - ***Gate design optimization in the injection molding of the optical lens*,
   ResearchGate 289064062.** Request-PDF only, no full text. NOT READ. Title is
-  exactly on point; **DISPOSITION: OPEN, second lead.**
+  exactly on point; **DISPOSITION: BLOCKED** - barrier: request-PDF only. Next route: author request. Second lead.
 - **Grey optimization of injection molding processing of plastic optical lens...,
   Microsystem Technologies (2018).** Abstract only. NOT READ.
 - **Film-gate dimensioning, 0.2-0.6 mm thickness with a 0.6-1 mm land** - trade
