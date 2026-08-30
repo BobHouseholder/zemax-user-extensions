@@ -605,6 +605,21 @@ namespace MoldStress
         /// the field carries only the filling drop.</summary>
         public double ChangeoverPressureMPa;
 
+        /// <summary>
+        /// The cavity-gap floor this field was solved with, where it came from,
+        /// and how much of the flow path it actually set.
+        ///
+        /// The last of the three is the one worth printing. dp/ds goes as 1/h^3,
+        /// so a floor binding over most of the path means the in-plane field is
+        /// being set by the flange rather than by the lens - which is fine, real
+        /// parts are like that, but it should not be invisible. A floor that
+        /// never binds is a number that changed nothing.
+        /// </summary>
+        public double FloorMm;
+        public bool FloorIsAssumed;
+        public int FloorBoundNodes;
+        public double FloorBoundFraction;
+
         public double PathLengthMm { get { return S[S.Length - 1]; } }
 
         /// <summary>
@@ -728,11 +743,23 @@ namespace MoldStress
                 //
                 // This binds only where the sagitta would thin a rim below the
                 // gate land. A constant-thickness part is untouched.
+                //
+                // SINCE 2026-08-29 the floor is the DECLARED flange when there is
+                // one, and the gate land only as a fallback. Identical arithmetic
+                // when nothing is declared, so no published number moves - what
+                // changes is that the run now says WHICH of the two it used and
+                // over how much of the path it binds. A floor that never applies
+                // and a floor carrying the whole field look the same in the
+                // output otherwise, and only one of them is an assumption the
+                // reader needs to know about.
                 double hGeom = e.ThicknessAt(Math.Min(r, e.SemiDiameterMm));
-                double hFloor = (e.Gate != null && e.Gate.ThicknessMm > 1e-4)
-                    ? e.Gate.ThicknessMm : 0.0;
+                double hFloor = e.EffectiveFloorMm;
+                if (hFloor > hGeom + 1e-12) f.FloorBoundNodes++;
                 f.H[i] = Math.Max(Math.Max(hGeom, hFloor), 1e-4);
             }
+            f.FloorMm = e.EffectiveFloorMm;
+            f.FloorIsAssumed = e.FloorIsAssumed;
+            f.FloorBoundFraction = (double)f.FloorBoundNodes / nodes;
 
             // Wall shear rate for the viscosity: 6Q/(W h^2) for a slit.
             double hMean = 0.0, wMean = 0.0;

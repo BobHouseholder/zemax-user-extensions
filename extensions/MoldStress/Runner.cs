@@ -431,6 +431,25 @@ namespace MoldStress
                             "(clear aperture {1:F3}); beyond the clear aperture the rim's " +
                             "values are carried outward, not solved",
                             e.ExportSemiDiameterMm, e.SemiDiameterMm));
+                    // THE FLANGE, AND WHETHER IT WAS DECLARED OR ASSUMED. The
+                    // cavity gap is floored so a lens sagitta cannot produce a
+                    // knife rim that dp/ds ~ 1/h^3 would then let dominate the
+                    // whole field. That floor used to be the gate land, silently.
+                    say(string.Format(CultureInfo.InvariantCulture,
+                        "      flange    {0} {1:F3} mm; it sets the gap over {2:F0}% of the flow path",
+                        e.FloorIsAssumed ? "NOT DECLARED, assumed equal to the gate land"
+                                         : "declared",
+                        fill.FloorMm, 100.0 * fill.FloorBoundFraction));
+                    if (e.FloorIsAssumed && fill.FloorBoundFraction > 0.25)
+                        say("                that assumption is carrying the fill field here - " +
+                            "set flange=<mm> in -gateconfig to own the number");
+                    if (e.GateFeedsThinEnd)
+                        say(string.Format(CultureInfo.InvariantCulture,
+                            "      NOTE      the rim gate feeds the THIN end ({0:F3} mm edge " +
+                            "against a {1:F3} mm centre). Practice is to gate the thick section; " +
+                            "a lens cannot, because the thick section is the aperture - which is " +
+                            "why the flange above has to hold the feed open.",
+                            e.EdgeThicknessMm, e.CentreThicknessMm));
                     say(string.Format(CultureInfo.InvariantCulture,
                         "      fill      gate pressure {0:F2} MPa, viscosity {1:E2} Pa.s, {2:F0} mm3/s",
                         fill.P[0], fill.EtaPaS, fill.FlowRateMm3PerS));

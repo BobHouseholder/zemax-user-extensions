@@ -1370,6 +1370,82 @@ namespace MoldStress
                       string.Format("L/t {0:F0} over the {1:F0} limit",
                                     lWafer, Gating.RingFlowLengthRatio));
 
+                // --- THE FLANGE, MADE EXPLICIT --------------------------------
+                //
+                // The cavity gap has always been floored so a lens sagitta cannot
+                // give a knife rim that dp/ds ~ 1/h^3 would then let dominate the
+                // whole field. That floor was the gate land, silently; it is now
+                // the DECLARED flange when there is one.
+                {
+                    var noFlange = fresh();
+                    Check("with no flange declared the floor is the gate land, and says so",
+                          noFlange.FloorIsAssumed &&
+                          Math.Abs(noFlange.EffectiveFloorMm - noFlange.Gate.ThicknessMm) < 1e-12,
+                          string.Format("floor {0:F4} mm = land {1:F4} mm, assumed",
+                                        noFlange.EffectiveFloorMm, noFlange.Gate.ThicknessMm));
+
+                    // THE REGRESSION GUARD: declaring a flange EQUAL to the old
+                    // implicit value must change nothing, or this quietly moved
+                    // every published number.
+                    var same = fresh();
+                    double implicitFloor = same.Gate.ThicknessMm;
+                    string tf = System.IO.Path.GetTempFileName();
+                    System.IO.File.WriteAllText(tf, string.Format(CultureInfo.InvariantCulture,
+                        "surface=3 flange={0:R}", implicitFloor));
+                    try { Gating.ApplyOverrides(new[] { same }, tf); }
+                    finally { System.IO.File.Delete(tf); }
+                    Near("declaring the flange at the OLD implicit value is a no-op",
+                         same.EffectiveFloorMm, implicitFloor, 1e-12);
+                    Check("...and it is then reported as declared, not assumed",
+                          !same.FloorIsAssumed, "FloorIsAssumed false");
+
+                    var thickFl = fresh();
+                    string tg = System.IO.Path.GetTempFileName();
+                    System.IO.File.WriteAllText(tg, "surface=3 flange=3.0");
+                    try { Gating.ApplyOverrides(new[] { thickFl }, tg); }
+                    finally { System.IO.File.Delete(tg); }
+                    Near("a declared flange overrides the gate land",
+                         thickFl.EffectiveFloorMm, 3.0, 1e-12);
+
+                    // A flange thinner than its own gate cannot exist, and is
+                    // REFUSED rather than clamped: a silently-raised flange is a
+                    // number the user thinks they set and did not.
+                    var tooThin = fresh();
+                    string th = System.IO.Path.GetTempFileName();
+                    System.IO.File.WriteAllText(th, "surface=3 flange=0.05");
+                    bool refusedThin = false;
+                    try { Gating.ApplyOverrides(new[] { tooThin }, th); }
+                    catch (FormatException) { refusedThin = true; }
+                    finally { System.IO.File.Delete(th); }
+                    Check("a flange thinner than the gate that feeds it is refused",
+                          refusedThin,
+                          string.Format("0.05 mm against a {0:F3} mm land",
+                                        tooThin.Gate.ThicknessMm));
+
+                    // The thin-end condition, BOTH directions - a flag that
+                    // answered the same way for both would be decoration.
+                    var biconvex = fresh();
+                    var biconcave = new MouldedElement
+                    {
+                        FrontSurface = 3, CentreThicknessMm = 1.2, SemiDiameterMm = 2.391,
+                        FrontRadiusMm = -13.97735, BackRadiusMm = 9.00465,
+                    };
+                    biconcave.EdgeThicknessMm = biconcave.ThicknessAt(biconcave.SemiDiameterMm);
+                    biconcave.Gate = Gating.DefaultGate(biconcave);
+                    Check("a biconvex element IS gated at its thin end",
+                          biconvex.GateFeedsThinEnd,
+                          string.Format("edge {0:F3} < centre {1:F3}",
+                                        biconvex.EdgeThicknessMm, biconvex.CentreThicknessMm));
+                    Check("a biconcave element is NOT - its rim is the thick end",
+                          !biconcave.GateFeedsThinEnd,
+                          string.Format("edge {0:F3} > centre {1:F3}",
+                                        biconcave.EdgeThicknessMm, biconcave.CentreThicknessMm));
+                    var ringed = fresh();
+                    ringed.Gate.Kind = GateKind.RingAllRound;
+                    Check("a ring gate is never 'gated at the thin end'",
+                          !ringed.GateFeedsThinEnd, "fed all round");
+                }
+
                 // AND THE PUBLISHED TRIPLET MUST NOT MOVE. Every number in the
                 // validation study was taken with all three elements edge-gated;
                 // if the new rule reclassified any of them the study would need

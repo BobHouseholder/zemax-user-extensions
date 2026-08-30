@@ -39,6 +39,69 @@ namespace MoldStress
         public double PartingLineZMm;       // local z of the parting plane, from the front vertex
 
         /// <summary>
+        /// THE FLANGE, DECLARED. Zero means nobody has said, and the fill model
+        /// then falls back to flooring the cavity at the gate land - which is
+        /// what it has always done, silently.
+        ///
+        /// A moulded lens is not just the lens surface: it carries an annulus
+        /// outside the clear aperture holding the gate, the datum and the
+        /// handling features. This model already knows that annulus is THERE - it
+        /// is the gap between SemiDiameterMm and ExportSemiDiameterMm - and has
+        /// never known how THICK it is, so it assumed the gate land.
+        ///
+        /// The assumption is load-bearing rather than cosmetic. dp/ds goes as
+        /// 1/h^3, so the thinnest station on the flow path sets the whole in-plane
+        /// field; taking a lens sagitta out to the full semi-diameter gives a
+        /// knife rim - 0.273 mm on reference case 2's 32 mm plano-convex - and the
+        /// in-plane peak came out 6.60x published with its maximum sitting on a
+        /// rim that does not exist. Flooring fixed that. Declaring the flange
+        /// replaces an assumption that happens to be about right with a number
+        /// the user owns and can be wrong about deliberately.
+        ///
+        /// Set with `flange=<mm>` in -gateconfig.
+        /// </summary>
+        public double FlangeThicknessMm;
+
+        /// <summary>
+        /// True when a rim gate feeds the THIN end of the element - the biconvex
+        /// case, where the centre is thick and the rim is not.
+        ///
+        /// Ordinary moulding practice gates into the thick section and lets the
+        /// melt run thick to thin, because the reverse freezes the feed path while
+        /// the heavy section is still shrinking and wanting pack. A lens usually
+        /// CANNOT obey it: the thick section is the clear aperture and nothing may
+        /// be gated through it. What a real mould does instead is carry a flange
+        /// thick enough to hold the feed open - which is the number above, and
+        /// exactly what this tool has been assuming.
+        ///
+        /// So this is not a defect to fix. It is a condition to REPORT, because it
+        /// tells the user their flange is doing structural work in the fill model.
+        /// </summary>
+        public bool GateFeedsThinEnd
+        {
+            get
+            {
+                if (Gate == null) return false;
+                if (Gate.Kind == GateKind.RingAllRound) return false;   // fed all round
+                return EdgeThicknessMm < CentreThicknessMm - 1e-9;
+            }
+        }
+
+        /// <summary>The gap the fill model will actually floor the cavity at, and
+        /// whether that number was declared or assumed. Pure, so the report and
+        /// the solver cannot disagree about it.</summary>
+        public double EffectiveFloorMm
+        {
+            get
+            {
+                if (FlangeThicknessMm > 1e-4) return FlangeThicknessMm;
+                return (Gate != null && Gate.ThicknessMm > 1e-4) ? Gate.ThicknessMm : 0.0;
+            }
+        }
+
+        public bool FloorIsAssumed { get { return !(FlangeThicknessMm > 1e-4); } }
+
+        /// <summary>
         /// How this element's surfaces depart from a plain sphere, or null when
         /// they do not. INFORMATIONAL since 2026-08-20 - conics and even/odd
         /// aspheric terms are now read and modelled, so this is reported rather
@@ -462,7 +525,7 @@ namespace MoldStress
                     switch (key.ToLowerInvariant())
                     {
                         case "surface": case "azimuth": case "datum": case "width":
-                        case "thickness": case "parting": case "kind":
+                        case "thickness": case "parting": case "kind": case "flange":
                             break;
                         default:
                             throw new FormatException("gate config line " + lineNo +
@@ -474,6 +537,24 @@ namespace MoldStress
                 if (kv.TryGetValue("width", out tmp)) { el.Gate.WidthMm = D(tmp); el.Gate.IsDefault = false; }
                 if (kv.TryGetValue("thickness", out tmp)) { el.Gate.ThicknessMm = D(tmp); el.Gate.IsDefault = false; }
                 if (kv.TryGetValue("parting", out tmp)) { el.PartingLineZMm = D(tmp); }
+                if (kv.TryGetValue("flange", out tmp))
+                {
+                    double fl = D(tmp);
+                    // A flange thinner than the gate that feeds it cannot exist,
+                    // and accepting one would put the fill model's thinnest
+                    // station inside the feed path - which is the geometry the
+                    // floor was introduced to rule out. Refuse rather than clamp:
+                    // a silently-raised flange is a number the user thinks they
+                    // set and did not.
+                    if (fl > 0.0 && el.Gate != null && el.Gate.ThicknessMm > 1e-4
+                        && fl < el.Gate.ThicknessMm - 1e-9)
+                        throw new FormatException("gate config line " + lineNo +
+                            ": flange " + fl.ToString("F3", CultureInfo.InvariantCulture) +
+                            " mm is thinner than the gate land " +
+                            el.Gate.ThicknessMm.ToString("F3", CultureInfo.InvariantCulture) +
+                            " mm that feeds it");
+                    el.FlangeThicknessMm = fl;
+                }
                 if (kv.TryGetValue("kind", out tmp))
                 {
                     el.Gate.Kind = ParseKind(tmp, lineNo);
