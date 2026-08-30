@@ -398,6 +398,10 @@ namespace MoldStress
                 // a zero and must not read as one.
                 double peakRetWaves = 0.0, peakRetNm = 0.0;
                 int peakRetFront = 0, peakRetBack = 0;
+                // The peak's MATERIAL, so the band can be taken from the
+                // coefficient that actually produced it rather than from
+                // whichever element happened to be scanned last.
+                string peakRetPolymer = null;
                 int retMeasured = 0, retMissing = 0;
 
                 foreach (var e in els)
@@ -597,6 +601,7 @@ namespace MoldStress
                         {
                             peakRetWaves = waves; peakRetNm = nm;
                             peakRetFront = e.FrontSurface; peakRetBack = e.BackSurface;
+                            peakRetPolymer = e.Material;
                         }
                         say(string.Format(CultureInfo.InvariantCulture,
                             "      birefringence  {0:F5} rad/mm at the d-line, over {1} points",
@@ -971,6 +976,34 @@ namespace MoldStress
                         "    retardance      at most {0:F4} waves = {1:F1} nm at the d-line, " +
                         "on surfaces {2}-{3}", peakRetWaves, peakRetNm,
                         peakRetFront, peakRetBack));
+
+                    // THE BAND THE NUMBER INHERITS FROM ITS OWN COEFFICIENT.
+                    //
+                    // Retardance is proportional to K11-K12 = -KGlass, so the
+                    // coefficient's stated interval propagates exactly. Printing
+                    // four decimals beside a constant whose own citation spans a
+                    // factor of three is what this line exists to stop.
+                    //
+                    // An UNQUANTIFIED row is reported as such and never as a
+                    // zero-width band: "the source gave one number" and "the
+                    // value is certain" look identical otherwise, and two of the
+                    // five rows in this table are the first kind.
+                    {
+                        var pk = (peakRetPolymer != null) ? Polymers.ByName(peakRetPolymer) : null;
+                        double bLo, bHi;
+                        if (Polymers.RetardanceBand(pk, peakRetWaves, out bLo, out bHi))
+                            say(string.Format(CultureInfo.InvariantCulture,
+                                "                    from the coefficient's own interval: " +
+                                "{0:F4} to {1:F4} waves ({2} K {3:F1} to {4:F1} Br, a factor of {5:F1})",
+                                bLo, bHi, peakRetPolymer,
+                                pk.KGlassLowBr, pk.KGlassHighBr,
+                                Polymers.RetardanceBandFactor(pk)));
+                        else if (pk != null)
+                            say(string.Format(CultureInfo.InvariantCulture,
+                                "                    band UNQUANTIFIED - {0}'s source states a " +
+                                "value and no interval, so this figure's precision is not " +
+                                "supported and not bounded either", peakRetPolymer));
+                    }
                     say("    That is a BOUND: local birefringence over the longest path,");
                     say("    exact for a uniform field and high otherwise. The map route");
                     say("    this used to read returned pi on a stress-FREE element.");

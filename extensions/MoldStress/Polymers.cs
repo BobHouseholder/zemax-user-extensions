@@ -112,6 +112,44 @@ namespace MoldStress
         public string CMeltSource;
 
         /// <summary>
+        /// THE INTERVAL THE SOURCE STATES, machine-readable, for the two
+        /// coefficients the outputs are LINEAR in. NaN means the source gives a
+        /// value and no interval - an "order of" figure, or a bare number - and
+        /// that is reported as UNQUANTIFIED rather than silently treated as
+        /// exact, which is the whole reason these fields exist.
+        ///
+        /// Added 2026-08-30. Until then every stated range in this file lived in
+        /// PROSE inside the source strings, so the tool reported four decimals on
+        /// constants whose own citations span a factor of three, and nothing
+        /// could compute what that was worth. These carry the SOURCE's numbers,
+        /// never an estimate of them: where a source says "-4.5 to -1.5" both
+        /// ends go in; where it says "order -10", neither does, and the row is
+        /// reported as unquantified.
+        ///
+        /// The isotropic (density) channel already had its span - see
+        /// `Polymer.IsotropicSpan`, which the run prints as the K11/K12 CAVEAT.
+        /// These two cover the other channels.
+        /// </summary>
+        public double KGlassLowBr = double.NaN, KGlassHighBr = double.NaN;
+        public double CMeltLowBr = double.NaN, CMeltHighBr = double.NaN;
+
+        /// <summary>
+        /// True when the source states an interval for the retardance
+        /// coefficient. Retardance is EXACTLY proportional to K11-K12 = -KGlass,
+        /// so this interval propagates with no sweep and no linearisation error:
+        /// the band is the coefficient's band, scaled.
+        /// </summary>
+        public bool KGlassBounded
+        {
+            get { return !double.IsNaN(KGlassLowBr) && !double.IsNaN(KGlassHighBr); }
+        }
+
+        public bool CMeltBounded
+        {
+            get { return !double.IsNaN(CMeltLowBr) && !double.IsNaN(CMeltHighBr); }
+        }
+
+        /// <summary>
         /// Set when a published value for this constant CONFLICTS with the one
         /// carried here, in sign or by more than a factor of two. Null when the
         /// constant is simply measured, and null when it is merely BORROWED -
@@ -306,6 +344,9 @@ namespace MoldStress
                 Name = "MS_PMMA", Description = "Poly(methyl methacrylate), generic optical grade",
                 Nd = 1.4917, Vd = 57.4, WavelengthUm = 0.5876,
                 KGlassBrewster = -4.5, K11Brewster = 2.3,
+                // Aston fibre work states -4.5 to -1.5; Hu & Xue 2025 give 4.6
+                // unsigned on a moulding grade, which bounds the far end.
+                KGlassLowBr = -4.6, KGlassHighBr = -1.5,
                 KSource = "glassy stress-optic coefficient, PMMA fibre measurements, -4.5 to -1.5e-12 /Pa (Aston, polymer optical fibre); most negative value taken. A MEASURED SPLIT EXISTS, FOR A DIFFERENT GRADE, AND IT REFUTES THE ASSUMPTION. Waxler et al. (1979) measured PLEXIGLAS 55 - a general-purpose cast acrylic, not an optical grade - at q11 +26.7, q12 +25.5 Br. NOT ADOPTED for the same reason as the polycarbonate row: different grade. BUT THE GRADE CAVEAT DOES NOT RESCUE THE SPLIT. The hydrostatic combination q11 + 2*q12 is +77.7 Br measured against -2.1 Br from this row assumed N-BK7 proportion - a factor of 37 AND the opposite SIGN. A grade difference can plausibly move a magnitude; it cannot flip the sign of a hydrostatic response, and the -2.1 is not a measurement of any grade at all - it is a glass proportion applied to a polymer. The comparison is not two grades disagreeing, it is an assumption refuted by a measurement. INDEPENDENTLY CORROBORATED 2026-08-21 on MAGNITUDE ONLY: Hu & Xue, Sci. Rep. 15:15451 (2025), Table 3, give Brewster constant 4.6 for the ACREPT VH001 PMMA they mould - 1 part in 45 against the 4.5 carried here, from a source unconnected to the fibre measurements. They state it unsigned (their Eq. 19 uses it as a positive scalar), so the SIGN is still carried on the fibre work alone. Their Tg of 105 C is an exact match for this row",
                 Provisional = true,
                 CMeltBrewster = -30.0,
@@ -335,6 +376,11 @@ namespace MoldStress
                 Name = "MS_POLYCARB", Description = "Bisphenol-A polycarbonate, optical grade",
                 Nd = 1.5855, Vd = 29.9, WavelengthUm = 0.5876,
                 KGlassBrewster = 72.0, K11Brewster = -24.0,
+                // The photoelasticity literature reports 72-82 Br for the optical grade.
+                KGlassLowBr = 72.0, KGlassHighBr = 82.0,
+                // 4000 Br from flow birefringence against 5150 from shear creep,
+                // a discrepancy the source states and does not reconcile.
+                CMeltLowBr = 4000.0, CMeltHighBr = 5150.0,
                 KSource = "glassy photoelastic constant of PC, ~72e-12 /Pa, standard value in the photoelasticity literature. A MEASURED SPLIT EXISTS, FOR A DIFFERENT GRADE. Waxler, Horowitz and Feldman, Appl. Opt. 18(1) 101 (1979), NBS interferometry at 2 percent accuracy, measured the INDIVIDUAL constants for LEXAN - a 1979 GENERAL-PURPOSE polycarbonate, not an optical grade: q11 -4.6, q12 +34.6 Br, difference +39.2 Br. NOT ADOPTED, decided 2026-08-22: that is a different material from the optical-grade PC this row describes, and the 72-82 Br carried here is what the photoelasticity literature reports for the optical grade. Recorded as a general-purpose datum rather than a competing measurement of the same thing. What it DOES settle is the split: q11 + 2*q12 is +64.6 Br measured against +72.0 Br from this row assumed N-BK7 proportion, within 12 percent - which is luck, not validation, since nothing connects a glass proportion to a polymer hydrostatic response.",
                 Provisional = true,
                 CMeltBrewster = 4000.0,
@@ -389,6 +435,10 @@ namespace MoldStress
                 // not measured and is assumed in N-BK7's proportion.
                 KGlassBrewster = -8.5, K11Brewster = 2.43,
                 KSource = "MEASURED: Kim, Yoon & Kornfield, Key Eng. Mater. 326-328 (2006) 183 - glassy -8 to -9 Br; midpoint taken. K11/K12 split assumed",
+                // Kim et al. state both ends for both coefficients: the only row here
+                // where the retardance AND flow channels are both bounded by measurement.
+                KGlassLowBr = -9.0, KGlassHighBr = -8.0,
+                CMeltLowBr = 920.0, CMeltHighBr = 1160.0,
                 Provisional = false,
                 CMeltBrewster = 1000.0,
                 CMeltSource = "MEASURED: Kim, Yoon & Kornfield, Key Eng. Mater. 326-328 (2006) 183, melt +920 to +1160 Br. A corroboration from TOPAS 5013 was claimed here until 2026-08-18 and was WITHDRAWN - see CMeltContested. This value now rests on its own measurement alone, which is what it always should have done",
@@ -442,9 +492,12 @@ namespace MoldStress
                     + "and the structure-insensitivity claim was only ever made about the first. So "
                     + "this grade being a COP is what supports it, and routing the justification "
                     + "through a COC was the actual defect. WHAT REMAINS OPEN: no melt coefficient "
-                    + "has been measured for 480R itself, and Inoue's family value is +1700 Br "
-                    + "against the +1000 used here - a factor of 1.7 that would make case 2's "
-                    + "in-plane over-prediction WORSE, not better.",
+                    + "has been measured for 480R itself, and Inoue's family value of +1700 Br "
+                    + "IS NOW THE VALUE CARRIED - this sentence used to say it stood against "
+                    + "the +1000 in use, which stopped being true when the field was "
+                    + "corrected the same day. Adopting it made case 2's in-plane "
+                    + "over-prediction WORSE, not better, which is why it is recorded rather "
+                    + "than treated as an improvement.",
                 MeltModulusPa = 2.8e5,
                 DiffusivityMm2PerS = 0.10, CtePerK = 60e-6, ModulusMPa = 2100, PoissonRatio = 0.36,
                 DensityGPerCm3 = 1.01,
@@ -474,6 +527,51 @@ namespace MoldStress
         {
             string t;
             return Aliases.TryGetValue((name ?? "").Trim(), out t) ? t : null;
+        }
+
+        /// <summary>
+        /// THE BAND A REPORTED RETARDANCE INHERITS FROM ITS OWN COEFFICIENT.
+        ///
+        /// Exact, not swept and not linearised: retardance is proportional to
+        /// K11 - K12, which is identically -KGlassBrewster, so scaling by the
+        /// ends of the coefficient's stated interval IS the propagation. There
+        /// is no interaction to miss because there is only one term.
+        ///
+        /// Returns false when the source states no interval. That case is
+        /// reported as UNQUANTIFIED and must never be rendered as a zero-width
+        /// band: "the source gave one number" and "the value is certain" print
+        /// identically otherwise, and two of the five rows here are the former.
+        ///
+        /// NOTE what this does NOT cover, because conflating them would overstate
+        /// the result: the K11/K12 SPLIT uncertainty (retardance is immune to it,
+        /// the density channel is not - see Polymer.IsotropicSpan), and every
+        /// non-linear input in the flow model. This is the band from ONE
+        /// coefficient, and the run says so.
+        /// </summary>
+        public static bool RetardanceBand(Polymer p, double value,
+                                          out double lo, out double hi)
+        {
+            lo = hi = double.NaN;
+            if (p == null || !p.KGlassBounded) return false;
+            double c = Math.Abs(p.KGlassBrewster);
+            if (!(c > 1e-12) || double.IsNaN(value)) return false;
+            double a = value * Math.Abs(p.KGlassLowBr) / c;
+            double b = value * Math.Abs(p.KGlassHighBr) / c;
+            lo = Math.Min(a, b);
+            hi = Math.Max(a, b);
+            return true;
+        }
+
+        /// <summary>
+        /// How wide that band is, as a factor. 1.0 would mean the coefficient is
+        /// pinned; NaN means the source never stated an interval to be wide in.
+        /// </summary>
+        public static double RetardanceBandFactor(Polymer p)
+        {
+            if (p == null || !p.KGlassBounded) return double.NaN;
+            double a = Math.Abs(p.KGlassLowBr), b = Math.Abs(p.KGlassHighBr);
+            double lo = Math.Min(a, b), hi = Math.Max(a, b);
+            return (lo > 1e-12) ? hi / lo : double.NaN;
         }
 
         public static Polymer ByName(string name)
@@ -527,34 +625,64 @@ namespace MoldStress
             return got >= lo && got <= hi;
         }
 
+        /// <summary>
+        /// The guard bands, HOISTED out of SelfCheckValues 2026-08-30 so the
+        /// self-check and the interval cross-check read one copy.
+        ///
+        /// These are NOT the citations' intervals. They are deliberately
+        /// generous test tolerances guarding the ORDER and the SIGN, which is
+        /// where this table's real errors have been. The citation's own interval
+        /// lives on the Polymer as KGlassLow/HighBr and is what gets propagated
+        /// to an output band - widening an uncertainty with a test tolerance
+        /// would overstate it. A self-test asserts the cited interval sits
+        /// strictly inside the guard, so the two cannot drift apart.
+        /// </summary>
+        internal static readonly object[][] PublishedBands = new[]
+        {
+            new object[] { "MS_PMMA", "C_melt", -30.0, -90.0, -10.0,
+                "Wimberger-Friedl, Rheol. Acta 30 (1991) 329, via US9720155 Table 1, 20 C above Tg" },
+            new object[] { "MS_PMMA", "K_glass", -4.5, -6.0, -1.0,
+                "PMMA optical-fibre measurements (Aston), -4.5 to -1.5e-12 /Pa" },
+            new object[] { "MS_POLYCARB", "C_melt", 3500.0, 2500.0, 4500.0,
+                "US9720155 Table 1 / Wimberger-Friedl 1991: BPA-PC +3000~4000 Br at 20 C above Tg" },
+            new object[] { "MS_POLYCARB", "K_glass", 78.0, 60.0, 95.0,
+                "BPA-PC photoelastic ~78-82 Br, matched-order convention (n_P-n_Q = C(sig_P-sig_Q))" },
+            new object[] { "MS_POLYSTYR", "C_melt", -4725.0, -5500.0, -4000.0,
+                "Venerus et al., J. Rheol. 43(3) 795 (1999): PS melt -4.65 to -4.8e-9 /Pa" },
+            new object[] { "MS_COC_TOPAS6017", "C_melt", 1040.0, 850.0, 1250.0,
+                "MEASURED: Kim, Yoon & Kornfield, Key Eng. Mater. 326-328 (2006) 183, +920 to +1160 Br" },
+            new object[] { "MS_COC_TOPAS6017", "K_glass", -8.5, -10.0, -7.0,
+                "MEASURED: same source, glassy -8 to -9 Br" },
+            // Borrowed, so this is checked against the FAMILY value it is
+            // justified by, not against the grade it was copied from - which
+            // would be circular. Inoue's +1700 Br sits outside the band's
+            // centre on purpose: the band records that the number in use is
+            // low against the family, which is a known open item.
+            new object[] { "MS_COP_ZEONEX480R", "C_melt", 1700.0, 900.0, 2500.0,
+                "Inoue et al., Polymer J. (1995): ROMP cyclic olefin polymers ~+1700 Br - the family this grade belongs to. Still not measured for 480R itself" },
+        };
+
+        /// <summary>The guard band for one material and quantity, or false when
+        /// the table carries none.</summary>
+        internal static bool PublishedGuardBand(string material, string quantity,
+                                                out double lo, out double hi)
+        {
+            lo = hi = double.NaN;
+            foreach (var e in PublishedBands)
+            {
+                if ((string)e[0] == material && (string)e[1] == quantity)
+                {
+                    lo = (double)e[3]; hi = (double)e[4];
+                    return true;
+                }
+            }
+            return false;
+        }
+
         public static void SelfCheckValues()
         {
             // material, quantity, published centre, low, high, citation
-            var expect = new[]
-            {
-                new object[] { "MS_PMMA", "C_melt", -30.0, -90.0, -10.0,
-                    "Wimberger-Friedl, Rheol. Acta 30 (1991) 329, via US9720155 Table 1, 20 C above Tg" },
-                new object[] { "MS_PMMA", "K_glass", -4.5, -6.0, -1.0,
-                    "PMMA optical-fibre measurements (Aston), -4.5 to -1.5e-12 /Pa" },
-                new object[] { "MS_POLYCARB", "C_melt", 3500.0, 2500.0, 4500.0,
-                    "US9720155 Table 1 / Wimberger-Friedl 1991: BPA-PC +3000~4000 Br at 20 C above Tg" },
-                new object[] { "MS_POLYCARB", "K_glass", 78.0, 60.0, 95.0,
-                    "BPA-PC photoelastic ~78-82 Br, matched-order convention (n_P-n_Q = C(sig_P-sig_Q))" },
-                new object[] { "MS_POLYSTYR", "C_melt", -4725.0, -5500.0, -4000.0,
-                    "Venerus et al., J. Rheol. 43(3) 795 (1999): PS melt -4.65 to -4.8e-9 /Pa" },
-                new object[] { "MS_COC_TOPAS6017", "C_melt", 1040.0, 850.0, 1250.0,
-                    "MEASURED: Kim, Yoon & Kornfield, Key Eng. Mater. 326-328 (2006) 183, +920 to +1160 Br" },
-                new object[] { "MS_COC_TOPAS6017", "K_glass", -8.5, -10.0, -7.0,
-                    "MEASURED: same source, glassy -8 to -9 Br" },
-                // Borrowed, so this is checked against the FAMILY value it is
-                // justified by, not against the grade it was copied from - which
-                // would be circular. Inoue's +1700 Br sits outside the band's
-                // centre on purpose: the band records that the number in use is
-                // low against the family, which is a known open item.
-                new object[] { "MS_COP_ZEONEX480R", "C_melt", 1700.0, 900.0, 2500.0,
-                    "Inoue et al., Polymer J. (1995): ROMP cyclic olefin polymers ~+1700 Br - the family this grade belongs to. Still not measured for 480R itself" },
-            };
-
+            var expect = PublishedBands;
             foreach (var e in expect)
             {
                 var pm = ByName((string)e[0]);

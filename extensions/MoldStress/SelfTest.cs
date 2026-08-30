@@ -1486,6 +1486,129 @@ namespace MoldStress
                   errs.Count == 0 ? Polymers.All.Length + " materials"
                                   : string.Join("; ", errs));
 
+            // --- THE STATED-INTERVAL PROPAGATION ------------------------------
+            //
+            // Retardance is proportional to K11-K12 = -KGlass, so a coefficient's
+            // stated interval propagates EXACTLY. What these guard is not the
+            // arithmetic - it is the distinction between a source that gave an
+            // interval and one that gave a number, which print identically if
+            // an absent interval is rendered as a zero-width band.
+            {
+                double lo, hi;
+                var topas = Polymers.ByName("MS_COC_TOPAS6017");   // -9 to -8, measured
+                Check("a bounded coefficient yields a band",
+                      Polymers.RetardanceBand(topas, 1.0, out lo, out hi),
+                      string.Format(CultureInfo.InvariantCulture,
+                                    "{0:F4} to {1:F4} on a unit retardance", lo, hi));
+                Check("...that BRACKETS the carried value rather than sitting to one side",
+                      lo <= 1.0 + 1e-12 && hi >= 1.0 - 1e-12,
+                      string.Format(CultureInfo.InvariantCulture,
+                                    "{0:F4} <= 1.0000 <= {1:F4}", lo, hi));
+                // THE WIDTH IS IN MAGNITUDES, AND FOR A NEGATIVE COEFFICIENT THE
+                // FIELD NAMES INVERT. TOPAS runs -9.0 to -8.0, so KGlassHighBr
+                // has the SMALLER magnitude; the first version of this assertion
+                // did |High| - |Low| in field order, got -0.1176 against the
+                // code's +0.1176, and failed. The code was right - it takes
+                // min/max of the magnitudes - and the test was carrying an
+                // ordering assumption that only holds for positive constants.
+                double mLo = Math.Min(Math.Abs(topas.KGlassLowBr), Math.Abs(topas.KGlassHighBr));
+                double mHi = Math.Max(Math.Abs(topas.KGlassLowBr), Math.Abs(topas.KGlassHighBr));
+                Near("...and scales linearly, because the dependence is exactly linear",
+                     (hi - lo) * 2.0,
+                     ((mHi - mLo) / Math.Abs(topas.KGlassBrewster)) * 2.0, 1e-12);
+                // And a POSITIVE-coefficient row must work too, or the fix above
+                // has only moved the assumption rather than removed it.
+                {
+                    var pc = Polymers.ByName("MS_POLYCARB");   // +72 to +82
+                    double plo, phi;
+                    Check("a POSITIVE coefficient bands the same way",
+                          Polymers.RetardanceBand(pc, 1.0, out plo, out phi) &&
+                          plo <= 1.0 + 1e-12 && phi >= 1.0 - 1e-12,
+                          string.Format(CultureInfo.InvariantCulture,
+                                        "{0:F4} <= 1.0000 <= {1:F4} on +72 to +82 Br", plo, phi));
+                }
+
+                // THE ONE THAT MATTERS. Polystyrene's source says "order -10e-12
+                // /Pa" - a value with no interval. Reporting that as +-0 would
+                // claim a precision nobody measured.
+                var ps = Polymers.ByName("MS_POLYSTYR");
+                Check("an UNQUANTIFIED coefficient refuses to produce a band",
+                      !Polymers.RetardanceBand(ps, 1.0, out lo, out hi) &&
+                      double.IsNaN(lo) && double.IsNaN(hi),
+                      "MS_POLYSTYR states 'order -10e-12 /Pa', so there is no interval");
+                Check("...and is distinguishable from a pinned coefficient",
+                      double.IsNaN(Polymers.RetardanceBandFactor(ps)) &&
+                      !double.IsNaN(Polymers.RetardanceBandFactor(topas)),
+                      "NaN vs a real factor - not 1.0 vs 1.0");
+
+                // PMMA is the widest bounded row, and the width is the finding:
+                // -4.6 to -1.5 Br is a factor of ~3 on a headline number that
+                // has been reported to four decimals.
+                var pmma = Polymers.ByName("MS_PMMA");
+                double f = Polymers.RetardanceBandFactor(pmma);
+                Check("PMMA's stated interval is a factor of about 3",
+                      f > 2.5 && f < 3.5,
+                      string.Format(CultureInfo.InvariantCulture,
+                                    "{0:F2}x, from {1:F1} to {2:F1} Br",
+                                    f, pmma.KGlassLowBr, pmma.KGlassHighBr));
+                Check("and it is WIDER than the measured TOPAS row",
+                      f > Polymers.RetardanceBandFactor(topas),
+                      string.Format(CultureInfo.InvariantCulture,
+                                    "PMMA {0:F2}x vs TOPAS {1:F2}x - borrowed beats measured, "
+                                    + "which is the point of recording both",
+                                    f, Polymers.RetardanceBandFactor(topas)));
+
+                // A band on a zero retardance is zero-wide, not NaN.
+                Check("a zero retardance bands to zero, not to nothing",
+                      Polymers.RetardanceBand(topas, 0.0, out lo, out hi) &&
+                      Math.Abs(lo) < 1e-15 && Math.Abs(hi) < 1e-15,
+                      "0 to 0");
+
+                // How many rows can be bounded at all - the headline of item 1.
+                int bounded = 0;
+                foreach (var q in Polymers.All) if (q.KGlassBounded) bounded++;
+                Check("the count of bounded rows is reported, not assumed",
+                      bounded >= 1 && bounded < Polymers.All.Length,
+                      string.Format("{0} of {1} rows carry a stated retardance interval; "
+                                    + "the rest cite a value with none",
+                                    bounded, Polymers.All.Length));
+
+                // TWO TABLES OF NEARLY THE SAME NUMBERS, AND THEY MUST NOT BE
+                // ABLE TO CONTRADICT EACH OTHER.
+                //
+                // SelfCheckValues already held a band per constant. It is a
+                // DIFFERENT quantity and both are wanted: that one is a test
+                // tolerance, deliberately generous because it "guards the ORDER
+                // and the SIGN, not the third digit" (PMMA -6.0 to -1.0), while
+                // the interval added here is what the CITATION says (-4.6 to
+                // -1.5) and is the only one honest to propagate - widening an
+                // uncertainty band with a test tolerance would overstate it.
+                //
+                // The risk is drift, which this file already warns about in as
+                // many words. So the relation is asserted rather than assumed:
+                // the stated interval must lie INSIDE the guard band. If either
+                // table is edited so they disagree, this fails.
+                foreach (var q in Polymers.All)
+                {
+                    if (!q.KGlassBounded) continue;
+                    double glo, ghi;
+                    bool haveGuard = Polymers.PublishedGuardBand(q.Name, "K_glass", out glo, out ghi);
+                    if (!haveGuard) continue;
+                    double slo = Math.Min(q.KGlassLowBr, q.KGlassHighBr);
+                    double shi = Math.Max(q.KGlassLowBr, q.KGlassHighBr);
+                    Check(q.Name + ": the cited interval sits inside the guard band",
+                          slo >= glo - 1e-9 && shi <= ghi + 1e-9,
+                          string.Format(CultureInfo.InvariantCulture,
+                                        "cited [{0:F1}, {1:F1}] within guard [{2:F1}, {3:F1}]",
+                                        slo, shi, glo, ghi));
+                    Check(q.Name + ": and is STRICTLY narrower, so the two are not one table twice",
+                          (shi - slo) < (ghi - glo) - 1e-9,
+                          string.Format(CultureInfo.InvariantCulture,
+                                        "cited width {0:F2} Br vs guard width {1:F2} Br",
+                                        shi - slo, ghi - glo));
+                }
+            }
+
             // The relation OpticStudio itself enforces on a catalog save.
             foreach (var p in Polymers.All)
                 Near("K = K12 - K11 for " + p.Name,
