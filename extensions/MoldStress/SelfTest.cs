@@ -241,7 +241,7 @@ namespace MoldStress
             // they were written to test, which is that ScalarVerdict forms and
             // formats a ratio correctly, and that is independent of where the
             // numerator came from. They are NOT evidence about any lens. The
-            // measured ratio on the validation triplet is 176x.
+            // measured ratio on the validation triplet is 1513x.
             //
             // The boundary is DERIVED, not chosen: both quantities are in waves,
             // so the warning fires exactly when the retardance is the larger of
@@ -265,15 +265,32 @@ namespace MoldStress
                 Verdict(Runner.ScalarVerdict(0.41, 0.140186, 0.140887, false)));
 
             // AND THE MEASURED CASE, which is the one that is evidence: the
-            // validation triplet's 1.29522-wave retardance bound against an RMS
-            // wavefront that moved 0.132177 -> 0.124818 waves at a pinned plane.
-            // 1.29522 / 0.007359 = 176. Note the wavefront IMPROVED slightly, so
-            // this also guards that the verdict keys on the magnitude of the
-            // change rather than its sign.
-            Check("the measured 176x case is formatted as 176x",
-                Verdict(Runner.ScalarVerdict(1.29522, 0.132177, 0.124818, false))
-                    .Contains("176x"),
-                Verdict(Runner.ScalarVerdict(1.29522, 0.132177, 0.124818, false)));
+            // validation triplet's 1.2125-wave retardance bound against an RMS
+            // wavefront that moved 0.132177 -> 0.132978 waves at the design
+            // plane. 1.2125 / 0.000802 = 1513.
+            //
+            // THIS ANCHOR WAS ITSELF WRONG FOR A FEW HOURS on 2026-08-29 and read
+            // 176x, from 1.29522 / 0.007359. Both halves came from a scratch
+            // harness rather than from the tool: the numerator measured over a
+            // 2.640 mm aperture where surfaces 3-4 pass only 2.391 mm, and the
+            // denominator had the wavefront IMPROVING by 5.6%, which is what
+            // moulding stress does not do. Running the tool through the GUI is
+            // what caught it. The numbers below are the tool's own output,
+            // reproduced standalone and in extension mode.
+            // 1514 AND NOT 1513, AND THE DIFFERENCE IS NOT A DEFECT. The run
+            // prints 1513x, computed from unrounded doubles. Feeding this check
+            // the numbers as PUBLISHED - the bound to four places, the wavefront
+            // pair to six - makes the delta 0.000801 and the ratio 1514. This
+            // asserts the FORMATTER against its own inputs, which is what it is
+            // for; the measurement belongs to the run. Worth knowing generally:
+            // a ratio reconstructed from two rounded figures is not the ratio
+            // that was reported, and the gap grows as the denominator shrinks -
+            // here a 1-in-800 rounding of the denominator moves the headline by
+            // a whole unit.
+            Check("the measured case is formatted as 1514x from the PUBLISHED figures",
+                Verdict(Runner.ScalarVerdict(1.2125, 0.132177, 0.132978, false))
+                    .Contains("1514x"),
+                Verdict(Runner.ScalarVerdict(1.2125, 0.132177, 0.132978, false)));
 
             // A wavefront that does not move AT ALL is the worst version of the
             // trap: the ratio is infinite, and a bare format string would print

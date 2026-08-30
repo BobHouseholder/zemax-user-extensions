@@ -1,0 +1,32 @@
+Missing cluster url!
+Invalid job setup file! (C:\Users\Shadow\Documents\Zemax\HPC\Scripts\setup.sh)
+--- HARNESS: pin BEFORE loading
+    design plane      30.802613 mm
+    after loading     30.802613 mm  (moved +0.0 um)
+    final thickness   30.802613 mm
+    baseline          0.132177 waves
+    loaded            0.124818 waves
+    change            -0.007359 waves
+    semi-dia at load  [inf, 5.675648, 4.918073, 2.640218, 2.39134, 4.274193, 4.847705, 8.446897]
+    semi-dia after    [inf, 5.682514, 4.925833, 2.644086, 2.391425, 4.268026, 4.842202, 8.449104]
+    semi-dia final    [inf, 5.682514, 4.925833, 2.644086, 2.391425, 4.268026, 4.842202, 8.449104]
+
+--- TOOL: load, let the solve move, then pin back
+    design plane      30.802613 mm
+    after loading     30.609223 mm  (moved -193.4 um)
+    final thickness   30.802613 mm
+    baseline          0.132177 waves
+    loaded            0.132978 waves
+    change            +0.000802 waves
+    semi-dia at load  [inf, 5.675648, 4.918073, 2.640218, 2.39134, 4.274193, 4.847705, 8.446897]
+    semi-dia after    [inf, 5.682514, 4.925833, 2.644086, 2.391425, 4.268026, 4.842202, 8.425497]
+    semi-dia final    [inf, 5.682514, 4.925833, 2.644086, 2.391425, 4.268026, 4.842207, 8.449232]
+
+======================================================================
+baseline agrees : True (0.132177 vs 0.132177)
+loaded differs  : 0.124818 vs 0.132978   delta 0.008160 waves
+final semi-diameters identical: False
+  harness: [inf, 5.682514, 4.925833, 2.644086, 2.391425, 4.268026, 4.842202, 8.449104]
+  tool   : [inf, 5.682514, 4.925833, 2.644086, 2.391425, 4.268026, 4.842207, 8.449232]
+  -> the aperture, not the plane, is what differs
+done

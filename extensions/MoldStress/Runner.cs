@@ -684,8 +684,13 @@ namespace MoldStress
                 // retracted: it was computed from a route that fails six
                 // closed-form controls. On the validation triplet, measured at a
                 // pinned plane with the route that passes them, the ratio is
-                // 176x - 1.29522 waves of retardance bound against 0.007359
-                // waves of RMS wavefront change. The QUALITATIVE claim survives
+                // 1513x - 1.2125 waves of retardance bound against 0.000802
+                // waves of RMS wavefront change, confirmed by three independent
+                // routes (ribbon-deployed binary on a live GUI session, the same
+                // binary standalone with -file, and a probe following the same
+                // pin order). A FIRST replacement of 176x stood for a few hours
+                // on 2026-08-29 and was itself wrong in BOTH halves - see the
+                // pin-order entry in the README's Open list. The QUALITATIVE claim survives
                 // and is if anything stronger; the specific figure does not.
                 string partial = PartialCoverage(elementsWithPoints, elementsApplied);
 
@@ -915,7 +920,7 @@ namespace MoldStress
                     say("    NOT COMPUTED, by design. Index-only mode applies the density index");
                     say("    change and nothing else - no stress tensor, no birefringence, no");
                     say("    retardance. On the validation triplet the retardance bound was");
-                    say("    176x the RMS wavefront change, so a polarisation-sensitive");
+                    say("    1513x the RMS wavefront change, so a polarisation-sensitive");
                     say("    system needs the full run: pass -full.");
                 }
                 else if (retMeasured == 0 && deltaRefused)
@@ -934,7 +939,7 @@ namespace MoldStress
                     say("    NOT MEASURED on any element, although stress WAS applied. The");
                     say("    wavefront number above therefore stands alone, and on the");
                     say("    validation triplet the wavefront understated the polarisation");
-                    say("    effect by 176x. Do not quote it as the moulding result until");
+                    say("    effect by 1513x. Do not quote it as the moulding result until");
                     say("    the birefringence is readable.");
                 }
                 else

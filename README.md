@@ -363,12 +363,30 @@ BUILT ON.** Its numerator came from `GetRetardanceMap`, which controls have now 
 does not return a retardance at all — see the Open list below. The lens it was
 measured on is not available to re-run, so this is a retraction and not a correction:
 the figure was computed by a route that fails six closed-form controls, and no claim
-is made here about what that lens would read today. On the validation triplet,
-measured at a pinned plane with the route that passes those controls, the ratio is
-**176×** — a retardance bound of 1.29522 waves against 0.007359 waves of RMS
-wavefront change. The qualitative claim, that the scalar understates a
+is made here about what that lens would read today. On the validation triplet the
+ratio is **1513×** — a retardance bound of 1.2125 waves against 0.000802 waves of
+RMS wavefront change. The qualitative claim, that the scalar understates a
 polarisation-sensitive system by orders of magnitude, survives and is if anything
 stronger. The specific number did not.
+
+**AND THE FIRST REPLACEMENT FOR IT WAS ALSO WRONG.** For a few hours on
+2026-08-29 this paragraph read **176×**, from 1.29522 waves against 0.007359.
+Both halves were wrong, in opposite directions, so they partly cancelled and the
+result looked unremarkable. Running the tool through the GUI is what caught it:
+
+- the **numerator** was measured over an aperture the element does not have.
+  Surfaces 3–4 have semi-diameters 2.640 and 2.391, and light must clear both, so
+  the longest path is 1.729 mm at r = 2.391 — not the 1.847 mm at r = 2.640 that a
+  scratch script computed from surface 3 alone. The tool had it right; the check
+  written to verify the tool did not.
+- the **denominator** was wrong in SIGN. The harness read the moulded wavefront as
+  0.124818 waves against a 0.132177 baseline — moulding stress *improving* a lens
+  by 5.6%, which should have been suspicious on its face and was not.
+
+The tool's figure is now confirmed by three independent routes: a ribbon-deployed
+binary attached to a live GUI session, the same binary standalone with `-file`,
+and a scratch probe that reproduces either answer on demand — see the pin-order
+entry in the Open list, because the mechanism is not what it looks like.
 
 #### Questions this extension has already answered, and where
 
@@ -499,6 +517,34 @@ file that owns the question before writing a conclusion in its domain.**
   birefringence or retardance. Report and scripts:
   `https://claude.ai/code/artifact/f3599f59-7086-4aa4-a7c3-ec85eff16648`.
 
+- **An RMS wavefront read at the design plane depends on WHEN the focus solve was
+  killed, by 0.008 waves, with the final system state identical.** Found
+  2026-08-29 by running the tool through the GUI and getting a different answer
+  from the scratch harness that had been used to check it. Two orders, one file,
+  one process, byte-identical stress data:
+
+  | | plane after loading | final thickness | change |
+  |---|---|---|---|
+  | pin the solve, THEN load | 30.802613 mm (never moved) | 30.802613 | **−0.007359 waves** |
+  | load, let the solve move, then pin back | 30.609223 mm | 30.802613 | **+0.000802 waves** |
+
+  Both end at the same thickness with the same data applied, and they disagree by
+  0.008160 waves — enough to flip the sign of the reported moulding effect. The
+  obvious suspect is refuted: automatic semi-diameters differ between the two only
+  in the sixth decimal (4.842202 vs 4.842207 mm), six orders of magnitude too
+  small. So it is neither the plane nor the aperture, and the mechanism is **not
+  yet known**.
+
+  **The tool's order is the one to trust**, on two grounds: it is what a user
+  actually does — open a file whose solve is live and press the button — and its
+  answer is reproduced by three independent routes (ribbon-deployed binary against
+  a live GUI session, the same binary standalone with `-file`, and a probe that
+  follows its order). The harness order is reproducible too, which is what makes
+  this a finding rather than noise. **Every wavefront number this study's python
+  harness produced is suspect until re-taken in the tool's order**; the retardance
+  and birefringence numbers are not affected, having been confirmed identical
+  across all three routes. Probe: `validation/mtf-triplet/pinorder.py`.
+
 - **The peak retardance this tool printed was not a measurement, and it named the
   wrong element.** Found 2026-08-29 by putting the `-full` polarisation half under
   the controls that had already exposed four defects in the index half. Until this
@@ -533,7 +579,7 @@ file that owns the question before writing a conclusion in its domain.**
   — peak local birefringence over the element's longest axial path, exact for a
   uniform field and high otherwise. On the validation triplet that changes which
   element is worst: the old call said 0.990 / 0.739 / 0.004 waves and the bound says
-  **0.036 / 1.295 / 0.016**, so the peak is on the biconcave polystyrene middle
+  **0.0362 / 1.2125 / 0.0157**, so the peak is on the biconcave polystyrene middle
   element (local birefringence 4.405 rad/mm against 0.057 on element 1), not on
   element 1. An engineer acting on the old number would have redesigned the wrong
   part. **Still open:** no argument set found returns an exact rotation-invariant

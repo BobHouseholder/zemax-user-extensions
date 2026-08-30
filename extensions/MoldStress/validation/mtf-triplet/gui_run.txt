@@ -1,0 +1,98 @@
+  wrote C:\Users\Shadow\Documents\Zemax\Glasscat\MOLDSTRESS.AGF
+  working copy C:\Users\Shadow\Documents\Zemax\Samples\MoldStress\plastic-cooke-MoldStress.zmx (original untouched)
+  attached the MOLDSTRESS material catalogue
+  surface 1: PMMA -> MS_PMMA  (constants are MS_PMMA's, a substitution rather than an identification)
+  surface 3: POLYSTYR -> MS_POLYSTYR  (constants are MS_POLYSTYR's, a substitution rather than an identification)
+  surface 5: PMMA -> MS_PMMA  (constants are MS_PMMA's, a substitution rather than an identification)
+  3 surface(s) converted; re-scanning the copy
+MoldStress
+  ESTIMATE - not a mould-flow simulation, not validated against a moulded part
+  system: C:\Users\Shadow\Documents\Zemax\Samples\MoldStress\plastic-cooke-MoldStress.zmx
+  process: fill 0.60 s, pack 60.0 MPa for 3.0 s
+
+  baseline RMS wavefront error: 0.132177 waves
+
+  surfaces 1-2  MS_PMMA            CT  4.000  ET  2.695  semi  4.918
+      gate     EdgeRadial at 0.0 deg, 4.85 x 1.62 mm (default)
+      parting  z = 2.5079 mm from the front vertex
+      export   to the MECHANICAL semi-diameter, 6.676 mm (clear aperture 4.918); beyond the clear aperture the rim's values are carried outward, not solved
+      fill      gate pressure 0.31 MPa, viscosity 1.73E+003 Pa.s, 425 mm3/s
+      freeze    core at 12.57 s, skin 70.0 C at freeze-off
+      channels  flow dn 8.540E-006 peaking at 89 % of the half-wall, density dn 2.208E-005
+      CAVEAT    that density figure rests on an ASSUMED K11/K12 split - not measured for MS_PMMA.
+                across the splits real polymers have been measured at, K11+2K12 spans 2.1 to 71.1 Br, a factor of 34, and the density term scales inversely with it. Sign is not guaranteed either.
+                The retardance above is UNAFFECTED - it rides on the measured difference.
+      files     15015 stress points, 15015 index points, peak equivalent stress 1.9 N/mm2
+      sampling  ring grid captures the density field to 2.24% of its span (radial midpoint test)
+      index     not loaded - density rides in the stress tensor (pass -directindex to load it instead, which disables stress birefringence on this surface)
+      STAR      stress 15015/15015 points accepted (code 0), index 0
+      birefringence  0.05691 rad/mm at the d-line, over 869 points
+      retardance     at most 0.0362 waves = 21.3 nm over the longest path (4.000 mm)
+
+  surfaces 3-4  MS_POLYSTYR        CT  1.200  ET  1.729  semi  2.391
+      gate     EdgeRadial at 0.0 deg, 3.11 x 1.04 mm (default)
+      parting  z = 0.6586 mm from the front vertex
+      export   to the MECHANICAL semi-diameter, 3.640 mm (clear aperture 2.391); beyond the clear aperture the rim's values are carried outward, not solved
+      fill      gate pressure 0.30 MPa, viscosity 1.18E+003 Pa.s, 44 mm3/s
+      freeze    core at 5.13 s, skin 50.0 C at freeze-off
+      channels  flow dn 3.013E-004 peaking at 93 % of the half-wall, density dn 2.727E-005
+      CAVEAT    that density figure rests on an ASSUMED K11/K12 split - not measured for MS_POLYSTYR.
+                across the splits real polymers have been measured at, K11+2K12 spans 5.0 to 60.1 Br, a factor of 12, and the density term scales inversely with it. Sign is not guaranteed either.
+                The retardance above is UNAFFECTED - it rides on the measured difference.
+      files     15015 stress points, 15015 index points, peak equivalent stress 54.5 N/mm2
+      sampling  ring grid captures the density field to 0.78% of its span (radial midpoint test)
+      index     not loaded - density rides in the stress tensor (pass -directindex to load it instead, which disables stress birefringence on this surface)
+      STAR      stress 15015/15015 points accepted (code 0), index 0
+      birefringence  4.40522 rad/mm at the d-line, over 434 points
+      retardance     at most 1.2125 waves = 712.4 nm over the longest path (1.729 mm)
+
+  surfaces 5-6  MS_PMMA            CT  4.000  ET  2.820  semi  4.274
+      gate     EdgeRadial at 0.0 deg, 5.08 x 1.69 mm (default)
+      parting  z = 1.7817 mm from the front vertex
+      export   to the MECHANICAL semi-diameter, 5.848 mm (clear aperture 4.274); beyond the clear aperture the rim's values are carried outward, not solved
+      fill      gate pressure 0.22 MPa, viscosity 1.83E+003 Pa.s, 327 mm3/s
+      freeze    core at 13.77 s, skin 70.0 C at freeze-off
+      channels  flow dn 5.482E-006 peaking at 89 % of the half-wall, density dn 1.584E-005
+      CAVEAT    that density figure rests on an ASSUMED K11/K12 split - not measured for MS_PMMA.
+                across the splits real polymers have been measured at, K11+2K12 spans 2.1 to 71.1 Br, a factor of 34, and the density term scales inversely with it. Sign is not guaranteed either.
+                The retardance above is UNAFFECTED - it rides on the measured difference.
+      files     15015 stress points, 15015 index points, peak equivalent stress 1.2 N/mm2
+      sampling  ring grid captures the density field to 3.04% of its span (radial midpoint test)
+      index     not loaded - density rides in the stress tensor (pass -directindex to load it instead, which disables stress birefringence on this surface)
+      STAR      stress 15015/15015 points accepted (code 0), index 0
+      birefringence  0.02470 rad/mm at the d-line, over 869 points
+      retardance     at most 0.0157 waves = 9.2 nm over the longest path (4.000 mm)
+
+  WAVEFRONT - what any system sees
+    original materials         0.174136 waves RMS (before substitution)
+    baseline                   0.132177 waves RMS
+    with moulding effects      0.132978 waves RMS
+    change                     +0.000802 waves (+0.6%)
+    measured at the SAME image plane as the baseline, so this is optics and not refocusing - see IMAGE PLANE below
+
+  IMAGE PLANE - what this file's own focus solve does
+    a MarginalRayHeight solve on surface 6 moves the image plane -80.8 um
+    at that moved plane the wavefront reads 0.323853 waves RMS,
+    which is +0.191676 waves against the baseline - but 0.190875 of that
+    is DEFOCUS, and a refocus removes it.
+
+    REAL RAYS, scanned on this lens: best focus -75.0 um before
+    and -75.0 um after - a real shift of +0.0 um, against the solve's -80.8 um.
+    The solve is chasing a PARAXIAL shift real rays do not follow (0 % of it).
+    A fixed-focus assembly has to hold whichever of these is real;
+    an adjustable one does not.
+
+  DISPERSION - what this run is worth away from the d-line
+
+  POLARISATION - what a birefringent system sees
+    retardance      at most 1.2125 waves = 712.4 nm at the d-line, on surfaces 3-4
+    That is a BOUND: local birefringence over the longest path,
+    exact for a uniform field and high otherwise. The map route
+    this used to read returned pi on a stress-FREE element.
+
+    THE WAVEFRONT NUMBER UNDERSTATES THIS. Peak retardance is 1513x the wavefront change - 1.2125 waves against 0.000802 waves. For a polarisation-sensitive system the retardance is the result.
+
+  Files are in C:\Users\Shadow\Documents\Zemax\Samples\MoldStress\moldstress
+  In OpticStudio, any analysis window's STAR Effects setting switches
+  between On and Difference, which shows this change directly.
+  report: C:\Users\Shadow\Documents\Zemax\Samples\MoldStress\moldstress\moldstress_report.txt
