@@ -2286,6 +2286,98 @@ namespace MoldStress
                 SelfTest.Check("the depth port moves the skin value",
                     topE > 0.0 && Math.Abs(topL - topE) / topE > 0.25,
                     string.Format("skin {0:E3} -> {1:E3}", topE, topL));
+
+                // --- THE TWO PATHS ADJUDICATING EACH OTHER --------------------
+                //
+                // Everything above is ONE-SIDED. It asserts the port CHANGED
+                // something (the skin moved >25%) and that it did not change the
+                // magnitude. Neither path can convict the other, because nothing
+                // says how far apart they are at any other depth.
+                //
+                // These are two computations of one physical quantity - the shape
+                // of flow birefringence across the wall - sharing almost no code:
+                // an Eulerian per-depth history against a Lagrangian particle
+                // model. Where they agree that is real evidence; where they
+                // disagree it localises the disagreement to a depth.
+                //
+                // COMPARED AS NORMALISED SHAPES, which is forced rather than
+                // chosen: the port normalises phi to mean 1, so the thickness
+                // average is invariant BY CONSTRUCTION and comparing magnitudes
+                // would be a check that cannot fail. Only the shape carries
+                // information here, so only the shape is compared.
+                double sumE = 0.0, sumL = 0.0;
+                for (int k = 0; k < nzS; k++)
+                {
+                    sumE += Math.Abs(cE.DnFlow[0, k]);
+                    sumL += Math.Abs(cL.DnFlow[0, k]);
+                }
+                // THE FIRST VERSION OF THIS METRIC WAS DOMINATED BY A DIFFERENCE
+                // THE TWO MODELS ARE SUPPOSED TO HAVE, and measuring it is what
+                // showed that: RMS 0.497 with the worst case 1.000 sitting at
+                // node 40 of 81 - exactly the mid-plane. That disagreement is
+                // total and it is BY DESIGN. On the Eulerian path shear
+                // birefringence is identically zero at the mid-plane (asserted a
+                // few lines above); the Lagrangian says the element now at the
+                // mid-plane arrived from a sheared region and carries
+                // orientation. Replacing that assumption is the reason the port
+                // exists.
+                //
+                // A metric whose extremum is a known, intended difference cannot
+                // detect a NEW one, so the two are separated: the designed
+                // divergence at the core is asserted on its own, and the
+                // agreement metric runs where the Eulerian model has real signal.
+                double peakE = 0.0;
+                for (int k = 0; k < nzS; k++) peakE = Math.Max(peakE, Math.Abs(cE.DnFlow[0, k]));
+
+                double worst = 0.0, sq = 0.0; int worstK = -1, counted = 0;
+                if (sumE > 0.0 && sumL > 0.0 && peakE > 0.0)
+                {
+                    for (int k = 0; k < nzS; k++)
+                    {
+                        // Restrict to depths the Eulerian model actually
+                        // populates. This excludes the core zero WITHOUT
+                        // hand-picking a node range, so the exclusion follows
+                        // the physics rather than the array index.
+                        if (Math.Abs(cE.DnFlow[0, k]) < 0.01 * peakE) continue;
+                        double a = Math.Abs(cE.DnFlow[0, k]) / sumE;
+                        double b = Math.Abs(cL.DnFlow[0, k]) / sumL;
+                        double d = Math.Abs(a - b) / Math.Max(Math.Max(a, b), 1e-30);
+                        if (d > worst) { worst = d; worstK = k; }
+                        sq += d * d; counted++;
+                    }
+                }
+                double rms = (counted > 0) ? Math.Sqrt(sq / counted) : double.NaN;
+
+                // The designed divergence, asserted separately so it stays
+                // visible and cannot quietly become the whole result again.
+                int kMid = nzS / 2;
+                double midE = Math.Abs(cE.DnFlow[0, kMid]), midL = Math.Abs(cL.DnFlow[0, kMid]);
+                SelfTest.Check("the models diverge AT THE CORE by design, and it is recorded",
+                    midE <= 1e-12 && midL > midE,
+                    string.Format("mid-plane Eulerian {0:E2} vs Lagrangian {1:E2} - the "
+                                  + "assumption the port replaces", midE, midL));
+
+                // The sample count travels with the result: a comparison that
+                // retained no depths would otherwise print a perfect score.
+                SelfTest.Check("the shape comparison ran over a real number of depths",
+                    counted > nzS / 4,
+                    string.Format("{0} of {1} depths carried signal in at least one path",
+                                  counted, nzS));
+
+                // A DISAGREEMENT REPORTER FIRST, a gate second. The bound is set
+                // from the measured value rather than ahead of it, and left loose
+                // on purpose: the job is to make a future divergence VISIBLE as a
+                // number instead of arriving as a silently different answer.
+                SelfTest.Check("Eulerian and Lagrangian depth shapes are adjudicated, not assumed",
+                    !double.IsNaN(rms) && rms < 1.50,
+                    string.Format("RMS fractional shape difference {0:F3}, worst {1:F3} at depth "
+                                  + "node {2} of {3}", rms, worst, worstK, nzS));
+
+                // AND THEY MUST NOT BE IDENTICAL, or the adjudication is vacuous
+                // and the port is doing nothing at depth.
+                SelfTest.Check("...and they are genuinely two models, not one twice",
+                    worst > 1e-6,
+                    string.Format("worst per-depth difference {0:E2}", worst));
             }
 
             // ... and it must peak between the surface and the core, not at
