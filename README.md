@@ -401,13 +401,47 @@ file that owns the question before writing a conclusion in its domain.**
      solve follows it. **Real rays do not**: a through-focus scan on a shared 5 µm
      grid puts best focus at −25 µm in BOTH states, differing by 0.003 waves at the
      minimum. Pinning the plane collapses the reported change to nothing.
-     *The paraxial shift itself is unexplained and is the open item.* It tracks the
-     data — a uniform cloud produces −0.0000 mm — but it is ~18× larger than a smooth
-     reading of the field supports (the field is <2e-5 across the whole clear
-     aperture; its ±1.09e-4 extremes sit at r > 4.2 mm, at and beyond the 4.41 mm
-     clear aperture), and scaling the field by 0.1 moves EFFL by 0.065 of the full
-     amount where first order demands exactly 0.100. Near-axis behaviour of the MBA
-     fit is the suspect; not demonstrated.
+     ~~*The paraxial shift itself is unexplained and is the open item.*~~
+     **ANSWERED 2026-08-29 BY A POSITIVE CONTROL ON STAR, and the answer is that
+     the shift is not physics.** Chasing the mechanism inside the real field had
+     not worked in three attempts, so instead STAR was fed a field whose paraxial
+     answer is known in closed form — `n(r) = n₀ + a·r²`, on the same point set,
+     through the same import path. A thin slab of that profile adds power
+     `φ = −2at`, exactly linear in `a` by construction. STAR returns it
+     **non-linearly, and by the same amount the real field does**:
+
+     | | tenth/full | first order demands |
+     |---|---|---|
+     | synthetic analytic field | **0.0040** | 0.100 |
+     | real moulding field | **0.0049** | 0.100 |
+
+     So the non-linearity belongs to STAR's ingestion of a direct-index cloud,
+     not to the moulding field, not to the catalogue and not to the physics. The
+     earlier sign flip across the catalogue fix (0.155 → 0.065) needed no
+     material explanation: it is what a response sitting in noise does.
+
+     **The mechanism is a noise floor plus a GRIN-step dependence, both
+     measured.** Sweeping the synthetic amplitude over six decades, `measured /
+     closed form` runs 0.22, **−0.79**, 0.21, **−0.13**, 0.02, 3.20 below a peak
+     Δn of ~1e-6 — it changes SIGN, so below that amplitude the response is
+     noise rather than a small answer — and then settles at 0.82–0.91 from
+     Δn ≈ 1e-5 upward and stays there for two decades. The real field's smooth
+     quadratic component peaks at Δn = 4.8e-6, inside the transition. And the
+     answer moves with the GRIN integration step, a producer-side constant the
+     tool sets by heuristic: at that amplitude ΔEFFL is −0.0292 mm at step 1.0
+     against −0.0032 mm at 0.50, a factor of **9**.
+     **That last point retracts a convergence claim of this project's own.**
+     "Identical to four decimals across GRIN steps 1.0 → 0.02, a 50× range" was
+     established for the *index-shift metric on a NULL cloud* and is quoted
+     below in exactly those terms — it does not hold for paraxial EFFL on a real
+     field, and a convergence result belongs to the quantity it was measured on.
+     Scripts: `validation/mtf-triplet/paraxctl.py`, `paraxsweep.py`.
+     A separate instrument check: my own paraxial y-nu trace reproduces Zemax's
+     unperturbed EFFL to 1.8e-16 relative, so the closed forms above are not
+     resting on an unvalidated trace.
+     **What is still open** is narrower and is Ansys's rather than ours: why the
+     fit discards small index variation, and where exactly the usable floor sits
+     for a general cloud.
      **RE-DERIVED 2026-08-29 AFTER THE CATALOGUE FIX, and the catalogue is ruled
      out.** The whole three-arm probe was re-run at `265e826`, because its original
      evidence was taken against the inverted-dispersion rows. The shift is
