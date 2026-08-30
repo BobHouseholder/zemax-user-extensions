@@ -99,8 +99,8 @@ for surf in range(1, NS):
         pass
 rt.Close()
 
-fig = plt.figure(figsize=(11.5, 12.2))
-gs = fig.add_gridspec(4, 2, height_ratios=[1.15, 1.0, 1.0, 1.0], hspace=0.52, wspace=0.26)
+fig = plt.figure(figsize=(11.5, 13.6))
+gs = fig.add_gridspec(4, 2, height_ratios=[1.15, 1.0, 1.0, 1.30], hspace=0.86, wspace=0.26)
 
 # ================================================================== PANEL A
 axA = fig.add_subplot(gs[0, :])
@@ -252,8 +252,11 @@ axF.annotate("it is actually THIS one", xy=(1 + 0.2, new[1]), xytext=(1.55, 1.30
              fontsize=7.8, color="#1b7a4a",
              arrowprops=dict(arrowstyle="->", color="#1b7a4a", lw=1.1))
 axF.set_title("F.  The real moulding field — the correction changes which element you would redesign\n"
-              "RMS wavefront moved only 0.132177 $\\to$ 0.124818 waves at a pinned plane, so the ratio is 176$\\times$, not the withdrawn 585$\\times$",
-              fontsize=9.5, loc="left")
+              "Peak retardance is 1513$\\times$ the RMS wavefront change - 1.2125 waves against +0.000802 waves at a pinned plane.\n"
+              "RETRACTED 2026-08-30: this caption read 176$\\times$, from 1.29522 / 0.007359. Running the tool through the GUI refuted BOTH halves.\n"
+              "The numerator was measured over an aperture these surfaces do not have (2.640 mm against the true 2.391 mm), and the denominator had\n"
+              "the WRONG SIGN (-0.007359 against +0.000802). They partly cancelled, which is why the wrong ratio looked unremarkable. 585$\\times$ preceded both.",
+              fontsize=8.4, loc="left")
 axF.legend(fontsize=7.8, frameon=False)
 axF.grid(alpha=0.25, axis="y")
 
