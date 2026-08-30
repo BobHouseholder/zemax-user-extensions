@@ -702,9 +702,22 @@ file that owns the question before writing a conclusion in its domain.**
   paper that would supply it was priced and **not** bought (2026-08-22 sweep). Reopens
   the moment a PMMA reference case is added.
 
-- **Needs Bob:** click the ribbon entry once in the GUI. Everything here ran headless.
-
 #### Closed recently, kept because the reasoning is the useful part
+
+- **THE RIBBON CLICKS WERE THE MOST PRODUCTIVE TESTS IN THE ARC, and this entry
+  spent a week asking for them after they had happened.** It read "Needs Bob:
+  click the ribbon entry once in the GUI. Everything here ran headless" until
+  2026-08-30, while the same README recorded two rounds of clicks above it. What
+  they actually bought, in order: the first found that every early exit was
+  INVISIBLE on a ribbon launch, because there is no console; the second, once that
+  was fixed, found the real bug - OpticStudio passes `-zpid/-zplt/-zsid` and the
+  tool assumed an empty command line, so every click died in the unknown-argument
+  refusal; the third opened its report. Then on 2026-08-29 a ribbon-deployed
+  binary on a live GUI session refuted the published 176x ratio, which no
+  headless run had questioned in the hours it stood. **Four defects, none
+  reachable from a headless harness.** Left open: nobody has clicked the current
+  build. That is worth noting rather than asking for - the gating and accuracy
+  batches since 08-29 changed the report's TEXT and not its launch path.
 
 - **THE SUSPECTED RUN-TIME REGRESSION WAS NOT ONE - MEASURED 2026-08-29.** The
   2026-08-29 reporting work appeared to make `-run` three times slower on the
