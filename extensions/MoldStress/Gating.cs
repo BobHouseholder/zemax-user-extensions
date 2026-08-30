@@ -195,11 +195,65 @@ namespace MoldStress
         public double ThicknessMm;
         public bool IsDefault;              // false once a config file has overridden it
 
+        /// <summary>
+        /// WHERE THE MOUNTING DATUM SITS, in the same convention as AzimuthDeg;
+        /// NaN when nobody has said. A lens is located in its barrel by a
+        /// reference surface on the rim, and the gate has to be cut off that rim
+        /// after moulding - so the constraint on gate azimuth is not the clear
+        /// aperture, which no rim gate touches, but the DATUM, which the cutting
+        /// tool must not reach.
+        ///
+        /// US 5,975,882 is explicit about it: "should the reference surface be
+        /// damaged by a cutter blade in a gate-cut operation, the resulting
+        /// surface flaw could make it difficult to assemble the optical component
+        /// into an optically aligned position on a lens holder." A Zemax file
+        /// carries no datum, so this can only ever be an input.
+        /// </summary>
+        public double DatumAzimuthDeg = double.NaN;
+
+        /// <summary>
+        /// True while AzimuthDeg is the arbitrary 0 deg rather than a choice.
+        /// This matters because azimuth is NOT decorative - it reaches the
+        /// exported field through StarFiles, and the registered null control for
+        /// this whole goal requires the retardance maximum to move with it. A
+        /// placeholder that reads like a decision is the thing to avoid.
+        /// </summary>
+        public bool AzimuthIsPlaceholder;
+
+        public bool HasDatum { get { return !double.IsNaN(DatumAzimuthDeg); } }
+
         public override string ToString()
         {
+            string note = IsDefault ? " (default)" : " (override)";
+            if (AzimuthIsPlaceholder)
+                note += ", azimuth is a PLACEHOLDER - no mounting datum given";
+            else if (HasDatum)
+            {
+                // ONLY claim "opposite the datum" when it actually is. An
+                // explicit azimuth overrules the datum, and a note that still
+                // said "opposite" would be describing a placement the gate does
+                // not have - which is worse than saying nothing.
+                double want = AzimuthOppositeDatum(DatumAzimuthDeg);
+                double got = ((AzimuthDeg % 360.0) + 360.0) % 360.0;
+                note += Math.Abs(want - got) < 1e-9
+                    ? string.Format(CultureInfo.InvariantCulture,
+                        ", opposite a datum at {0:F1} deg", DatumAzimuthDeg)
+                    : string.Format(CultureInfo.InvariantCulture,
+                        ", set explicitly against a datum at {0:F1} deg", DatumAzimuthDeg);
+            }
             return string.Format(CultureInfo.InvariantCulture,
                 "{0} at {1:F1} deg, {2:F2} x {3:F2} mm{4}",
-                Kind, AzimuthDeg, WidthMm, ThicknessMm, IsDefault ? " (default)" : " (override)");
+                Kind, AzimuthDeg, WidthMm, ThicknessMm, note);
+        }
+
+        /// <summary>
+        /// The gate goes as far from the datum as the rim allows, which is
+        /// diametrically opposite it. Normalised to [0, 360).
+        /// </summary>
+        public static double AzimuthOppositeDatum(double datumDeg)
+        {
+            double a = (datumDeg + 180.0) % 360.0;
+            return a < 0.0 ? a + 360.0 : a;
         }
     }
 
@@ -230,7 +284,12 @@ namespace MoldStress
             return new GateSpec
             {
                 Kind = ringPreferred ? GateKind.RingAllRound : GateKind.EdgeRadial,
+                // 0 deg is arbitrary and is FLAGGED as arbitrary. Nothing in a
+                // lens file says where the mounting datum is, so there is no
+                // honest default here - only a placeholder that says so.
                 AzimuthDeg = DefaultAzimuthDeg,
+                AzimuthIsPlaceholder = true,
+                DatumAzimuthDeg = double.NaN,
                 // Conventional starting point: gate land about 60% of the local
                 // wall, and a width a few times its own depth so it freezes after
                 // the cavity rather than before it.
@@ -256,6 +315,12 @@ namespace MoldStress
         /// <summary>
         /// Per-element overrides, one line each:
         ///     surface=3 azimuth=180 kind=ring width=1.2 thickness=0.5 parting=2.4
+        ///
+        /// `datum=<deg>` says where the mounting reference surface is, and the
+        /// gate is then placed diametrically opposite it - which is the real
+        /// constraint on a lens gate, since the rim carries the datum and the
+        /// gate has to be cut off the rim. `azimuth=` still wins if both are
+        /// given, because an explicit azimuth is a decision.
         /// Unknown keys are refused rather than ignored - a typo that silently
         /// leaves the default in place is the failure mode this format exists to
         /// avoid.
@@ -289,24 +354,50 @@ namespace MoldStress
                     throw new FormatException("gate config line " + lineNo +
                         ": surface " + surf + " is not the front of a moulded element");
 
+                // VALIDATE EVERY KEY FIRST, then apply in a FIXED ORDER. The keys
+                // arrive in a dictionary, and `datum` and `azimuth` both write
+                // AzimuthDeg - so applying them in enumeration order would make
+                // the result depend on hash ordering. Explicit azimuth wins;
+                // datum only places the gate when no azimuth was given.
                 foreach (var key in kv.Keys)
                 {
-                    string v = kv[key];
                     switch (key.ToLowerInvariant())
                     {
-                        case "surface": break;
-                        case "azimuth": el.Gate.AzimuthDeg = D(v); el.Gate.IsDefault = false; break;
-                        case "width": el.Gate.WidthMm = D(v); el.Gate.IsDefault = false; break;
-                        case "thickness": el.Gate.ThicknessMm = D(v); el.Gate.IsDefault = false; break;
-                        case "parting": el.PartingLineZMm = D(v); break;
-                        case "kind":
-                            el.Gate.Kind = ParseKind(v, lineNo);
-                            el.Gate.IsDefault = false;
+                        case "surface": case "azimuth": case "datum": case "width":
+                        case "thickness": case "parting": case "kind":
                             break;
                         default:
                             throw new FormatException("gate config line " + lineNo +
                                 ": unknown key '" + key + "'");
                     }
+                }
+
+                string tmp;
+                if (kv.TryGetValue("width", out tmp)) { el.Gate.WidthMm = D(tmp); el.Gate.IsDefault = false; }
+                if (kv.TryGetValue("thickness", out tmp)) { el.Gate.ThicknessMm = D(tmp); el.Gate.IsDefault = false; }
+                if (kv.TryGetValue("parting", out tmp)) { el.PartingLineZMm = D(tmp); }
+                if (kv.TryGetValue("kind", out tmp))
+                {
+                    el.Gate.Kind = ParseKind(tmp, lineNo);
+                    el.Gate.IsDefault = false;
+                }
+                if (kv.TryGetValue("datum", out tmp))
+                {
+                    el.Gate.DatumAzimuthDeg = D(tmp);
+                    el.Gate.IsDefault = false;
+                }
+                if (kv.TryGetValue("azimuth", out tmp))
+                {
+                    // An explicit azimuth is a decision, so it is never a
+                    // placeholder - even if it happens to equal 0.
+                    el.Gate.AzimuthDeg = D(tmp);
+                    el.Gate.AzimuthIsPlaceholder = false;
+                    el.Gate.IsDefault = false;
+                }
+                else if (el.Gate.HasDatum)
+                {
+                    el.Gate.AzimuthDeg = GateSpec.AzimuthOppositeDatum(el.Gate.DatumAzimuthDeg);
+                    el.Gate.AzimuthIsPlaceholder = false;
                 }
             }
         }

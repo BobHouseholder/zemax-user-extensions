@@ -1231,6 +1231,85 @@ namespace MoldStress
             Check("an override replaces the default",
                   lens.Gate.AzimuthDeg == 180.0 && !lens.Gate.IsDefault,
                   "azimuth now 180 deg, no longer flagged default");
+
+            // --- THE MOUNTING DATUM ------------------------------------------
+            //
+            // The constraint on a lens gate is not the clear aperture - no rim
+            // gate touches it - but the DATUM, the reference surface the barrel
+            // seats on, which the gate-cut tool must not reach (US 5,975,882).
+            // A lens file carries no datum, so 0 deg is a placeholder and has to
+            // say so; and once a datum IS given the gate goes opposite it.
+            {
+                var d1 = Gating.DefaultGate(lens);
+                Check("with no datum the azimuth is flagged a PLACEHOLDER",
+                      d1.AzimuthIsPlaceholder && !d1.HasDatum,
+                      d1.ToString());
+                Check("...and the printout says so, rather than reading like a choice",
+                      d1.ToString().Contains("PLACEHOLDER"),
+                      d1.ToString());
+
+                Near("a datum at 0 puts the gate at 180",
+                     GateSpec.AzimuthOppositeDatum(0.0), 180.0, 1e-12);
+                Near("a datum at 90 puts the gate at 270",
+                     GateSpec.AzimuthOppositeDatum(90.0), 270.0, 1e-12);
+                Near("a datum at 270 wraps to 90, not 450",
+                     GateSpec.AzimuthOppositeDatum(270.0), 90.0, 1e-12);
+                Near("a NEGATIVE datum normalises into [0,360)",
+                     GateSpec.AzimuthOppositeDatum(-90.0), 90.0, 1e-12);
+
+                Func<MouldedElement> fresh = () =>
+                {
+                    var m = new MouldedElement
+                    {
+                        FrontSurface = 3, BackSurface = 4, Material = "MS_COC_TOPAS6017",
+                        CentreThicknessMm = 4.0, SemiDiameterMm = 8.0,
+                        FrontRadiusMm = 40.0, BackRadiusMm = -40.0,
+                    };
+                    m.EdgeThicknessMm = m.ThicknessAt(m.SemiDiameterMm);
+                    m.Gate = Gating.DefaultGate(m);
+                    return m;
+                };
+
+                var el2 = fresh();
+                string t3 = System.IO.Path.GetTempFileName();
+                System.IO.File.WriteAllText(t3, "surface=3 datum=90\n");
+                try { Gating.ApplyOverrides(new[] { el2 }, t3); }
+                finally { System.IO.File.Delete(t3); }
+                Check("a datum alone places the gate opposite it",
+                      el2.Gate.AzimuthDeg == 270.0 && !el2.Gate.AzimuthIsPlaceholder,
+                      el2.Gate.ToString());
+
+                // PRECEDENCE, and it is not decorative: both keys write
+                // AzimuthDeg, and they arrive in a Dictionary. If this were left
+                // to enumeration order the answer would depend on hashing.
+                var el3 = fresh();
+                string t4 = System.IO.Path.GetTempFileName();
+                System.IO.File.WriteAllText(t4, "surface=3 datum=90 azimuth=30\n");
+                try { Gating.ApplyOverrides(new[] { el3 }, t4); }
+                finally { System.IO.File.Delete(t4); }
+                Check("an EXPLICIT azimuth beats a datum, whichever order they parse in",
+                      el3.Gate.AzimuthDeg == 30.0 && el3.Gate.HasDatum,
+                      el3.Gate.ToString());
+                // ...and the printout must not then CLAIM the gate is opposite
+                // the datum, because at 30 deg against a 90 deg datum it is not.
+                Check("and the note stops saying 'opposite' once it no longer is",
+                      !el3.Gate.ToString().Contains("opposite a datum") &&
+                      el3.Gate.ToString().Contains("set explicitly against a datum"),
+                      el3.Gate.ToString());
+
+                // And the datum must be REFUSED as an unknown key nowhere - the
+                // whole-key validation pass has to admit it.
+                var el4 = fresh();
+                string t5 = System.IO.Path.GetTempFileName();
+                System.IO.File.WriteAllText(t5, "surface=3 datum=45 kind=ring\n");
+                bool ok5 = true;
+                try { Gating.ApplyOverrides(new[] { el4 }, t5); }
+                catch (FormatException) { ok5 = false; }
+                finally { System.IO.File.Delete(t5); }
+                Check("datum= is an accepted key alongside the rest", ok5,
+                      ok5 ? el4.Gate.ToString() : "refused");
+
+            }
         }
 
         private static void CatalogChecks()
