@@ -352,13 +352,23 @@ catalogue-generic (four of the five are); a part whose dominant moulding risk is
 
 Since 2026-08-21 the run reports the two quantities under separate headings and ends
 on the **polarisation** one, because they answer different questions and the last
-number printed is the one people quote. On the one real lens tested, RMS wavefront
-error moved +0.5% while peak retardance reached 0.41 waves — **585x** — and the run
-used to end on the scalar. It now also states the ratio, warns whenever retardance
-exceeds the wavefront change (a derived boundary, not a chosen threshold), and says
-so explicitly when the retardance map could not be read at all while stress WAS
-applied, which is the case where a real wavefront number stands alone and reads as
-the result.
+number printed is the one people quote. It also states the ratio, warns whenever
+retardance exceeds the wavefront change (a derived boundary, not a chosen threshold),
+and says so explicitly when the birefringence could not be read at all while stress
+WAS applied, which is the case where a real wavefront number stands alone and reads
+as the result.
+
+**THE 585× THAT STOOD HERE IS WITHDRAWN, 2026-08-29, AND SO IS THE 0.41 WAVES IT WAS
+BUILT ON.** Its numerator came from `GetRetardanceMap`, which controls have now shown
+does not return a retardance at all — see the Open list below. The lens it was
+measured on is not available to re-run, so this is a retraction and not a correction:
+the figure was computed by a route that fails six closed-form controls, and no claim
+is made here about what that lens would read today. On the validation triplet,
+measured at a pinned plane with the route that passes those controls, the ratio is
+**176×** — a retardance bound of 1.29522 waves against 0.007359 waves of RMS
+wavefront change. The qualitative claim, that the scalar understates a
+polarisation-sensitive system by orders of magnitude, survives and is if anything
+stronger. The specific number did not.
 
 #### Questions this extension has already answered, and where
 
@@ -408,15 +418,7 @@ file that owns the question before writing a conclusion in its domain.**
      hence the export grid move with them (up to 12.6 um radially on element 3,
      0.2% of its radius). But the Δn VALUES change by at most 1.6e-7, which is
      0.02%, 0.09% and 0.51% of each element's field span. The anomaly acts on
-     the same field to within half a percent. **What DID change is the non-linearity, and it changed sign:**
-     the TENTH/FULL ratio was 0.155 (super-linear) before the fix and is 0.065
-     (sub-linear) after, on a field that moved by under 0.51%. A first-order
-     effect gives 0.100
-     either way, so the departure is real in both runs but its DIRECTION is not
-     robust to the material model — which is itself evidence against a physical
-     first-order mechanism and for something in the fit. Still not demonstrated,
-     and now the sharper question: what makes a paraxial trace through this fit
-     depend on the host material's dispersion at all?
+     the same field to within half a percent.
      **AND THE TOOL NOW MEASURES THIS ON EVERY RUN**, since `e4b4110`, so the
      question is asked of the user's own lens rather than quoted at them from
      these two. `-run` scans real-ray best focus before and after — both at the
@@ -462,6 +464,48 @@ file that owns the question before writing a conclusion in its domain.**
   **What this does not touch:** index-only mode, so nothing here bears on stress
   birefringence or retardance. Report and scripts:
   `https://claude.ai/code/artifact/f3599f59-7086-4aa4-a7c3-ec85eff16648`.
+
+- **The peak retardance this tool printed was not a measurement, and it named the
+  wrong element.** Found 2026-08-29 by putting the `-full` polarisation half under
+  the controls that had already exposed four defects in the index half. Until this
+  commit `PeakRetardance()` took `max|R|` over `GetRetardanceMap(8, 0, 1, 1, 0, 0, 0)`.
+  Uniform stress fields whose retardance is known in closed form were loaded — every
+  one accepted cleanly, import code 0, 15015 of 15015 points, so these are answers
+  about STAR and not about a failed import — and that call fails all of them:
+
+  | control field | true retardance | what it returned |
+  |---|---|---|
+  | NULL, every component exactly zero | 0 | **π and 2π**, i.e. 0.5000 and 1.0000 waves |
+  | hydrostatic 10 N/mm² | 0 by symmetry | π and 2π |
+  | biaxial σxx=σyy (von Mises ≠ 0) | 0 | up to 1.978 rad |
+  | uniaxial σxx, 0.02 → 200 N/mm² | 0.0004 → 7.4 waves | 0.40–1.00 waves throughout |
+  | the same state rotated 45° | identical to uniaxial | 0.062 vs 4.260 rad, a factor of **69** |
+
+  It is an **angle**, not a phase: on every ring of a uniform field it takes three
+  values — 0, +δ and δ−π — with span exactly π (3.1416 at r=0.39, 3.1450 at r=1.98)
+  and exact zeros at azimuth 0, ±90 and 180°. Its ratio to the truth runs 814× at
+  0.02 N/mm² down to 0.16× at 200, crossing 1.0 near 10 N/mm² — which is the regime
+  the one published measurement sat in.
+
+  **`GetPointRetardanceList` passes every one of those controls** and is what the
+  tool reads now: 0.000000 exactly on the null and hydrostatic arms, **1.0000**
+  against uniaxial for the same state at 0°, 30°, 45° and 90°, and **1.9976** for
+  pure shear where theory demands exactly 2. It returns *local birefringence in
+  rad/mm at the d-line* — 0.9978 of the closed form — whatever `SetWorkingWavelength`
+  is given, which is a second defect: the tool converted those d-line waves to nm
+  with wavelength 1, making the published nm figure **17.3% low**.
+
+  Because it is local, retardance now needs the path, and the tool reports **a bound**
+  — peak local birefringence over the element's longest axial path, exact for a
+  uniform field and high otherwise. On the validation triplet that changes which
+  element is worst: the old call said 0.990 / 0.739 / 0.004 waves and the bound says
+  **0.036 / 1.295 / 0.016**, so the peak is on the biconcave polystyrene middle
+  element (local birefringence 4.405 rad/mm against 0.057 on element 1), not on
+  element 1. An engineer acting on the old number would have redesigned the wrong
+  part. **Still open:** no argument set found returns an exact rotation-invariant
+  peak — integrating the local field along real rays would, and the tool bounds
+  instead. Scripts: `validation/mtf-triplet/retctl.py`, `retdump.py`, `retfix.py`,
+  `retpoint.py`, `retorient.py`, `retreal.py`.
 
 - **The frozen-in thermal ORIENTATION channel is wired and now NON-ZERO** as of
   2026-08-21, opt-in via `-thermal-orientation` and off by default. It was

@@ -555,32 +555,43 @@ namespace MoldStress
                         continue;
                     }
                     int samples; string note;
-                    double peakRet = PeakRetardance(st, e, out samples, out note);
+                    double localBiref = PeakLocalBirefringence(st, e, out samples, out note);
                     if (note != null) { retMissing++; say("      retardance UNAVAILABLE: " + note); }
                     else
                     {
                         retMeasured++;
-                        // WAVES FIRST. rad and nm are both correct and neither is
-                        // comparable by eye to an RMS wavefront error in waves,
+                        // WAVES FIRST. rad/mm and nm are both correct and neither
+                        // is comparable by eye to an RMS wavefront error in waves,
                         // which is the number sitting four lines below it.
-                        double waves = Math.Abs(peakRet) / (2 * Math.PI);
-                        double nm = waves *
-                            sys.SystemData.Wavelengths.GetWavelength(1).Wavelength * 1000.0;
+                        //
+                        // AND IT IS A BOUND, NOT A PEAK. The local birefringence
+                        // is trustworthy (see PeakLocalBirefringence); turning it
+                        // into a retardance needs the path, and taking the LONGEST
+                        // path everywhere over-estimates unless the field is
+                        // uniform. Over-estimating is the safe direction and the
+                        // word "at most" is in the output so nobody quotes it as a
+                        // measured peak.
+                        double pathMm = MaxAxialPathMm(e);
+                        double waves = RetardanceBoundWaves(localBiref, pathMm);
+                        double nm = waves * LambdaDMm * 1e6;   // d-line, NOT wavelength 1
                         if (waves > peakRetWaves)
                         {
                             peakRetWaves = waves; peakRetNm = nm;
                             peakRetFront = e.FrontSurface; peakRetBack = e.BackSurface;
                         }
                         say(string.Format(CultureInfo.InvariantCulture,
-                            "      retardance peak {0:F4} waves = {1:F1} nm ({2:F4} rad), " +
-                            "over {3} map points", waves, nm, peakRet, samples));
+                            "      birefringence  {0:F5} rad/mm at the d-line, over {1} points",
+                            localBiref, samples));
+                        say(string.Format(CultureInfo.InvariantCulture,
+                            "      retardance     at most {0:F4} waves = {1:F1} nm over the " +
+                            "longest path ({2:F3} mm)", waves, nm, pathMm));
                     }
 
                     // The tool's own silent-zero guard. A stress field that
                     // carries real equivalent stress cannot produce exactly zero
-                    // retardance; if it does, something upstream is not
+                    // birefringence; if it does, something upstream is not
                     // functioning and a zero must not be reported as a result.
-                    if (note == null && peakRet == 0.0 && w.PeakEquivalentStressMPa > 0)
+                    if (note == null && localBiref == 0.0 && w.PeakEquivalentStressMPa > 0)
                         say("      REFUSING that zero: " +
                             string.Format(CultureInfo.InvariantCulture,
                             "{0:F1} N/mm2 of equivalent stress cannot give exactly zero " +
@@ -658,13 +669,24 @@ namespace MoldStress
                 // TWO QUANTITIES, TWO QUESTIONS, AND THE RUN ENDS ON THE SECOND.
                 //
                 // Until 2026-08-21 the last number this tool printed was the RMS
-                // wavefront delta, so that is the number people quote. On the one
-                // real lens it read +0.5% while peak retardance was 0.41 waves - a
-                // factor of 585 - and for a polarisation-sensitive system the
-                // scalar is the wrong headline by two and a half orders of
-                // magnitude. Both are correct; they answer different questions,
-                // and only one of them is about birefringence, which is what this
-                // tool exists to estimate.
+                // wavefront delta, so that is the number people quote, and for a
+                // polarisation-sensitive system the scalar is the wrong headline
+                // by orders of magnitude. Both are correct; they answer different
+                // questions, and only one of them is about birefringence, which
+                // is what this tool exists to estimate.
+                //
+                // THE FACTOR OF 585 THAT USED TO BE QUOTED HERE IS WITHDRAWN,
+                // 2026-08-29. Its numerator came from GetRetardanceMap, which
+                // controls have since shown is not a retardance at all - it
+                // returns pi or 2*pi on a field with every stress component
+                // exactly zero. The lens it was measured on cannot be re-run
+                // here, so the number is not being corrected, it is being
+                // retracted: it was computed from a route that fails six
+                // closed-form controls. On the validation triplet, measured at a
+                // pinned plane with the route that passes them, the ratio is
+                // 176x - 1.29522 waves of retardance bound against 0.007359
+                // waves of RMS wavefront change. The QUALITATIVE claim survives
+                // and is if anything stronger; the specific figure does not.
                 string partial = PartialCoverage(elementsWithPoints, elementsApplied);
 
                 say("  WAVEFRONT - what any system sees");
@@ -892,9 +914,9 @@ namespace MoldStress
                 {
                     say("    NOT COMPUTED, by design. Index-only mode applies the density index");
                     say("    change and nothing else - no stress tensor, no birefringence, no");
-                    say("    retardance. On the one real lens where both were measured, peak");
-                    say("    retardance was 585x the wavefront change, so a polarisation-");
-                    say("    sensitive system needs the full run: pass -full.");
+                    say("    retardance. On the validation triplet the retardance bound was");
+                    say("    176x the RMS wavefront change, so a polarisation-sensitive");
+                    say("    system needs the full run: pass -full.");
                 }
                 else if (retMeasured == 0 && deltaRefused)
                 {
@@ -910,20 +932,27 @@ namespace MoldStress
                     // moved, so a number exists and reads as the result - while
                     // the half this tool exists to estimate is simply absent.
                     say("    NOT MEASURED on any element, although stress WAS applied. The");
-                    say("    wavefront number above therefore stands alone, and on the one");
-                    say("    real lens tested the wavefront understated the polarisation");
-                    say("    effect by 585x. Do not quote it as the moulding result until");
-                    say("    the retardance map is readable.");
+                    say("    wavefront number above therefore stands alone, and on the");
+                    say("    validation triplet the wavefront understated the polarisation");
+                    say("    effect by 176x. Do not quote it as the moulding result until");
+                    say("    the birefringence is readable.");
                 }
                 else
                 {
+                    // AT MOST, not a peak. What STAR returns is a LOCAL
+                    // birefringence; turning it into a retardance takes the
+                    // longest path through the element, which is exact only if
+                    // the field is uniform and an over-estimate otherwise.
                     say(string.Format(CultureInfo.InvariantCulture,
-                        "    peak retardance            {0:F4} waves = {1:F1} nm, " +
+                        "    retardance      at most {0:F4} waves = {1:F1} nm at the d-line, " +
                         "on surfaces {2}-{3}", peakRetWaves, peakRetNm,
                         peakRetFront, peakRetBack));
+                    say("    That is a BOUND: local birefringence over the longest path,");
+                    say("    exact for a uniform field and high otherwise. The map route");
+                    say("    this used to read returned pi on a stress-FREE element.");
                     if (retMissing > 0)
                         say(string.Format(CultureInfo.InvariantCulture,
-                            "    peak is over {0} of {1} elements - {2} produced no map, and a",
+                            "    bound is over {0} of {1} elements - {2} produced no data, and a",
                             retMeasured, retMeasured + retMissing, retMissing) +
                             " missing map is not a zero.");
 
@@ -1287,41 +1316,99 @@ namespace MoldStress
         }
 
         /// <summary>
-        /// Peak retardance from STAR's OWN map, with the sample count reported.
-        ///
-        /// The first version of this walked a grid of points calling
-        /// GetRetardance and swallowed every exception, so when the samples all
-        /// failed it returned a confident 0.0000 rad on a field STAR had accepted
-        /// and fitted - a peak of 4.85 rad was sitting there the whole time. A
-        /// silent zero from a stress-free-looking answer is the exact failure
-        /// this tool exists to refuse, and it reached the tool's own output.
-        /// Nothing is caught silently here now.
+        /// The d-line, in mm. GetPointRetardanceList reports at THIS wavelength
+        /// whatever SetWorkingWavelength was given - measured 2026-08-29 by
+        /// reading the same uniform field at working wavelengths 1 and 2 and
+        /// getting the same 1.92486 rad, which is the closed form at 0.5875618
+        /// and not at 0.486133. It is why the nm conversion no longer uses
+        /// wavelength 1, which made the published nm figure 17.3% low.
         /// </summary>
-        private static double PeakRetardance(ZOSAPI.Editors.LDE.ISTAR_Stress st,
-                                             MouldedElement e, out int samples, out string note)
+        internal const double LambdaDMm = 0.5875618e-3;
+
+        /// <summary>
+        /// PEAK LOCAL BIREFRINGENCE, in radians per mm at the d-line.
+        ///
+        /// THIS USED TO READ GetRetardanceMap, AND THAT WAS NOT A MEASUREMENT.
+        /// Established 2026-08-29 by loading uniform stress fields whose
+        /// retardance is known in closed form, every one of which STAR accepted
+        /// cleanly (import code 0, 15015 of 15015 points - so these are answers
+        /// about STAR, not about a failed import):
+        ///
+        ///   * a NULL field, every tensor component exactly zero, returned peak
+        ///     |R| of exactly pi or 2*pi - the tool would have printed 0.5000 or
+        ///     1.0000 waves of retardance from no stress at all;
+        ///   * so did a HYDROSTATIC field, whose retardance is zero by symmetry
+        ///     while carrying 10 N/mm2;
+        ///   * the same physical state ROTATED 45 degrees read 0.062 rad against
+        ///     4.260 on element 3, a factor of 69. Retardance is a property of
+        ///     the medium and cannot depend on that;
+        ///   * it did not scale with stress - 814x the closed form at
+        ///     0.02 N/mm2, 0.16x at 200 - passing through 1.0x near 10 N/mm2,
+        ///     which is where the one published measurement happened to sit;
+        ///   * on every ring of a uniform field it took three values, 0, +d and
+        ///     d-pi, with span exactly pi and exact zeros at 0, +-90 and 180
+        ///     degrees of azimuth. That is an ANGLE, not a phase.
+        ///
+        /// GetPointRetardanceList passes all of it. Against the closed form
+        /// 2*pi*(K11-K12)*S/lambda_d per mm it reads 0.9978, exactly 0.000000 on
+        /// the null and hydrostatic arms, 1.0000 for the same state at 0, 30, 45
+        /// and 90 degrees, and 1.9976 for pure shear where theory demands 2.
+        ///
+        /// It is a LOCAL quantity, so it is returned as one and the caller
+        /// bounds the retardance with the longest axial path. That bound is
+        /// exact for a uniform field and an over-estimate otherwise, which is
+        /// the safe direction for a number this tool already tells people to
+        /// treat as an order of magnitude.
+        /// </summary>
+        private static double PeakLocalBirefringence(ZOSAPI.Editors.LDE.ISTAR_Stress st,
+                                                     MouldedElement e, out int samples, out string note)
         {
             note = null;
             samples = 0;
             double peak = 0.0;
             try
             {
-                // density is a sampling SELECTOR, not a point count: 8 returns a
-                // 217-point map, 16 returns nothing at all rather than refusing.
-                var map = st.Fits.GetRetardanceMap(8, 0, 1, 1.0, 0.0, 0.0, 0.0);
-                if (map != null)
+                // density is a sampling SELECTOR, not a point count.
+                var list = st.Fits.GetPointRetardanceList(8, 0, 1);
+                if (list != null)
                 {
-                    samples = map.Length;
-                    foreach (var pt in map)
+                    samples = list.Length;
+                    foreach (var pt in list)
                         if (Math.Abs(pt.Retardance) > Math.Abs(peak)) peak = pt.Retardance;
                 }
             }
             catch (Exception ex)
             {
-                note = "GetRetardanceMap raised: " + ex.Message;
+                note = "GetPointRetardanceList raised: " + ex.Message;
                 return double.NaN;
             }
-            if (samples == 0) note = "GetRetardanceMap returned no points";
-            return peak;
+            if (samples == 0) note = "GetPointRetardanceList returned no points";
+            return Math.Abs(peak);
+        }
+
+        /// <summary>
+        /// The longest ray path through the element, which is what turns a local
+        /// birefringence into a retardance bound. A biconvex element is thickest
+        /// on axis and a biconcave one at its edge, so both ends are taken rather
+        /// than assuming the centre - on the validation triplet the middle
+        /// element's path peaks at the edge at 2.45 mm against a 1.20 mm centre.
+        /// </summary>
+        internal static double MaxAxialPathMm(MouldedElement e)
+        {
+            double ct = e.CentreThicknessMm, et = e.EdgeThicknessMm;
+            if (double.IsNaN(et) || et <= 0.0) return ct;
+            return Math.Max(ct, et);
+        }
+
+        /// <summary>
+        /// Local birefringence (rad/mm at the d-line) times the longest path,
+        /// expressed in waves. Split out so the self-test can exercise the
+        /// conversion without an OpticStudio session.
+        /// </summary>
+        internal static double RetardanceBoundWaves(double localRadPerMm, double pathMm)
+        {
+            if (double.IsNaN(localRadPerMm) || double.IsNaN(pathMm)) return double.NaN;
+            return Math.Abs(localRadPerMm) * pathMm / (2.0 * Math.PI);
         }
     }
 }

@@ -230,9 +230,18 @@ namespace MoldStress
             // --- THE SCALAR-VS-RETARDANCE VERDICT ---------------------------
             //
             // The number a tool prints LAST is the number people quote. Until
-            // 2026-08-21 that was the RMS wavefront delta, and on the one real
-            // lens it read +0.5% while peak retardance was 0.41 waves - a factor
-            // of 585. Both correct; only one is about birefringence.
+            // 2026-08-21 that was the RMS wavefront delta, which is the wrong
+            // headline for a polarisation-sensitive system by orders of
+            // magnitude. Both correct; only one is about birefringence.
+            //
+            // THE 0.41 WAVES AND THE 585x BELOW ARE A WITHDRAWN MEASUREMENT,
+            // KEPT ONLY AS ARITHMETIC. They came from GetRetardanceMap, which
+            // 2026-08-29 controls showed is not a retardance - see
+            // Runner.PeakLocalBirefringence. The cases below still test what
+            // they were written to test, which is that ScalarVerdict forms and
+            // formats a ratio correctly, and that is independent of where the
+            // numerator came from. They are NOT evidence about any lens. The
+            // measured ratio on the validation triplet is 176x.
             //
             // The boundary is DERIVED, not chosen: both quantities are in waves,
             // so the warning fires exactly when the retardance is the larger of
@@ -248,13 +257,23 @@ namespace MoldStress
                     .Contains("UNDERSTATES"),
                 Verdict(Runner.ScalarVerdict(0.0101, 1.0000, 1.0100, false)));
 
-            // The real lens, to the numbers on record: 0.41 waves of retardance
-            // against a 0.5% move on a 0.140186-wave baseline, i.e. a
-            // 0.000701-wave change. 0.41 / 0.000701 = 585.
-            Check("the 585x case is reported as 585x",
+            // ARITHMETIC ONLY, per the retraction above: 0.41 against a
+            // 0.000701-wave change is 585, and the formatter must say so.
+            Check("a 585x ratio is formatted as 585x",
                 Verdict(Runner.ScalarVerdict(0.41, 0.140186, 0.140887, false))
                     .Contains("585x"),
                 Verdict(Runner.ScalarVerdict(0.41, 0.140186, 0.140887, false)));
+
+            // AND THE MEASURED CASE, which is the one that is evidence: the
+            // validation triplet's 1.29522-wave retardance bound against an RMS
+            // wavefront that moved 0.132177 -> 0.124818 waves at a pinned plane.
+            // 1.29522 / 0.007359 = 176. Note the wavefront IMPROVED slightly, so
+            // this also guards that the verdict keys on the magnitude of the
+            // change rather than its sign.
+            Check("the measured 176x case is formatted as 176x",
+                Verdict(Runner.ScalarVerdict(1.29522, 0.132177, 0.124818, false))
+                    .Contains("176x"),
+                Verdict(Runner.ScalarVerdict(1.29522, 0.132177, 0.124818, false)));
 
             // A wavefront that does not move AT ALL is the worst version of the
             // trap: the ratio is infinite, and a bare format string would print
@@ -375,6 +394,76 @@ namespace MoldStress
                 Runner.PlaneCase(30.8026, -0.3249, "MarginalRayHeight", true) !=
                 Runner.PlaneCase(30.8026, -0.3249, "MarginalRayHeight", false),
                 "if these agreed, the pinning flag would be decoration");
+
+            // --- THE RETARDANCE BOUND ---------------------------------------
+            //
+            // The retardance is no longer read off GetRetardanceMap, because
+            // that returned pi or 2*pi on a field with every stress component
+            // exactly zero - see PeakLocalBirefringence. What is read now is a
+            // LOCAL birefringence in rad/mm, and these guard the two steps that
+            // turn it into a number a user sees: the path, and the conversion.
+            {
+                // The validation triplet's middle element is BICONCAVE: over its
+                // 2.640 mm clear semi-diameter the path peaks at the edge at
+                // 1.8474 mm against a 1.2000 mm centre. Taking the centre
+                // thickness there would understate the bound by 54% on exactly
+                // the element that turned out to be the worst - its local
+                // birefringence is 4.405 rad/mm against 0.057 on element 1 -
+                // which is why MaxAxialPathMm takes both ends.
+                var biconcave = new MouldedElement
+                {
+                    CentreThicknessMm = 1.2000, EdgeThicknessMm = 1.8474
+                };
+                var biconvex = new MouldedElement
+                {
+                    CentreThicknessMm = 4.0000, EdgeThicknessMm = 0.9962
+                };
+                Near("a biconcave element's longest path is its EDGE",
+                    Runner.MaxAxialPathMm(biconcave), 1.8474, 1e-9);
+                Near("a biconvex element's longest path is its CENTRE",
+                    Runner.MaxAxialPathMm(biconvex), 4.0000, 1e-9);
+                Check("the two cases pick different ends",
+                    Runner.MaxAxialPathMm(biconcave) != biconcave.CentreThicknessMm &&
+                    Runner.MaxAxialPathMm(biconvex) == biconvex.CentreThicknessMm,
+                    "if both returned the centre thickness this helper would be decoration");
+                Near("an element with no edge thickness falls back to the centre",
+                    Runner.MaxAxialPathMm(new MouldedElement
+                    {
+                        CentreThicknessMm = 3.0, EdgeThicknessMm = 0.0
+                    }), 3.0, 1e-9);
+
+                // MEASURED ANCHOR. A uniform uniaxial 10 N/mm2 field in MS_PMMA
+                // (K11-K12 = 4.5 Br from the generated catalogue) gives a local
+                // birefringence of 2*pi*4.5e-5/0.5875618e-3 = 0.4812146 rad/mm,
+                // which STAR returned as 0.481215 on 2026-08-29. Over the 4 mm
+                // centre thickness that is 4.5e-5*4.0 = 1.8e-4 mm of path
+                // difference, i.e. 180.0 nm and 0.3063507 waves at the d-line.
+                //
+                // The first version of this test wanted 0.30612 waves and FAILED,
+                // because that came from dividing by the BD record's printed
+                // 0.588 um rather than by the 0.5875618 the map actually reports
+                // at. The code was right and the hand arithmetic was not, which
+                // is what an anchor is for.
+                Near("the measured PMMA anchor converts to 0.3063507 waves",
+                    Runner.RetardanceBoundWaves(0.4812146, 4.0), 0.3063507, 1e-6);
+                Near("and to exactly the 180.0 nm of path difference it is",
+                    Runner.RetardanceBoundWaves(0.4812146, 4.0) * Runner.LambdaDMm * 1e6,
+                    180.0, 1e-5);
+                Check("the d-line constant is NOT the F-line the tool used to convert with",
+                    Math.Abs(Runner.LambdaDMm - 0.486133e-3) > 1e-6,
+                    "converting d-line waves with the F-line made the nm figure 17.3% low");
+                Near("zero birefringence bounds to zero retardance",
+                    Runner.RetardanceBoundWaves(0.0, 4.0), 0.0, 1e-15);
+                Check("the bound scales with BOTH the birefringence and the path",
+                    Math.Abs(Runner.RetardanceBoundWaves(0.9624292, 4.0)
+                             - 2.0 * Runner.RetardanceBoundWaves(0.4812146, 4.0)) < 1e-12 &&
+                    Math.Abs(Runner.RetardanceBoundWaves(0.4812146, 8.0)
+                             - 2.0 * Runner.RetardanceBoundWaves(0.4812146, 4.0)) < 1e-12,
+                    "pure shear doubles the first, a thicker element the second");
+                Check("a NaN birefringence does not become a confident number",
+                    double.IsNaN(Runner.RetardanceBoundWaves(double.NaN, 4.0)),
+                    "the old route's failure mode was a confident number from nothing");
+            }
 
             // --- THE SAMPLING-ADEQUACY NUMBER, both arms ---------------------
             //
