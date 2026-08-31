@@ -1,0 +1,107 @@
+  wrote C:\Users\Shadow\Documents\Zemax\Glasscat\MOLDSTRESS.AGF
+  working copy C:\Users\Shadow\Documents\Zemax\Samples\MoldStress\plastic-cooke-MoldStress.zmx (original untouched)
+  attached the MOLDSTRESS material catalogue
+  surface 1: PMMA -> MS_PMMA  (constants are MS_PMMA's, a substitution rather than an identification)
+  surface 3: POLYSTYR -> MS_POLYSTYR  (constants are MS_POLYSTYR's, a substitution rather than an identification)
+  surface 5: PMMA -> MS_PMMA  (constants are MS_PMMA's, a substitution rather than an identification)
+  3 surface(s) converted; re-scanning the copy
+MoldStress
+  ESTIMATE - not a mould-flow simulation, not validated against a moulded part
+  system: C:\Users\Shadow\Documents\Zemax\Samples\MoldStress\plastic-cooke-MoldStress.zmx
+  process: fill 0.60 s, pack 60.0 MPa for 3.0 s
+
+  baseline RMS wavefront error: 0.132177 waves
+
+  INDEX-ONLY MODE (default): only the refractive-index change from
+  moulding is computed and applied, through STAR's direct-index route.
+  No stress, no birefringence, no retardance. Pass -full for those.
+
+      export   to the MECHANICAL semi-diameter, 6.676 mm (clear aperture 4.918); beyond the clear aperture the rim's values are carried outward, not solved
+      flange    NOT DECLARED, assumed equal to the gate land 1.617 mm; it sets the gap over 0% of the flow path
+      NOTE      the rim gate feeds the THIN end (2.695 mm edge against a 4.000 mm centre). Practice is to gate the thick section; a lens cannot, because the thick section is the aperture - which is why the flange above has to hold the feed open.
+      fill      gate pressure 0.31 MPa, viscosity 1.73E+003 Pa.s, 425 mm3/s
+      freeze    core at 12.57 s, skin 70.0 C at freeze-off
+      channels  flow dn 8.540E-006 peaking at 89 % of the half-wall, density dn 2.208E-005
+      files     15015 stress points, 1540 index points, peak equivalent stress 1.9 N/mm2
+      sampling  ring grid captures the density field to 2.24% of its span (radial midpoint test)
+      STAR      index 1540 points accepted (direct index; no stress applied); GRIN step 0.50 mm, ~8 steps/ray
+      STAR      stress 0/15015 points accepted (code 0), index 1540
+
+      export   to the MECHANICAL semi-diameter, 3.640 mm (clear aperture 2.391); beyond the clear aperture the rim's values are carried outward, not solved
+      flange    NOT DECLARED, assumed equal to the gate land 1.038 mm; it sets the gap over 0% of the flow path
+      fill      gate pressure 0.30 MPa, viscosity 1.18E+003 Pa.s, 44 mm3/s
+      freeze    core at 5.13 s, skin 50.0 C at freeze-off
+      channels  flow dn 3.013E-004 peaking at 93 % of the half-wall, density dn 2.727E-005
+      files     15015 stress points, 1540 index points, peak equivalent stress 54.5 N/mm2
+      sampling  ring grid captures the density field to 0.78% of its span (radial midpoint test)
+      STAR      index 1540 points accepted (direct index; no stress applied); GRIN step 0.50 mm, ~2 steps/ray
+      STAR      stress 0/15015 points accepted (code 0), index 1540
+
+      export   to the MECHANICAL semi-diameter, 5.848 mm (clear aperture 4.274); beyond the clear aperture the rim's values are carried outward, not solved
+      flange    NOT DECLARED, assumed equal to the gate land 1.692 mm; it sets the gap over 0% of the flow path
+      NOTE      the rim gate feeds the THIN end (2.820 mm edge against a 4.000 mm centre). Practice is to gate the thick section; a lens cannot, because the thick section is the aperture - which is why the flange above has to hold the feed open.
+      fill      gate pressure 0.22 MPa, viscosity 1.83E+003 Pa.s, 327 mm3/s
+      freeze    core at 13.77 s, skin 70.0 C at freeze-off
+      channels  flow dn 5.482E-006 peaking at 89 % of the half-wall, density dn 1.584E-005
+      files     15015 stress points, 1540 index points, peak equivalent stress 1.2 N/mm2
+      sampling  ring grid captures the density field to 3.04% of its span (radial midpoint test)
+      STAR      index 1540 points accepted (direct index; no stress applied); GRIN step 0.50 mm, ~8 steps/ray
+      STAR      stress 0/15015 points accepted (code 0), index 1540
+
+  WAVEFRONT - what any system sees
+    original materials         0.174136 waves RMS (before substitution)
+    baseline                   0.132177 waves RMS
+    with moulding effects      0.199083 waves RMS
+    change                     +0.066906 waves (+50.6%)
+    measured at the SAME image plane as the baseline, so this is optics and not refocusing - see IMAGE PLANE below
+
+  IMAGE PLANE - what this file's own focus solve does
+    a MarginalRayHeight solve on surface 6 moves the image plane -293.9 um
+    at that moved plane the wavefront reads 0.512732 waves RMS,
+    which is +0.380555 waves against the baseline - but 0.313650 of that
+    is DEFOCUS, and a refocus removes it.
+
+    REAL RAYS, scanned on this lens: best focus -75.0 um before
+    and -75.0 um after - a real shift of +0.0 um, against the solve's -293.9 um.
+    The solve is chasing a PARAXIAL shift real rays do not follow (0 % of it).
+    A fixed-focus assembly has to hold whichever of these is real;
+    an adjustable one does not.
+
+  DISPERSION - what this run is worth away from the d-line
+    STAR's direct-index route is MONOCHROMATIC: it applies one
+    index per point at all 3 wavelengths, and this run wrote the
+    0.5876 um value, so each element ALSO loses its own dispersion
+    on loading. That substitution is an index error:
+      surfaces 1-2  MS_PMMA   moulding dn 2.21E-005
+        0.4861 um  imposed error -0.006020   273x the moulding change
+        0.5876 um  imposed error +0.000000   <- written at this wavelength
+        0.6563 um  imposed error +0.002546   115x the moulding change
+      surfaces 3-4  MS_POLYSTYR   moulding dn 2.73E-005
+        0.4861 um  imposed error -0.013492   495x the moulding change
+        0.5876 um  imposed error +0.000000   <- written at this wavelength
+        0.6563 um  imposed error +0.005618   206x the moulding change
+      surfaces 5-6  MS_PMMA   moulding dn 1.58E-005
+        0.4861 um  imposed error -0.006020   380x the moulding change
+        0.5876 um  imposed error +0.000000   <- written at this wavelength
+        0.6563 um  imposed error +0.002546   161x the moulding change
+    This is a property of STAR's route, not of this tool's physics:
+    IndexDataType is read-only, and the switchable PhysicsBasedIndex
+    route is the stress/temperature one, which would reintroduce the
+    K11/K12 split Waxler 1979 refuted.
+
+  POLARISATION - what a birefringent system sees
+    NOT COMPUTED, by design. Index-only mode applies the density index
+    change and nothing else - no stress tensor, no birefringence, no
+    retardance. On the validation triplet the retardance bound was
+    1513x the RMS wavefront change, so a polarisation-sensitive
+    system needs the full run: pass -full.
+
+  Files are in C:\Users\Shadow\Documents\Zemax\Samples\MoldStress\moldstress
+
+  NOTE: with STAR index data loaded, FFT-type analyses (MTF, PSF)
+  trace every ray through the index volume and can take MINUTES on
+  a multi-element system at high sampling. If a window seems hung,
+  check CPU in Task Manager: pegged means computing - let it finish
+  or lower the analysis sampling. Idle means genuinely stuck.
+  In OpticStudio, any analysis window's STAR Effects setting switches
+  between On and Difference, which shows this change directly.
