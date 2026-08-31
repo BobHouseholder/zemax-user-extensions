@@ -1,0 +1,37 @@
+[
+ {
+  "arm": "1  nothing",
+  "before": 0.12481827073791654,
+  "after": 0.12481827073791654,
+  "moved": 0.0,
+  "frac_of_gap": 0.0
+ },
+ {
+  "arm": "2  MakeSolveFixed on surf6 semi-dia, no assignment",
+  "before": 0.12481827073791654,
+  "after": 0.13297842855708777,
+  "moved": 0.008160157819171232,
+  "frac_of_gap": 0.9999999457225925
+ },
+ {
+  "arm": "3  MakeSolveFixed on surf7 semi-dia, no assignment",
+  "before": 0.12481827073791654,
+  "after": 0.1329784285649079,
+  "moved": 0.008160157826991365,
+  "frac_of_gap": 0.9999999466809236
+ },
+ {
+  "arm": "4  assign surf7 its OWN value, cell left automatic",
+  "before": 0.12481827073791654,
+  "after": 0.1329784285570798,
+  "moved": 0.008160157819163266,
+  "frac_of_gap": 0.9999999457216164
+ },
+ {
+  "arm": "5  MakeSolveFixed on BOTH, no assignment",
+  "before": 0.12481827073791654,
+  "after": 0.13297842855708777,
+  "moved": 0.008160157819171232,
+  "frac_of_gap": 0.9999999457225925
+ }
+]

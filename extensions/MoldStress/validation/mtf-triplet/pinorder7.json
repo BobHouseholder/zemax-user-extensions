@@ -1,0 +1,32 @@
+[
+ {
+  "arm": "control: nothing",
+  "moved": 0.0,
+  "frac": 0.0
+ },
+ {
+  "arm": "surface 1 Thickness = its own value",
+  "moved": 0.008160157819451674,
+  "frac": 0.9999999457569598
+ },
+ {
+  "arm": "surface 2 Thickness = its own value",
+  "moved": 0.008160157826139658,
+  "frac": 0.9999999465765498
+ },
+ {
+  "arm": "surface 3 Thickness = its own value",
+  "moved": 0.008160157828536713,
+  "frac": 0.9999999468703008
+ },
+ {
+  "arm": "surface 4 Thickness = its own value",
+  "moved": 0.0081601578210245,
+  "frac": 0.9999999459497043
+ },
+ {
+  "arm": "surface 5 Thickness = its own value",
+  "moved": 0.008160157811106572,
+  "frac": 0.9999999447342955
+ }
+]

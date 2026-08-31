@@ -1,0 +1,18 @@
+==============================================================================
+The helper's exact operation, per surface
+==============================================================================
+  control: nothing                               +0.000000000  (  0% of the gap)
+  surface 1 Thickness = its own value            +0.008160158  (100% of the gap)
+  surface 2 Thickness = its own value            +0.008160158  (100% of the gap)
+  surface 3 Thickness = its own value            +0.008160158  (100% of the gap)
+  surface 4 Thickness = its own value            +0.008160158  (100% of the gap)
+  surface 5 Thickness = its own value            +0.008160158  (100% of the gap)
+
+==============================================================================
+VERDICT
+==============================================================================
+  SURFACE 1 REFRESHES. The helper does what its comment claims, and the
+  tool's numbers were bit-identical because this path already wrote to
+  the LDE before the read - the helper is insurance, not a correction.
+
+wrote pinorder7.json

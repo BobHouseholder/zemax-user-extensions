@@ -526,34 +526,6 @@ file that owns the question before writing a conclusion in its domain.**
   birefringence or retardance. Report and scripts:
   `https://claude.ai/code/artifact/f3599f59-7086-4aa4-a7c3-ec85eff16648`.
 
-- **An RMS wavefront read at the design plane depends on WHEN the focus solve was
-  killed, by 0.008 waves, with the final system state identical.** Found
-  2026-08-29 by running the tool through the GUI and getting a different answer
-  from the scratch harness that had been used to check it. Two orders, one file,
-  one process, byte-identical stress data:
-
-  | | plane after loading | final thickness | change |
-  |---|---|---|---|
-  | pin the solve, THEN load | 30.802613 mm (never moved) | 30.802613 | **−0.007359 waves** |
-  | load, let the solve move, then pin back | 30.609223 mm | 30.802613 | **+0.000802 waves** |
-
-  Both end at the same thickness with the same data applied, and they disagree by
-  0.008160 waves — enough to flip the sign of the reported moulding effect. The
-  obvious suspect is refuted: automatic semi-diameters differ between the two only
-  in the sixth decimal (4.842202 vs 4.842207 mm), six orders of magnitude too
-  small. So it is neither the plane nor the aperture, and the mechanism is **not
-  yet known**.
-
-  **The tool's order is the one to trust**, on two grounds: it is what a user
-  actually does — open a file whose solve is live and press the button — and its
-  answer is reproduced by three independent routes (ribbon-deployed binary against
-  a live GUI session, the same binary standalone with `-file`, and a probe that
-  follows its order). The harness order is reproducible too, which is what makes
-  this a finding rather than noise. **Every wavefront number this study's python
-  harness produced is suspect until re-taken in the tool's order**; the retardance
-  and birefringence numbers are not affected, having been confirmed identical
-  across all three routes. Probe: `validation/mtf-triplet/pinorder.py`.
-
 - **The peak retardance this tool printed was not a measurement, and it named the
   wrong element.** Found 2026-08-29 by putting the `-full` polarisation half under
   the controls that had already exposed four defects in the index half. Until this
@@ -712,6 +684,50 @@ file that owns the question before writing a conclusion in its domain.**
   the moment a PMMA reference case is added.
 
 #### Closed recently, kept because the reasoning is the useful part
+
+- **SOLVED 2026-08-30 - the pin-order anomaly was a STALE READ, and the tool's
+  number was the right one all along.** An RMS wavefront read at the design plane
+  depended on WHEN the focus solve was killed, by 0.008160158 waves, with the
+  final thickness identical to the nanometre and byte-identical stress data -
+  enough to flip the SIGN of the reported moulding effect. Open since 08-29 with
+  its only named suspect refuted.
+
+  **The mechanism:** after `ApplyStress()`, `RWRE` is served from state that a
+  merit-operand READ does not invalidate. Any WRITE to the lens data editor does.
+  Measured in `validation/mtf-triplet/pinorder6.py`: a thickness set to its own
+  value, a radius set to its own value, and **a comment string** each move the
+  reading by the full 0.008160158 waves, while the do-nothing control moves
+  exactly zero. `pinorder3.py` had already shown that a paraxial operand and a
+  real-ray trace move nothing at all - so it is writes, not traces.
+
+  So the two orders differ because one of them WRITES: pinning the plane after
+  loading restores the thickness, which refreshes. Pinning it first writes
+  nothing afterwards and keeps the stale value. **+0.000802 is the refreshed
+  answer and -0.007359 is the stale one**, which vindicates the tool and
+  convicts the harness that was used to check it.
+
+  **The semi-diameters were guilty and were cleared for the wrong reason.** The
+  08-29 note compared the VALUES, found they agree to the sixth decimal, and
+  looked elsewhere. `pinorder4.py`'s control is what caught it: forcing them to
+  their OWN, UNCHANGED values moved the wavefront the entire gap. The value was
+  never the point - the ACT of writing was.
+
+  **AND THE PROBE THAT WENT LOOKING FIRST DESTROYED THE EFFECT.** `pinorder2.py`
+  fingerprinted 105 pieces of state and reported the orders agreeing to 7e-13
+  waves - no anomaly. It evaluates about fifteen merit operands before reading
+  the wavefront, and reported its own erasure as a finding. Re-running the
+  original probe unmodified, minutes later, reproduced the anomaly exactly.
+
+  **A live bug fell out of it.** `movedWfe` - the "what you see on opening the
+  copy" figure - is read with no intervening write, so it was always stale; and
+  the pin-back that saved the headline number is guarded by
+  `Math.Abs(planeShiftMm) > 0.0`, so on a lens whose plane does not move nothing
+  was written and the reported effect came from a stale read. Fixed by a
+  deliberate refresh (`RefreshAfterStarLoad`), whose own operation is verified in
+  `pinorder7.py` rather than assumed: assigning surface 1's thickness to itself
+  carries 100% of the gap. On the triplet the fix changes nothing, because this
+  path already wrote - it is insurance here and a correction where the plane
+  is fixed.
 
 - **THE RIBBON CLICKS WERE THE MOST PRODUCTIVE TESTS IN THE ARC, and this entry
   spent a week asking for them after they had happened.** It read "Needs Bob:

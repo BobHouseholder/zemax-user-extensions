@@ -1,0 +1,26 @@
+==============================================================================
+STATE A, then one act per arm — each arm reaches A fresh
+==============================================================================
+  1  nothing                                     0.124818271 -> 0.124818271  +0.000000000  (0% of the gap)
+  2  MakeSolveFixed on surf6 semi-dia, no assignment 0.124818271 -> 0.132978429  +0.008160158  (100% of the gap)
+  3  MakeSolveFixed on surf7 semi-dia, no assignment 0.124818271 -> 0.132978429  +0.008160158  (100% of the gap)
+  4  assign surf7 its OWN value, cell left automatic 0.124818271 -> 0.132978429  +0.008160158  (100% of the gap)
+  5  MakeSolveFixed on BOTH, no assignment       0.124818271 -> 0.132978429  +0.008160158  (100% of the gap)
+
+==============================================================================
+VERDICT
+==============================================================================
+  control arm (nothing done) moves +0.00e+00 - clean
+  2  MakeSolveFixed on surf6 semi-dia, no assignment CARRIES IT
+  3  MakeSolveFixed on surf7 semi-dia, no assignment CARRIES IT
+  4  assign surf7 its OWN value, cell left automatic CARRIES IT
+  5  MakeSolveFixed on BOTH, no assignment       CARRIES IT
+
+  MECHANISM: MakeSolveFixed on surf6 semi-dia, no assignment
+  The wavefront in state A is computed against an aperture that is not
+  the one SemiDiameter reads back. Resolving the cell publishes it, and
+  the answer becomes state B's. The values were never the difference -
+  they agree to the sixth decimal, which is exactly why comparing the
+  VALUES cleared a suspect that was guilty.
+
+wrote pinorder5.json

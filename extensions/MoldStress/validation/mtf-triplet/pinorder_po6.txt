@@ -1,0 +1,26 @@
+==============================================================================
+Writes that have NOTHING to do with the aperture
+==============================================================================
+  0  control: nothing                              +0.000000000  (  0% of the gap)
+  1  surface 2 Thickness = its own value           +0.008160158  (100% of the gap)
+  2  surface 4 Radius = its own value              +0.008160158  (100% of the gap)
+  3  surface 2 Comment = a string                  +0.008160158  (100% of the gap)
+
+==============================================================================
+VERDICT
+==============================================================================
+  control clean (moves 0). 3 of 3 non-aperture writes carry the FULL gap;
+  0 move nothing.
+
+  MECHANISM, stated as narrowly as the evidence allows:
+    After ApplyStress(), RWRE is served from state that a merit-operand
+    READ does not invalidate. ANY WRITE to the lens data editor does -
+    a thickness or a radius set to its own value, or a comment string,
+    each moves the wavefront the entire 0.008160158 waves.
+
+    So the aperture was never the cause. The two pin orders differ
+    because order B WRITES (it restores the thickness) and order A
+    never writes after loading. B's +0.000802 is the refreshed value;
+    A's -0.007359 is stale, and the tool has been right all along.
+
+wrote pinorder6.json

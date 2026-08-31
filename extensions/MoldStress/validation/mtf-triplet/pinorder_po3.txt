@@ -1,0 +1,34 @@
+==============================================================================
+The wavefront at four stages, with NOTHING between the load and w0
+==============================================================================
+  A  pin first             w0 0.124818271  w1 0.124818271  w2 0.124818271  w3 0.124818271
+  B  pin after load        w0 0.132978429  w1 0.132978429  w2 0.132978429  w3 0.132978429
+
+==============================================================================
+WHERE DO THE TWO ORDERS CONVERGE?
+==============================================================================
+  w0  immediately after ApplyStress()            A 0.124818271  B 0.132978429  delta +0.008160158  DIFFER
+  w1  read a second time, nothing in between     A 0.124818271  B 0.132978429  delta +0.008160158  DIFFER
+  w2  after ONE paraxial operand (EFFL)          A 0.124818271  B 0.132978429  delta +0.008160158  DIFFER
+  w3  after ONE real-ray operand (REAY)          A 0.124818271  B 0.132978429  delta +0.008160158  DIFFER
+
+  The two orders NEVER converge across these four stages - the difference
+  is not erased by a trace, and the instrument hypothesis is REFUTED.
+
+==============================================================================
+AND WHAT MOVED WHEN THEY CONVERGED?
+==============================================================================
+  sd0  semi-diameters identical across orders: False
+        surf6  A=4.842202  B=4.842207  delta +0.000005
+        surf7  A=8.449104  B=8.449232  delta +0.000128
+  sd1  semi-diameters identical across orders: False
+        surf6  A=4.842202  B=4.842207  delta +0.000005
+        surf7  A=8.449104  B=8.449232  delta +0.000128
+  sd2  semi-diameters identical across orders: False
+        surf6  A=4.842202  B=4.842207  delta +0.000005
+        surf7  A=8.449104  B=8.449232  delta +0.000128
+  sd3  semi-diameters identical across orders: False
+        surf6  A=4.842202  B=4.842207  delta +0.000005
+        surf7  A=8.449104  B=8.449232  delta +0.000128
+
+wrote pinorder3.json

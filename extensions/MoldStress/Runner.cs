@@ -627,6 +627,13 @@ namespace MoldStress
                 // THE FIRST READ IS AT WHATEVER PLANE THE FILE CHOSE. If a solve
                 // moved it, this is what the user sees on opening the copy - and it
                 // is NOT the moulding effect on its own.
+                //
+                // REFRESH FIRST. Until 2026-08-30 this read came straight off the
+                // STAR load and was stale by 0.008160158 waves on the validation
+                // triplet - see RefreshAfterStarLoad. The second read below was
+                // saved only by the pin-back's write, and only on lenses whose
+                // solve actually moves the plane.
+                RefreshAfterStarLoad(sys);
                 double movedWfe = Metric(sys);
                 double planeLoaded = double.NaN;
                 try { planeLoaded = sys.LDE.GetSurfaceAt(imgPrev).Thickness; }
@@ -1360,6 +1367,46 @@ namespace MoldStress
                     0, 0, 0, 0, 0, 0);
             }
             catch { return double.NaN; }
+        }
+
+        /// <summary>
+        /// Invalidate whatever RWRE is being served from, WITHOUT changing the
+        /// system. Measured 2026-08-30 (`validation/mtf-triplet/pinorder6.py`):
+        /// after ApplyStress() the wavefront operand returns a stale value, a
+        /// merit-operand read does NOT refresh it, and any write to the lens
+        /// data editor does - including a thickness assigned its own value.
+        /// On the validation triplet the stale and refreshed readings differ by
+        /// 0.008160158 waves, enough to flip the SIGN of the reported effect.
+        ///
+        /// Call this after loading STAR data and before every measurement.
+        ///
+        /// ON THE VALIDATION TRIPLET THIS CHANGES NOTHING, and that is expected
+        /// rather than a disappointment: the numbers are bit-identical across
+        /// the fix because this path already writes a thickness in the pin-back
+        /// before the read. Here the helper is insurance.
+        ///
+        /// IT IS A CORRECTION ON THE PATH WHERE THE PLANE DOES NOT MOVE. That
+        /// pin-back is guarded by `Math.Abs(planeShiftMm) > 0.0`, so on a lens
+        /// with no focus solve - or one whose solve leaves the plane alone -
+        /// nothing was written and the reading stayed stale. That case is
+        /// measured, not reasoned: `pinorder3.py` state A pins the solve first
+        /// so the plane never moves, writes nothing afterwards, and reads
+        /// -0.007359 waves where the refreshed answer is +0.000802.
+        ///
+        /// The helper's own operation is verified in `pinorder7.py`: assigning
+        /// surface 1's thickness to itself carries 100% of the 0.008160158-wave
+        /// gap, so this is not a no-op under a confident comment.
+        /// </summary>
+        private static void RefreshAfterStarLoad(ZOSAPI.IOpticalSystem sys)
+        {
+            try
+            {
+                // surface 1 always exists on a real prescription; assigning a
+                // value to itself is a write with no optical consequence.
+                var su = sys.LDE.GetSurfaceAt(1);
+                su.Thickness = su.Thickness;
+            }
+            catch { }
         }
 
         private static double Metric(ZOSAPI.IOpticalSystem sys)

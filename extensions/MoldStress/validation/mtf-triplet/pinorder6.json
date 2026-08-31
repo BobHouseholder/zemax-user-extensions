@@ -1,0 +1,26 @@
+[
+ {
+  "arm": "0  control: nothing",
+  "moved": 0.0,
+  "frac": 0.0,
+  "error": ""
+ },
+ {
+  "arm": "1  surface 2 Thickness = its own value",
+  "moved": 0.008160157826147568,
+  "frac": 0.9999999465775191,
+  "error": ""
+ },
+ {
+  "arm": "2  surface 4 Radius = its own value",
+  "moved": 0.008160157818566549,
+  "frac": 0.9999999456484907,
+  "error": ""
+ },
+ {
+  "arm": "3  surface 2 Comment = a string",
+  "moved": 0.008160157826999331,
+  "frac": 0.9999999466818998,
+  "error": ""
+ }
+]
