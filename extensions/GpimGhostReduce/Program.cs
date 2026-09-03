@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Text;
 using ZOSAPI;
 using ZOSAPI.Editors;
 using ZOSAPI.Editors.MFE;
@@ -80,7 +81,7 @@ namespace GpimGhostReduce
                 Environment.ExitCode = 1;
             }
         }
- marquee unused
+
         static void ParseArgs(string[] args)
         {
             for (int i = 0; i < args.Length; i++)
@@ -103,6 +104,7 @@ namespace GpimGhostReduce
                     case "-nodialog": Opts.NoDialog = true; break;
                     case "-quiet": break;
                     default:
+                        // OpticStudio ribbon launches with -zpid/-zplt/-zsid.
                         if (al.StartsWith("-z")) break;
                         if (al.StartsWith("-"))
                             throw new Exception("unknown flag " + a);
@@ -153,6 +155,8 @@ namespace GpimGhostReduce
                 {
                     try { App = connection.ConnectAsExtension(0); } catch { App = null; }
                 }
+                // ConnectAsExtension returns a live-looking stub with PrimarySystem
+                // == null when nothing is listening — that is not a connection.
                 if (App == null || App.PrimarySystem == null)
                     throw new Exception("could not connect to OpticStudio (use the Programming ribbon or Interactive Extension)");
                 if (!App.IsValidLicenseForAPI)
@@ -313,6 +317,7 @@ namespace GpimGhostReduce
                 }
             }
 
+            // OpticStudio's own worst-of-all probe.
             WriteGpim(op, -1, -1, mode);
             double all = ReadValue(op, mfe);
             int awfb, awsb;
@@ -403,6 +408,7 @@ namespace GpimGhostReduce
                 else if (u == "WFB") ColWfb = c;
                 else if (u == "WSB") ColWsb = c;
             }
+            // Fall back to the usual Int1/Int2/Int3 packing if headers did not name them.
             if (ColSurf1 < 0) ColSurf1 = 2;
             if (ColSurf2 < 0) ColSurf2 = 3;
             if (ColMode < 0) ColMode = 4;
@@ -468,6 +474,7 @@ namespace GpimGhostReduce
 
         static void SetComment(IOperand op, string text)
         {
+            // BLNK comment lives in the first string cell after Type.
             int n = 16;
             try { if (op.Editor != null) n = Math.Max(8, op.Editor.NumberOfColumns); } catch { }
             for (int c = 1; c < n; c++)
