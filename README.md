@@ -503,3 +503,231 @@ file that owns the question before writing a conclusion in its domain.**
   2. **STAR's DirectRefractiveIndex route applies one index at every wavelength.**
      StarFiles writes absolute `Nd + dn`, i.e. the d-line, so the element loses its
      own dispersion. Isolated by a NULL cloud (`n = Nd` everywhere, physically a
+     no-op): at the d-line it sits **8.7e-11** waves from the baseline - numerically
+     zero - while moving the band ends by 0.05 to 0.09 waves. **The correction to
+     that number was itself corrected.** It was first measured at 2.8e-5 and the
+     "exact" claim was duly softened as an overclaim; that residual turned out to
+     be a symptom of the inverted-dispersion catalogue bug found the same day, and
+     with the catalogue fixed the original claim is true. The lesson kept is not
+     "it was fine all along" - it is that a measurement taken through a broken
+     instrument can make a TRUE claim look false, and softening it was still right
+     on the evidence then available. Not integration error - identical to
+     four decimals across GRIN steps 1.0 -> 0.02 mm, a 50x range. No delta form
+     exists on this route: `IndexDataType` is read-only and reports
+     `DirectRefractiveIndex`; the switchable `PhysicsBasedIndex` is the
+     stress/temperature route. So on this route, carrying dn costs the dispersion — which the 2026-08-22 conclusion
+     "absolute index is correct" did not know, and which that conclusion should now
+     be read against: absolute is the only form the route accepts, not the form that
+     leaves a polychromatic system undisturbed.
+
+     **THIS IS NOW MEASURED ON EVERY RUN, not once by hand** (2026-08-30,
+     `validation/mtf-triplet/starroundtrip.py` arm C). Loading a uniform index
+     collapses the ray-traced optical path at F, d and C onto the d-line value
+     exactly - F shortens by 24.1 um, C lengthens by 10.2 um, d moves by
+     5.5e-13 - so the route REPLACES the index rather than perturbing it. Write
+     that arm with `INDX` and it can never fail: differencing two loaded states
+     1e-2 apart moves `INDX` by exactly zero, because the operand cannot see the
+     STAR contribution at all. It has to be a quantity the ray experiences.
+
+  **REPRODUCED ON A SECOND, MANUFACTURABLE ARTICLE, 2026-08-29.** The first
+  article was found by GLOBAL optimisation and was not a Cooke triplet at all -
+  element powers + - - , a meniscus middle element, a 0.50 mm airgap and a 62.9 deg
+  surface slope. Bob rejected it on sight. The replacement is the shipped glass
+  Cooke (`Samples/Sequential/Objectives/Cooke 40 degree field.zmx`) scaled 0.8 and
+  transcribed into PMMA/POLYSTYR, with the form held by explicit curvature-sign
+  constraints and LOCAL optimisation only, and injection-moulding limits as merit
+  operands. It passes every moulding check. Both findings reproduce on it: the
+  solve moves the plane 325 um (250 um PAST the real best focus) while real rays
+  minimise at -75 um in both states, and the NULL cloud is a no-op at the d-line to
+  2e-7 waves while moving the band ends 1.3e6x further. So neither finding is an
+  artefact of an odd lens. A glass twin at the identical spec (`glass-cooke.zmx`)
+  isolates what going all-plastic costs: RMS wavefront 0.013/0.137/0.204 waves
+  against 0.156/0.245/0.199.
+
+  **What this does not touch:** index-only mode, so nothing here bears on stress
+  birefringence or retardance. Report and scripts:
+  `https://claude.ai/code/artifact/f3599f59-7086-4aa4-a7c3-ec85eff16648`.
+
+- **The peak retardance this tool printed was not a measurement, and it named the
+  wrong element.** Found 2026-08-29 by putting the `-full` polarisation half under
+  the controls that had already exposed four defects in the index half. Until this
+  commit `PeakRetardance()` took `max|R|` over `GetRetardanceMap(8, 0, 1, 1, 0, 0, 0)`.
+  Uniform stress fields whose retardance is known in closed form were loaded — every
+  one accepted cleanly, import code 0, 15015 of 15015 points, so these are answers
+  about STAR and not about a failed import — and that call fails all of them:
+
+  | control field | true retardance | what it returned |
+  |---|---|---|
+  | NULL, every component exactly zero | 0 | **π and 2π**, i.e. 0.5000 and 1.0000 waves |
+  | hydrostatic 10 N/mm² | 0 by symmetry | π and 2π |
+  | biaxial σxx=σyy (von Mises ≠ 0) | 0 | up to 1.978 rad |
+  | uniaxial σxx, 0.02 → 200 N/mm² | 0.0004 → 7.4 waves | 0.40–1.00 waves throughout |
+  | the same state rotated 45° | identical to uniaxial | 0.062 vs 4.260 rad, a factor of **69** |
+
+  It is an **angle**, not a phase: on every ring of a uniform field it takes three
+  values — 0, +δ and δ−π — with span exactly π (3.1416 at r=0.39, 3.1450 at r=1.98)
+  and exact zeros at azimuth 0, ±90 and 180°. Its ratio to the truth runs 814× at
+  0.02 N/mm² down to 0.16× at 200, crossing 1.0 near 10 N/mm² — which is the regime
+  the one published measurement sat in.
+
+  **`GetPointRetardanceList` passes every one of those controls** and is what the
+  tool reads now: 0.000000 exactly on the null and hydrostatic arms, **1.0000**
+  against uniaxial for the same state at 0°, 30°, 45° and 90°, and **1.9976** for
+  pure shear where theory demands exactly 2. It returns *local birefringence in
+  rad/mm at the d-line* — 0.9978 of the closed form — whatever `SetWorkingWavelength`
+  is given, which is a second defect: the tool converted those d-line waves to nm
+  with wavelength 1, making the published nm figure **17.3% low**.
+
+  Because it is local, retardance now needs the path, and the tool reports **a bound**
+  — peak local birefringence over the element's longest axial path, exact for a
+  uniform field and high otherwise. On the validation triplet that changes which
+  element is worst: the old call said 0.990 / 0.739 / 0.004 waves and the bound says
+  **0.0362 / 1.2125 / 0.0157**, so the peak is on the biconcave polystyrene middle
+  element (local birefringence 4.405 rad/mm against 0.057 on element 1), not on
+  element 1. An engineer acting on the old number would have redesigned the wrong
+  part. **Still open:** no argument set found returns an exact rotation-invariant
+  peak — integrating the local field along real rays would, and the tool bounds
+  instead. Scripts: `validation/mtf-triplet/retctl.py`, `retdump.py`, `retfix.py`,
+  `retpoint.py`, `retorient.py`, `retreal.py`.
+
+- **The frozen-in thermal ORIENTATION channel is wired and now NON-ZERO** as of
+  2026-08-21, opt-in via `-thermal-orientation` and off by default. It was
+  structurally null on first wiring — the model's thermal stress accumulates only in
+  nodes already below Tg while optical memory builds only above it, so the two
+  windows were disjoint and it returned 0 at 0 of 161 nodes. A **melt-side cooling
+  stress** now supplies the missing half: thermal stress in still-molten material,
+  built against the rubbery modulus `3G/(1−ν)` rather than the glassy `E/(1−ν)` (four
+  orders of magnitude apart), balanced over the liquid set, and relaxing each step by
+  `exp(−Δt/λ)`.
+  **What it is worth, measured on case 4:** peak |dn| 4.28e-5 over 157 of 161 nodes,
+  moving the gapwise-average clause from 3.402e-4 to 3.504e-4 — **+3.0%**, ratio 0.57
+  → 0.58 against the measured 6.0e-4. All eight clauses still pass; the case is still
+  MET. The channel reads exactly zero in the CTE = 0 null arm, which is its own
+  negative control.
+  **And that +3% is an upper bound, not a measurement.** `λ = η₀/G` near Tg has been
+  measured in this repo as 1e6–1e7× longer than the polymer's real optical
+  retardation time, so this stress barely relaxes and is over-stated. Even so
+  favoured, the mechanism supplies 3% — it cannot be the explanation for case 4's
+  remaining 43% deficit, still less for case 2's. Two further limits: only
+  **polycarbonate** carries measured optical memory, so cases 1 and 2 cannot use the
+  channel at all; and the retention transition sits 10 of its 11 degrees below the
+  measured τ(T)'s stated validity floor. It also feeds **out-of-plane only**, since
+  cooling orientation is equibiaxial in the plane.
+- **`λ = η₀/G` is measurably wrong and measurably NOT the lever.** `tau-measured-pc.py`
+  puts it **1e6–1e7× longer** than polycarbonate's real optical retardation time near
+  Tg — a melt viscosity divided by a plateau modulus, evaluated far below the range it
+  was fitted in. Both remaining deficits sit downstream of it, so it looked like the
+  next thing to fix. **Swept 2026-08-22 across ten orders of magnitude and it is not:**
+
+  | `-lambdascale` | 1e-6 | 1e-4 | 1e-2 | 1 | 1e2 | 1e4 |
+  |---|---|---|---|---|---|---|
+  | case 2 in-plane peak | 0.26x | 0.26x | 0.26x | **0.28x** | 0.31x | 0.32x |
+
+  A factor of 1.22 for a factor of 1e10 in the input — saturated at both ends. And the
+  correction runs the wrong way: the measurement says λ is too LONG, so the fix is
+  SHORTER, which takes case 2 from 0.28x to 0.26x. Fixing λ makes the failing case
+  worse. It remains wrong, and it still matters to the melt-side cooling stress, whose
+  magnitude it over-states — but it is not what is holding either registered deficit
+  down, and no work on it should be started expecting that.
+- **The K11/K12 split is assumed for every polymer, and the measurement now says how
+  badly.** Waxler, Horowitz & Feldman, *Appl. Opt.* **18**(1) 101 (1979) — bought and
+  read 2026-08-22 — measured the individual constants by interferometry for Plexiglas
+  55 (PMMA) and Lexan (PC). The hydrostatic combination `q11 + 2·q12`, which is the
+  route the density channel is delivered through:
+
+  | | measured | this model |
+  |---|---|---|
+  | PMMA | **+77.7** | −2.1 |
+  | PC | **+64.6** | +72.0 |
+
+  **For PMMA the assumed N-BK7 split is wrong by a factor of 37 and in sign; for
+  polycarbonate it lands within 12%.** So the splitting method is refuted, and happens
+  to be good for the one polymer two reference cases use — 12% is luck, not
+  validation, and applied to a COC or COP grade it has no more reason to hold than it
+  had for PMMA.
+
+  **The consequence is now reported at the point of use** (2026-08-22). `StarFiles`
+  converts the density index shift into an equivalent hydrostatic stress by *dividing*
+  by `K11 + 2·K12` and writes that into the STAR file — so the assumption was being
+  exported, not merely held. A `-run` now prints, beside every density figure, that the
+  split is unmeasured for that grade, the span of `K11 + 2·K12` across the splits real
+  polymers have actually been measured at, and the fact that **the retardance is
+  unaffected** because it rides on the measured difference. Every grade in the table
+  reports `SplitMeasured = false`, which is the honest value; setting it true for a
+  grade whose constants have been measured silences the caveat for that grade alone.
+
+  **The measured values are NOT adopted, and the reason is grade rather than doubt**
+  (decided 2026-08-22). Plexiglas 55 and Lexan are 1979 general-purpose plastics; these
+  rows describe optical grades, so Waxler is recorded as a measurement of a *different
+  material* and the optical-grade values stand. **But the grade caveat does not rescue
+  the split:** `q11 + 2·q12` in this model is not a measurement of any grade — it is a
+  glass's proportion applied to a polymer. A different grade can move a magnitude; it
+  cannot flip the sign of a hydrostatic response.
+- **The pressure-vitrification term applies the stress-optical rule ~12x beyond its
+  measured ceiling.** Luap, Karlina, Schweizer & Venerus, *Rheol. Acta* (2005) find the
+  rule holds for monodisperse PS melts to a critical stress of about 2.7 MPa and fails
+  above it, polydispersity lowering that ceiling; the term runs at a deviatoric stress
+  of ~33 MPa. It is **off by default** (`-pressure-vitrification`) and already fails a
+  registered clause when enabled, so this is a documented experiment rather than a
+  shipped defect — but it was recorded only in `GOALS.md` and a code docstring until
+  2026-08-21, and belongs here.
+
+- **Case 2 is ~3.6x low on its in-plane peak, and no single input closes that gap
+  while staying inside its own published bounds** (measured 2026-08-21, before any
+  tuning pass). Gate width — the case's one unsourced input — passes clause (a) only
+  over 4–8 mm, and across that whole window the wall shear stress runs 1.64–3.28 MPa
+  against published amorphous maxima of 0.25–0.50 MPa; the settings closest to
+  physical shear fail the clause worst. The stress-optical coefficient would have to
+  reach 6040 Br against its own published band of [900, 2500]. A hundredfold increase
+  in relaxation time buys +12%. `peak/ceiling` sits at 0.209 and moves only 0.10–0.25
+  across a 14x range of fill time, 100x of relaxation time, 7x of gate width and 8x of
+  grid — so the shortfall is architectural, not an input error. **The deficit is SHAPE,
+  not magnitude:** the model's peak dn is 3.646e-3 against the published 3.680e-3
+  (**0.991x**) while its gapwise mean is 0.281x — it puts nearly the right orientation
+  at the wall and almost none through the middle, a factor of 262 across the gap. The
+  comparison itself is sound: 0 sign changes over 101 stations x 161 nodes, uniform
+  nodes spanning the full thickness, so the clause's quantity is the fringe count's
+  quantity. That shape is what a missing frozen-in thermal **orientation** channel
+  would leave, which two other cases already implicate. **Nothing was tuned:**
+  6 mm would pass, and adopting it would be fitting a criterion registered in advance
+  to prevent exactly that. It is grid-converged on this clause (0.2% from nz 161 to
+  321); the earlier "not grid-converged" note predates the time-grid fix.
+
+- **The flow law is a recognised but dated simplification** (shear-stress-driven with
+  a Maxwell memory, Kamal & Tan-era) against a field that has used full viscoelastic
+  tensors since Baaijens 1991. Packing-stage flow orientation is not modelled.
+
+- **PMMA is the least trustworthy row in the material table — and the least
+  consequential.** Its stress-optical coefficient changes sign near 144 °C while one
+  constant is carried across an integral that straddles the inversion. **No reference
+  case uses PMMA**: the four run TOPAS 6017, ZEONEX 480R and polycarbonate twice. So a
+  better PMMA constant cannot change a single registered number, which is why the
+  paper that would supply it was priced and **not** bought (2026-08-22 sweep). Reopens
+  the moment a PMMA reference case is added.
+
+#### Closed recently, kept because the reasoning is the useful part
+
+- **SOLVED 2026-08-30 - the pin-order anomaly was a STALE READ, and the tool's
+  number was the right one all along.** An RMS wavefront read at the design plane
+  depended on WHEN the focus solve was killed, by 0.008160158 waves, with the
+  final thickness identical to the nanometre and byte-identical stress data -
+  enough to flip the SIGN of the reported moulding effect. Open since 08-29 with
+  its only named suspect refuted.
+
+  **The mechanism:** after `ApplyStress()`, `RWRE` is served from state that a
+  merit-operand READ does not invalidate. Any WRITE to the lens data editor does.
+  Measured in `validation/mtf-triplet/pinorder6.py`: a thickness set to its own
+  value, a radius set to its own value, and **a comment string** each move the
+  reading by the full 0.008160158 waves, while the do-nothing control moves
+  exactly zero. `pinorder3.py` had already shown that a paraxial operand and a
+  real-ray trace move nothing at all - so it is writes, not traces.
+
+  So the two orders differ because one of them WRITES: pinning the plane after
+  loading restores the thickness, which refreshes. Pinning it first writes
+  nothing afterwards and keeps the stale value. **+0.000802 is the refreshed
+  answer and -0.007359 is the stale one**, which vindicates the tool and
+  convicts the harness that was used to check it.
+
+  **The semi-diameters were guilty and were cleared for the wrong reason.** The
+  08-29 note compared the VALUES, found they agree to the sixth decimal, and
+  looked elsewhere. `pinorder4.py`'s control is what caught it: forcing them to
