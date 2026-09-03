@@ -2,7 +2,7 @@
 
 ZOS-API add-ins for Ansys Zemax OpticStudio 2026 R1.01. Each is a self-contained
 C# (.NET Framework 4.8) console app. Build output deploys to
-`{Zemax Data}\\ZOS-API\\Extensions\\` (or `User Analysis\\` for AthermalAnalysis)
+`{Zemax Data}\ZOS-API\Extensions\` (or `User Analysis\` for AthermalAnalysis)
 and appears under **Programming > User Extensions**. They also run from a shell
 against **Programming > Interactive Extension**. Per-tool details live in
 `extensions/<Name>/README.md`.
@@ -33,7 +33,7 @@ Analysis, apply coatings, or run NSC stray light.
 `TopN=0` is auto: keep pairs covering ~80% of total GPIM, drop anything under
 10% of the worst hit, cap 8 (`-top N` overrides). Default `-balance 1` scales
 new weights so ghost pull matches existing MF performance. Empty/unweighted MF
-skips DLS. Ribbon settings are remembered in `%APPDATA%\\GpimGhostReduce\\lastrun.txt`.
+skips DLS. Ribbon settings are remembered in `%APPDATA%\GpimGhostReduce\lastrun.txt`.
 
 Options: `-mode image|pupil|both`, `-top N`, `-balance B`, `-weight W`,
 `-optimize`, `-cycles K` (0 = automatic DLS), `-nodialog`, `-file <zmx>`,
@@ -128,7 +128,7 @@ on a Cooke triplet agree with OpticStudio to 14 significant figures at ΔT = 50 
 Semi-diameters and non-asphere length parameters are still not scaled.
 
 `-outdir` is honoured even when `-out` is also set (the folder + the `-out`
-stem). Ribbon settings in `%APPDATA%\\AthermalScan\\lastrun.txt`. Companion
+stem). Ribbon settings in `%APPDATA%\AthermalScan\lastrun.txt`. Companion
 **AthermalAnalysis** is the User Analysis window for the same sweep.
 
 Options: `-tmin/-tmax/-steps`, `-track L`, `-pressure P`, `-vacuum`,
@@ -195,11 +195,11 @@ here) is an override, not a project edit:
 
 ```
 ... dotnet build $_.FullName --configuration Release -p:PlatformTarget=x86
-powershell -NoProfile -ExecutionPolicy Bypass -File tools\\pack.ps1 -x86
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\pack.ps1 -x86
 ```
 
 `DeployToZemax` copies `.exe` + `.exe.config` to the Zemax data folder after
-each build (`HKCU\\Software\\Zemax@ZemaxRoot`). A new extension may need
+each build (`HKCU\Software\Zemax@ZemaxRoot`). A new extension may need
 **Programming > Refresh List and an OpticStudio restart** — Refresh List alone
 did not list an x64 `GpimGhostReduce` until an x86 rebuild plus restart. User
 analyses always need a restart. Replacing an already-listed add-in takes effect
@@ -210,7 +210,7 @@ on the next run.
 A zip at [`dist/`](dist/) installs without a SDK: extract, read `INSTALL.txt`,
 drag the `ZOS-API` folder onto the Zemax **data** folder (not into `Extensions`
 — one of the ten is a User Analysis). Unsigned; `INSTALL.txt` has `Unblock-File`.
-`tools\\pack.ps1` refuses a dirty tree, an Ansys binary, or a build-machine path.
+`tools\pack.ps1` refuses a dirty tree, an Ansys binary, or a build-machine path.
 Re-pack whenever binaries change. Redistribution of compiled `.exe` files is
 Ansys's terms, not this MIT licence.
 

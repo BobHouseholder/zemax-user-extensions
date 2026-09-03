@@ -13,9 +13,17 @@
 # running a .ps1 from file is disabled outright:
 #     powershell -NoProfile -ExecutionPolicy Bypass -File tools\pack.ps1
 #
-# Build first - this packs what is in bin\Release, it does not compile:
+# TEN add-ins: nine User Extensions + AthermalAnalysis User Analysis.
+#
+# Build first - this packs what is in bin\Release (or bin\<platform>\Release),
+# it does not compile. Default pack is x64, matching the csproj PlatformTarget;
+# do not flip the projects to x86.
 #     Get-ChildItem extensions -Filter *.csproj -Recurse -Depth 1 |
 #         ForEach-Object { dotnet build $_.FullName -c Release }
+# x86 flavor, override only, leave every csproj at x64:
+#     Get-ChildItem extensions -Filter *.csproj -Recurse -Depth 1 |
+#         ForEach-Object { dotnet build $_.FullName -c Release -p:PlatformTarget=x86 }
+#     powershell -NoProfile -ExecutionPolicy Bypass -File tools\pack.ps1 -x86
 #
 # Each project's destination comes from ZemaxDeployKind in its .csproj, the same
 # source of truth the DeployToZemax target in ZemaxPaths.props uses, so a project
@@ -45,8 +53,13 @@ param(
   # Pack from a dirty tree. Off by default: a published binary that corresponds to
   # no commit cannot be rebuilt or audited later, which is the single worst
   # property a hand-built release can have.
-  [switch]$AllowDirty
+  [switch]$AllowDirty,
+  # x86 pack. Default is x64. Does not rewrite any csproj; build first with
+  # -p:PlatformTarget=x86 if you want x86 binaries in the zip.
+  [switch]$x86
 )
+
+$platform = if ($x86) { 'x86' } else { 'x64' }
 
 $ErrorActionPreference = "Stop"
 if (-not $Repo) {
@@ -97,7 +110,9 @@ foreach ($proj in (Get-ChildItem (Join-Path $Repo "extensions") -Filter *.csproj
   $kind = ($xml.Project.PropertyGroup.ZemaxDeployKind | Where-Object { $_ }) -join ''
   if ([string]::IsNullOrWhiteSpace($kind)) { $kind = "Extensions" }
 
-  $exe = Join-Path (Split-Path $proj.FullName) "bin\Release\$name.exe"
+  $projDir = Split-Path $proj.FullName
+  $exe = Join-Path $projDir "bin\$platform\Release\$name.exe"
+  if (-not (Test-Path $exe)) { $exe = Join-Path $projDir "bin\Release\$name.exe" }
   if (-not (Test-Path $exe)) { Write-Warning "$name - no build output, skipped"; continue }
 
   $dest = Join-Path $stage "ZOS-API\$kind"
@@ -140,7 +155,7 @@ $m = @(
   ""
   "Source commit : $commit"
   "Built against : Ansys Zemax OpticStudio $osName (OpticStudio.exe $osVer)"
-  "Framework     : .NET Framework 4.8, x64"
+  "Framework     : .NET Framework 4.8, $platform"
   ""
   "These were compiled against the OpticStudio above. The ZOS-API assemblies are"
   "referenced but not redistributed, and are resolved at run time against YOUR"
@@ -167,8 +182,9 @@ READ THIS FIRST IF YOU HAVE INSTALLED AN ANSYS EXTENSION BEFORE
 --------------------------------------------------------------
 Ansys's own extension zips - the CODE V Converter, for instance - are extracted
 INTO the Extensions folder. Do not do that with this one. This zip carries TWO
-destinations, because one of the nine is a User Analysis rather than an
-extension, so its top level is a ZOS-API folder rather than loose .exe files.
+destinations, because it has TEN add-ins (nine User Extensions plus the
+AthermalAnalysis User Analysis), so its top level is a ZOS-API folder rather
+than loose .exe files.
 Extracting it into Extensions would give you
 
     ...\Zemax\ZOS-API\Extensions\ZOS-API\Extensions\*.exe
@@ -192,8 +208,9 @@ Follow step 2 instead.
 
 4. Open OpticStudio. The extensions are under Programming > User Extensions, and
    AthermalAnalysis - the one User Analysis - under Analyze > User Analysis.
-   If you left OpticStudio open at step 1, Programming > Refresh List picks up
-   new extensions without a restart; a new User Analysis still needs one.
+   Programming > Refresh List picks up new extensions; a new User Analysis still
+   needs an OpticStudio restart. On some machines (Windows ARM, OpticStudio 2026)
+   Refresh List is not enough - restart OpticStudio as well.
 
 UNBLOCK
 -------
@@ -225,7 +242,9 @@ these add-ins load.
 "@ | Set-Content (Join-Path $stage "INSTALL.txt") -Encoding utf8
 
 # --- zip --------------------------------------------------------------------------
-$zip = Join-Path $OutDir ("zemax-user-extensions-" + ($osName -replace ' ','') + ".zip")
+$zipTag = ($osName -replace ' ','')
+if ($x86) { $zipTag = $zipTag + "-x86" }
+$zip = Join-Path $OutDir ("zemax-user-extensions-" + $zipTag + ".zip")
 if (Test-Path $zip) { Remove-Item $zip -Force }
 Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -CompressionLevel Optimal
 Remove-Item $stage -Recurse -Force
@@ -234,5 +253,5 @@ Remove-Item $stage -Recurse -Force
 "zip     : $zip"
 "size    : {0:N0} bytes" -f (Get-Item $zip).Length
 "commit  : $commit"
-"against : OpticStudio $osName"
+"against : OpticStudio $osName ($platform)"
 $rows | Sort-Object Kind, Name | Format-Table Name, Kind, Size -AutoSize
