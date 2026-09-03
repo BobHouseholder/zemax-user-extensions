@@ -182,21 +182,10 @@ namespace ReverseSystem
             }
             else
             {
-                try { app = connection.ConnectToApplication(); } catch { app = null; }
-                if (app == null)
+                string connectError;
+                if (!ZemaxLocator.TryConnect(out app, out connectError, false))
                 {
-                    try { app = connection.ConnectAsExtension(0); } catch { app = null; }
-                }
-                if (app == null)
-                {
-                    Console.WriteLine("FATAL: could not connect to OpticStudio. Launch this tool from the");
-                    Console.WriteLine("Programming ribbon, or turn on Programming > Interactive Extension first.");
-                    Environment.ExitCode = 1;
-                    return;
-                }
-                if (!app.IsValidLicenseForAPI)
-                {
-                    Console.WriteLine("FATAL: license is not valid for ZOS-API: " + app.LicenseStatus);
+                    Console.WriteLine("FATAL: " + connectError);
                     Environment.ExitCode = 1;
                     return;
                 }
