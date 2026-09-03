@@ -854,3 +854,61 @@ file that owns the question before writing a conclusion in its domain.**
   2025): it gives a complete aspheric prescription, gate, material and process for a
   moulded PMMA lens, and every trial carrying a number runs the mould at 125–135 °C
   against PMMA's 105 °C Tg — above Tg, which this tool refuses by construction, since
+  that refusal is what makes "post-ejection cooling contributes zero" unconditional.
+  The one in-envelope condition is reported only as a fringe photograph. Details and
+  the three other closed leads are in `VALIDATION-SOURCES.md`. An asphere can also pinch
+  the wall in the middle of the aperture, where a sphere never can; that pinch is now
+  scanned for, reported, and refused when it closes, but it is the regime the
+  Hele-Shaw gapwise assumption is least happy in.
+
+- **`RejectFlagsNotReadBy` is wired into ALL TEN modes as of 2026-08-21.** Each mode
+  publishes the flags it reads, and the self-test derives the set it must refuse by
+  subtracting that list from the flag registries — 32 to 58 flags per mode, none
+  swallowed — rather than from a hand-picked example. Until that day
+  `-refcase -melttemp 400` ran a 400 °C melt nowhere, reported the
+  criterion **MET** and exited 0; `-refcase2 -adhered` reported a free-plate result
+  under an adhered heading. Both now exit 64 naming what the mode does read. The
+  flat read-list cannot see a **conditional** read — `-ejecttime` is read only
+  inside the `-adhered` branch — so that one is guarded by hand; any other
+  conditional read is still unprotected.
+
+- **INDEX-ONLY is the default `-run` and ribbon behaviour as of 2026-08-22** — a
+  deliberate scale-back: only the refractive-index change from moulding is computed
+  and applied, through STAR's **direct-index** route. No stress tensor, no
+  birefringence, no retardance; `-full` restores the stress/birefringence export.
+  The scale-back also sheds the two heaviest caveats, and that is not a coincidence:
+  the direct-index route applies the density Δn without ever touching the refuted
+  K11/K12 split (which only enters when converting index → equivalent stress), and
+  the flow law the 1989 literature indicts drives the birefringence channel, which is
+  not applied here. What remains is Lorentz-Lorenz on the packing pressure. The
+  report's POLARISATION section states plainly that nothing was computed there and
+  why a polarisation-sensitive system still needs `-full` — on the one real lens
+  where both were measured, peak retardance was 585× the wavefront change.
+- **Exit codes distinguish three outcomes of a `-run`, as of 2026-08-21.** 0 every
+  element applied; **66** some applied and some refused, where the before/after is a
+  real measurement of the system as LOADED and not of the part; **65** nothing
+  applied, where no change is reported at all. 64 stays a usage error. The refused
+  elements are named with their materials, and the qualification is printed ABOVE the
+  number it qualifies.
+
+### CryoGlass
+
+Generates OpticStudio glass catalogs from the NASA GSFC **CHARMS** cryogenic
+refractive-index dataset (Leviton & Frey temperature-dependent Sellmeier
+fits — absolute n(λ,T) measured to ~1e-4/1e-5 class accuracy, ~20–300 K).
+OpticStudio's catalog dn/dT model is a room-temperature-anchored
+perturbation that degrades at cryogenic temperatures; CHARMS is the measured
+ground truth there, but OpticStudio has no native support and the ZOS-API
+cannot override index computation — so CryoGlass freezes the CHARMS model at
+a working temperature T0, where it IS a three-term Sellmeier, and writes an
+`.AGF` with **exact** Sellmeier1 coefficients plus a locally-fitted Schott
+thermal model (fit error reported per glass) valid near T0. Materials so
+far: Si (1.1–5.6 µm) and Ge (1.9–5.5 µm), both 20–300 K, from the free NTRS
+full texts.
+
+A built-in self-test checks the evaluator against the papers' own published
+measured-index tables before every run and refuses on disagreement, so a
+coefficient transcription error can never silently reach a design.
+Out-of-range requests are refused by name — CHARMS stops at ~5.6 µm (LWIR is
+not covered) and below 20 K; the tool never extrapolates. Generated indices
+are ABSOLUTE (vacuum): set the system environment to the working temperature
