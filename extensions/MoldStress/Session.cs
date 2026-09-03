@@ -25,9 +25,11 @@ namespace MoldStress
             System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         public static void Locate()
         {
-            if (!ZemaxLocator.Initialize())
+            string error;
+            if (!ZemaxLocator.TryInitialize(out error))
                 throw new Exception("could not locate an OpticStudio installation; " +
-                                    "set ZEMAX_ROOT or install OpticStudio");
+                                    "set ZEMAX_ROOT or install OpticStudio" +
+                                    (error == null ? "" : " (" + error + ")"));
         }
 
         [System.Runtime.CompilerServices.MethodImpl(
@@ -50,13 +52,9 @@ namespace MoldStress
                 return app;
             }
 
-            try { app = connection.ConnectToApplication(); } catch { app = null; }
-            if (app == null) { try { app = connection.ConnectAsExtension(0); } catch { app = null; } }
-            if (app == null)
-                throw new Exception("could not connect to OpticStudio " +
-                                    "(run from the Programming ribbon, or pass -file)");
-            if (!app.IsValidLicenseForAPI)
-                throw new Exception("license is not valid for ZOS-API: " + app.LicenseStatus);
+            string connectError;
+            if (!ZemaxLocator.TryConnect(out app, out connectError, false))
+                throw new Exception(connectError);
             return app;
         }
 
