@@ -2,6 +2,13 @@
 
 Continuation of the root README: complete CryoGlass section, then Building, Releases, and Licence.
 
+### GpimGhostReduce
+
+See [extensions/GpimGhostReduce/README.md](../extensions/GpimGhostReduce/README.md) for the
+authoritative description. `TopN=0` is auto (cap 8, keep pairs covering ~80% of total
+GPIM, drop under 10% of the worst). Default `-balance 1` scales new GPIM weights so
+ghost pull matches existing MF performance. Existing MFE is never deleted.
+
 ### CryoGlass
 
 Generates OpticStudio glass catalogs from the NASA GSFC **CHARMS** cryogenic
@@ -44,33 +51,47 @@ sibling `repo/` clone, or create your own) points `ZEMAX_ROOT` at the install
 directory; the ZOSAPI assemblies are referenced with `Private=false` and resolved
 at runtime by `ZOSAPI_NetHelper`.
 
+Build every `extensions/*/*.csproj` (nine User Extensions plus the AthermalAnalysis
+User Analysis). Do not list a subset of names: a fourth example that is missing from
+the copy-paste is an extension that never gets built.
+
 ```
-dotnet build extensions\ReverseSystem\ReverseSystem.csproj --configuration Release
-dotnet build extensions\EquivalentGlassFinder\EquivalentGlassFinder.csproj --configuration Release
-dotnet build extensions\DistortionTarget\DistortionTarget.csproj --configuration Release
-dotnet build extensions\GpimGhostReduce\GpimGhostReduce.csproj --configuration Release
+Get-ChildItem extensions -Filter *.csproj -Recurse -Depth 1 |
+    ForEach-Object { dotnet build $_.FullName --configuration Release }
 ```
+
+Default `PlatformTarget` in each csproj stays x64. For an x86 build, pass an override
+without editing the projects:
+
+```
+Get-ChildItem extensions -Filter *.csproj -Recurse -Depth 1 |
+    ForEach-Object { dotnet build $_.FullName --configuration Release -p:PlatformTarget=x86 }
+```
+
+Then `tools\\pack.ps1` (x64, default) or `tools\\pack.ps1 -x86`.
 
 Every project deploys itself. `ZemaxPaths.props` carries a `DeployToZemax` target
 that runs after each build and copies the `.exe` and its `.exe.config` (which holds
 the binding redirects) into the folder OpticStudio reads. The destination comes from
-`HKCU\Software\Zemax@ZemaxRoot` — the same key Ansys's own ZOS-API boilerplate reads,
+`HKCU\\Software\\Zemax@ZemaxRoot` — the same key Ansys's own ZOS-API boilerplate reads,
 and the one OpticStudio rewrites when the data folder changes in preferences, so it
 cannot pick the wrong tree on a machine where Documents is redirected to OneDrive.
 
-Default destination is `{Zemax Data}\ZOS-API\Extensions\`. A project that is not a
+Default destination is `{Zemax Data}\\ZOS-API\\Extensions\\`. A project that is not a
 user extension says so itself — `AthermalAnalysis` sets
 `<ZemaxDeployKind>User Analysis</ZemaxDeployKind>` and lands in
-`{Zemax Data}\ZOS-API\User Analysis\` instead. Build with `-p:ZemaxDeploy=false` to
-skip deployment, or `-p:ZEMAX_DATA="C:\...\Zemax"` to target another data folder;
+`{Zemax Data}\\ZOS-API\\User Analysis\\` instead. Build with `-p:ZemaxDeploy=false` to
+skip deployment, or `-p:ZEMAX_DATA="C:\\...\\Zemax"` to target another data folder;
 a destination that does not exist fails the build rather than passing quietly.
 
 A newly added extension appears after **Programming > Refresh List**. User analyses
-have no such button — restart OpticStudio for a new one. Replacing an add-in that is
-already listed takes effect on its next run, with no refresh either way.
+have no such button — restart OpticStudio for a new one. On some machines (observed
+Windows ARM, OpticStudio 2026) Refresh List is not enough and OpticStudio must be
+restarted as well. Replacing an add-in that is already listed takes effect on its
+next run, with no refresh either way.
 
 Ansys ships no deploy step of its own: the project template behind
-**Programming > C#** leaves `OutputPath` at `bin\Release\` and its `AfterBuild`
+**Programming > C#** leaves `OutputPath` at `bin\\Release\\` and its `AfterBuild`
 target empty, so the copy is manual by their design.
 
 ## Releases
@@ -84,7 +105,7 @@ the same way, which is why the format is this one.)
 
 Each zip holds only our `.exe` and `.exe.config` files, `INSTALL.txt`, and a
 `manifest.txt` naming the source commit, the OpticStudio release compiled against and
-a SHA-256 per file. `tools\pack.ps1` builds it and refuses a dirty tree, an Ansys
+a SHA-256 per file. `tools\\pack.ps1` builds it and refuses a dirty tree, an Ansys
 binary, or an executable carrying a build-machine path.
 
 **Re-run the packer whenever the binaries change** — a stale zip looks exactly like a
