@@ -95,40 +95,45 @@ namespace AthermalScan
         public string OutPrefix = null;
         public string FilePath = null;
         public bool Quiet = false;
-        public double? Pressure = null;
-        public double? PressureEnd = null;
-        public double? Temp0 = null;
-        public double? Press0 = null;
+        public double? Pressure = null;      // scan pressure, atm (null = the design pressure)
+        public double? PressureEnd = null;   // -psweep end pressure, atm
+        public double? Temp0 = null;         // declared design temperature, C
+        public double? Press0 = null;        // declared design pressure, atm
         public bool FreezeSolves = false;
-        public double? DumpAt = null;
-        public bool NoArgs = true;
-        public bool NoDialog = false;
-        public bool ForceDialog = false;
+        public double? DumpAt = null;        // -dump T: print the expanded prescription and stop
+        public bool NoArgs = true;           // launched with no command line at all
+        public bool NoDialog = false;        // -nodialog: never put up the settings window
+        public bool ForceDialog = false;     // -dialog: put it up even outside Plugin mode
+        // Output FOLDER, as chosen in the settings window. -out takes a full prefix
+        // because a shell user wants to name the files; a dialog user means "put them
+        // somewhere else". A directory-less -out prefix is combined with -outdir
+        // when both are given; a full-path -out stays authoritative.
         public string OutDir = null;
-        public bool HostLaunched = false;
-        public bool NoFiles = false;
+        public bool HostLaunched = false;    // -zpid/-zplt/-zsid present: OpticStudio launched us
+        public bool NoFiles = false;         // suppress report/chart/csv/json (User Analysis renders in-window)
     }
 
     class RowSnap
     {
         public double Radius, Thickness, Conic;
-        public double SemiDia;
-        public double MechSemiDia;
+        public double SemiDia;       // clear semi-diameter: where the edge is measured
+        public double MechSemiDia;   // mechanical semi-diameter (fallback only)
         public double[] Pars = new double[9];
         public ZOSAPI.Editors.LDE.SurfaceType Type;
         public string Material = "";
-        public double MountTce;
-        public double AlphaRadius;
-        public double AlphaThick;
+        public double MountTce;      // LDE TCE column value, in 1e-6/K
+        public double AlphaRadius;   // effective expansion coeff for the radius
+        public double AlphaThick;    // effective expansion coeff for the gap
         public bool IsGlass;
     }
 
-    class Program
+    partial class Program
     {
         internal static Options Opts = new Options();
         internal static string[] LaunchArgs;
         internal static readonly List<string> Report = new List<string>();
 
+        // STA because a ribbon run puts up the settings window (ScanSettingsDialog).
         [STAThread]
         static void Main(string[] args)
         {
@@ -146,6 +151,10 @@ namespace AthermalScan
             {
                 Console.WriteLine("FATAL: " + ex.Message);
                 LaunchLog("FATAL: " + ex.Message);
+                // A ribbon run's console dies with the process, so an error printed to
+                // it is invisible - and the environment guards exist precisely to
+                // refuse loudly. Refusing invisibly is worse than not refusing at all,
+                // because the user is left with no scan and no reason.
                 if (Opts.HostLaunched && !Opts.Quiet)
                 {
                     try
@@ -154,7 +163,7 @@ namespace AthermalScan
                             System.Windows.Forms.MessageBoxButtons.OK,
                             System.Windows.Forms.MessageBoxIcon.Warning);
                     }
-                    catch { }
+                    catch { /* no desktop - the log still has it */ }
                 }
                 Environment.ExitCode = 1;
             }
@@ -206,15 +215,31 @@ namespace AthermalScan
                 }
             }
             if (Opts.Steps < 3) Opts.Steps = 3;
-            if (Opts.Pressure.HasValue && Opts.Pressure.Value < 0) Opts.Pressure = 0.0;
-            if (Opts.PressureEnd.HasValue && Opts.PressureEnd.Value < 0) Opts.PressureEnd = 0.0;
-            if (Opts.Press0.HasValue && Opts.Press0.Value < 0) Opts.Press0 = 0.0;
+            if (Opts.Pressure.HasValue && Opts.Pressure.Value < 0)
+            {
+                Console.WriteLine("WARNING: negative pressure is meaningless - clamping to 0 (vacuum).");
+                Opts.Pressure = 0.0;
+            }
+            if (Opts.PressureEnd.HasValue && Opts.PressureEnd.Value < 0)
+            {
+                Console.WriteLine("WARNING: negative pressure is meaningless - clamping to 0 (vacuum).");
+                Opts.PressureEnd = 0.0;
+            }
+            if (Opts.Press0.HasValue && Opts.Press0.Value < 0)
+            {
+                Console.WriteLine("WARNING: negative pressure is meaningless - clamping to 0 (vacuum).");
+                Opts.Press0 = 0.0;
+            }
         }
 
         static void ParsePSweep(string s)
         {
             var parts = (s ?? "").Split(':');
-            if (parts.Length != 2) return;
+            if (parts.Length != 2)
+            {
+                Console.WriteLine("WARNING: -psweep expects P1:P2 in atm - ignoring '" + s + "'.");
+                return;
+            }
             Opts.Pressure = ParseDouble(parts[0], 1.0);
             Opts.PressureEnd = ParseDouble(parts[1], 0.0);
         }
@@ -223,6 +248,7 @@ namespace AthermalScan
         {
             int v;
             if (int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out v)) return v;
+            Console.WriteLine("WARNING: '" + s + "' is not a valid integer - keeping " + keep + ".");
             return keep;
         }
 
@@ -230,6 +256,8 @@ namespace AthermalScan
         {
             double v;
             if (double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out v)) return v;
+            Console.WriteLine("WARNING: '" + s + "' is not a valid number - keeping " +
+                keep.ToString(CultureInfo.InvariantCulture) + ".");
             return keep;
         }
 
@@ -276,7 +304,9 @@ namespace AthermalScan
         static void Run()
         {
             ZOSAPI.IZOSAPI_Application app = null;
-            LaunchLog("launch argc=" + (LaunchArgs == null ? -1 : LaunchArgs.Length));
+            LaunchLog("launch argc=" + (LaunchArgs == null ? -1 : LaunchArgs.Length) +
+                      " argv=[" + string.Join(" ", LaunchArgs ?? new string[0]) + "]" +
+                      " -> noArgs=" + Opts.NoArgs + " hostLaunched=" + Opts.HostLaunched);
             var connection = new ZOSAPI.ZOSAPI_Connection();
             bool standalone = !string.IsNullOrEmpty(Opts.FilePath);
 
@@ -288,7 +318,8 @@ namespace AthermalScan
                                         "(CreateNewApplication returned nothing)");
                 if (!app.IsValidLicenseForAPI)
                     throw new Exception("a standalone instance started but its license is not valid for " +
-                                        "ZOS-API: " + app.LicenseStatus);
+                                        "ZOS-API: " + app.LicenseStatus + " (loaded from " +
+                                        (ZemaxLocator.ResolvedDirectory ?? "an unknown directory") + ")");
                 if (!app.PrimarySystem.LoadFile(Opts.FilePath, false))
                 {
                     app.CloseApplication();
@@ -306,8 +337,12 @@ namespace AthermalScan
             if (!standalone && !Opts.NoDialog && (Opts.NoArgs || Opts.ForceDialog))
             {
                 bool plugin = false;
-                try { plugin = app.Mode == ZOSAPI.ZOSAPI_Mode.Plugin; } catch { }
+                string modeName = "(unreadable)";
+                try { modeName = app.Mode.ToString(); plugin = app.Mode == ZOSAPI.ZOSAPI_Mode.Plugin; } catch { }
                 bool gui = plugin || Opts.HostLaunched;
+                LaunchLog("mode=" + modeName + " plugin=" + plugin + " hostLaunched=" + Opts.HostLaunched +
+                          " noArgs=" + Opts.NoArgs + " forceDialog=" + Opts.ForceDialog +
+                          " -> dialog=" + (gui || Opts.ForceDialog));
                 if (gui || Opts.ForceDialog)
                 {
                     var sysNow = app.PrimarySystem;
@@ -319,6 +354,8 @@ namespace AthermalScan
                                                  envNow.AdjustIndexToEnvironment, Opts, solvesNow))
                     {
                         app.ProgressMessage = "Done. Cancelled - the system was not touched.";
+                        Console.WriteLine("Cancelled - the system was not touched.");
+                        LaunchLog("cancelled at the settings window - nothing run");
                         return;
                     }
                 }
@@ -337,22 +374,20 @@ namespace AthermalScan
             }
         }
 
-        internal static void Analyze(ZOSAPI.IZOSAPI_Application app, ZOSAPI.IOpticalSystem sys)
+        static void OpenOutputs(ZOSAPI.IZOSAPI_Application app, params string[] paths)
         {
-            if (sys.Mode != ZOSAPI.SystemType.Sequential)
-                throw new Exception("this extension requires a sequential system");
-            // Honour -outdir even when -out already set a directory-less prefix
-            // (issue #1). A full-path -out stays authoritative.
-            string prefix = Opts.OutPrefix;
-            if (!string.IsNullOrWhiteSpace(Opts.OutDir) && !string.IsNullOrEmpty(prefix) && string.IsNullOrEmpty(Path.GetDirectoryName(prefix)))
+            if (Opts.Quiet) return;
+            try { if (app.Mode != ZOSAPI.ZOSAPI_Mode.Plugin) return; } catch { return; }
+            foreach (var p in paths)
             {
-                Directory.CreateDirectory(Opts.OutDir);
-                prefix = Path.Combine(Opts.OutDir, prefix);
-            }
-            if (!string.IsNullOrEmpty(prefix))
-            {
-                Console.WriteLine("Report written to: " + Path.GetFullPath(prefix + "_report.html"));
+                if (string.IsNullOrEmpty(p) || !File.Exists(p)) continue;
+                try { System.Diagnostics.Process.Start(p); }
+                catch (Exception ex) { Console.WriteLine("WARNING: could not open " + p + ": " + ex.Message); }
             }
         }
+
+        static double Op(ZOSAPI.IOpticalSystem sys, ZOSAPI.Editors.MFE.MeritOperandType t,
+            int p1, int p2, double h1 = 0, double h2 = 0, double p3 = 0, double p4 = 0)
+            => sys.MFE.GetOperandValue(t, p1, p2, h1, h2, p3, p4, 0, 0);
     }
 }
