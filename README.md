@@ -99,7 +99,7 @@ every reversed file in the GUI against the original.
 
 Solves a long-standing ZOS-API gap: layout windows cannot be saved as images from
 the API (see [Feature Request: Layout Window Exports](https://community.zemax.com/got-a-question-7/feature-request-layout-window-exports-2244)
-and [How do I output the image of an analysis in ZOS-API?](https://community.zemax.com/got-a-question-7/how-to-output-the-image-of-an-analysis-in-zos-api-1011) -
+and [How do I output the image of an analysis in ZOS-API?](https://community.zemax.com/got-a-question-7/how-do-i-output-the-image-of-an-analysis-in-zos-api-1011) -
 the ZPL EXPORTJPG workaround only works in interactive mode). LayoutRender draws
 the 2D Y-Z layout headlessly and writes a PNG: surface cross-sections are sampled
 from the sag equations and mapped to global coordinates via GetGlobalMatrix
@@ -107,7 +107,7 @@ from the sag equations and mapped to global coordinates via GetGlobalMatrix
 glass gaps, and per-field colour-coded ray fans are traced with the batch ray
 tracer and terminated where rays fail. The drawing is auto-oriented: a
 principal-component fit of the traced ray points rotates the view so folded and
-til ted systems (fold mirrors, Yolo telescopes, off-axis designs) render along
+tilted systems (fold mirrors, Yolo telescopes, off-axis designs) render along
 their dominant optical axis instead of a skewed Y-Z projection. Purely axial
 systems (no coordinate breaks or tilts, all vertices on the z axis) are never
 rotated — their beam axis is already level and the multi-field fan would bias
@@ -270,3 +270,236 @@ leaves in the plastic elements of a sequential system, and applies both through
 OpticStudio's STAR module so the change in optical performance can be read directly.
 
 **REQUIRES AN OPTICSTUDIO ENTERPRISE LICENCE.** Ansys's own help states it plainly:
+"To use the tools inside the STAR tab, you must have an Ansys Zemax OpticStudio
+Enterprise-level license." STAR is how this tool delivers its result, so without
+Enterprise it computes but cannot apply anything. That prerequisite went
+undocumented here until 2026-08-20 and it narrows the audience considerably — the
+tier below Enterprise cannot use this at all.
+
+It also qualifies the premise below. An Enterprise seat is the top tier, quote-only,
+well above the ~$5k–15k of Standard/Professional/Premium — so the user this was
+written for has already bought Zemax's most expensive licence. And Moldex3D now
+states it "allows users to directly export injection molding results to Ansys
+Zemax" (Moldex3D 2025), so the mould-flow-to-Zemax path is no longer absent. The
+real gap is narrower than "no mould-flow seat": an Enterprise owner, at concept
+stage, before a moulder is engaged.
+
+**ESTIMATE — not a mould-flow simulation, and not validated against a moulded part.**
+That label is on every artifact it writes. It is held against four published reference
+cases and does not clear all of them. Moldex3D's Optics add-on and Autodesk Moldflow
+Insight solve this properly; MoldStress exists for the designer with OpticStudio and
+STAR and no mould-flow seat.
+
+Nothing is asked that the design does not already contain: the cavity profile comes
+from the surface sag, so the fill solve needs no mesh, and a single edge gate at +Y
+(ring gate above 12 mm semi-diameter) with a parting plane at the rim are defaults,
+overridable per element. The sag reads the base radius, the conic, and even or odd
+aspheric terms; surface types whose parameters it cannot interpret are refused rather
+than silently flattened to a sphere.
+
+Four stages, each held against a closed form by `-selftest` before the next depends
+on it:
+
+- **A1** Hele–Shaw pressure and shear, Cross-WLF viscosity, Tait EOS — against
+  Poiseuille flow and the analytic log law for converging radial flow.
+- **A2** freeze history across the full wall — against the erf isotherm *where that
+  closed form is valid*. It is semi-infinite and overstates the core freeze time by
+  10.8× on a 2 mm wall, which is why the numerics are the model and it is the control.
+- **A3** three channels kept apart because they are physically apart: flow orientation
+  through a viscoelastic memory integral (single Maxwell mode), thermal residual stress
+  with force and moment balance imposed, and density through Lorentz–Lorenz.
+- **A4** assembly. STAR accepts a *stress tensor* and applies the catalog's K11/K12
+  itself, so frozen orientation — not a stress in the finished part — is converted to
+  `σ = Δn / (K11 − K12)` with its principal axis along the local flow.
+
+**A polymer catalog is a prerequisite.** No polymer OpticStudio ships carries a `BD`
+record, and without one STAR does not refuse the data — it accepts zero points, returns
+success and reports retardance exactly zero, indistinguishable from a well-moulded
+part. `-writecatalog` writes them; **four of the five are PROVISIONAL**, representative
+of a family rather than measured for a grade.
+
+The depth distribution comes from a **Lagrangian particle model** (`-eulerian-depth`
+turns it off), because the skin never sat at the wall — it was sheared in the hot core
+and carried there by the front. **Fountain deposition is ON by default**, though its
+source has since withdrawn the attribution that justified it; it is kept for measured
+reasons rather than that one, and `-fountain 0` recovers the shear-only model.
+Mechanism notes, catalog details and both retractions:
+[`VALIDATION-LOG.md`](extensions/MoldStress/VALIDATION-LOG.md).
+
+#### MoldStress validation, and what currently fails
+
+Four published reference cases, each with a criterion registered BEFORE it was
+first run. Numbers below are read from the binary, not carried in prose.
+
+| | what it tests | verdict at the shipped grid |
+|---|---|---|
+| `-refcase` | moulded plate, flow + thermal | **criterion MET**, grid-stable |
+| `-refcase2` | moulded lens, layer-removal depth data | NOT met — in-plane peak ~3.6x low |
+| `-refquench` | free quench, the THERMAL channel alone | **criterion MET** |
+| `-refplate` | flow and thermal SEPARATED by the author | MET, 3 of 8 clauses non-discriminating |
+
+**The time grid was the hidden axis.** Case 1's verdict used to flip — MET at
+nz=41, NOT met at nz=161 — because the recorded cooling history was fixed at
+`nt = 240` and did not refine with `nz`, so a sweep in `nz` alone was blind to it.
+Exposed as `-nt` and raised to 960 on 2026-08-20:
+
+| depth ratio | nt=240 | nt=480 | nt=960 |
+|---|---|---|---|
+| nz=41 | 3.43 MET | 3.42 MET | 3.42 MET |
+| nz=81 | 2.24 MET | 3.27 MET | 3.33 MET |
+| nz=161 | 2.80 **FAIL** | 3.32 MET | 3.38 MET |
+
+At the new default the ratio is flat to 1.5% and MET at every grid. It costs
+~10% runtime. It also moved published numbers — case 3's shape ratio 2.64 → 3.07 —
+and those are corrected rather than kept: a number that changes when the grid is
+made adequate was never the model's answer.
+
+How each was arrived at, and every mechanism tried and rejected, is in
+[`VALIDATION-LOG.md`](extensions/MoldStress/VALIDATION-LOG.md). Candidate sources
+and three literature sweeps are in
+[`VALIDATION-SOURCES.md`](extensions/MoldStress/VALIDATION-SOURCES.md).
+
+#### When this tool's answer is worth acting on
+
+Worth acting on for a rotationally symmetric element close to a plate or a shallow
+spherical lens, in a cyclo-olefin whose constants are measured rather than borrowed,
+with a known gate and a mould temperature safely below Tg — and then as an
+order-of-magnitude estimate of stress birefringence, not a number to set a tolerance
+against.
+
+**Not** worth acting on for: a **toroidal, biconic or Zernike** surface, whose shape
+this solver cannot read at all; a **non-circular outline**, approximated as a disc; a material whose photoelastic constants are
+catalogue-generic (four of the five are); a part whose dominant moulding risk is
+**warpage or sink**, which is not modelled at all.
+
+Since 2026-08-21 the run reports the two quantities under separate headings and ends
+on the **polarisation** one, because they answer different questions and the last
+number printed is the one people quote. It also states the ratio, warns whenever
+retardance exceeds the wavefront change (a derived boundary, not a chosen threshold),
+and says so explicitly when the birefringence could not be read at all while stress
+WAS applied, which is the case where a real wavefront number stands alone and reads
+as the result.
+
+**THE 585× THAT STOOD HERE IS WITHDRAWN, 2026-08-29, AND SO IS THE 0.41 WAVES IT WAS
+BUILT ON.** Its numerator came from `GetRetardanceMap`, which controls have now shown
+does not return a retardance at all — see the Open list below. The lens it was
+measured on is not available to re-run, so this is a retraction and not a correction:
+the figure was computed by a route that fails six closed-form controls, and no claim
+is made here about what that lens would read today. On the validation triplet the
+ratio is **1513×** — a retardance bound of 1.2125 waves against 0.000802 waves of
+RMS wavefront change. The qualitative claim, that the scalar understates a
+polarisation-sensitive system by orders of magnitude, survives and is if anything
+stronger. The specific number did not.
+
+**AND THE FIRST REPLACEMENT FOR IT WAS ALSO WRONG.** For a few hours on
+2026-08-29 this paragraph read **176×**, from 1.29522 waves against 0.007359.
+Both halves were wrong, in opposite directions, so they partly cancelled and the
+result looked unremarkable. Running the tool through the GUI is what caught it:
+
+- the **numerator** was measured over an aperture the element does not have.
+  Surfaces 3–4 have semi-diameters 2.640 and 2.391, and light must clear both, so
+  the longest path is 1.729 mm at r = 2.391 — not the 1.847 mm at r = 2.640 that a
+  scratch script computed from surface 3 alone. The tool had it right; the check
+  written to verify the tool did not.
+- the **denominator** was wrong in SIGN. The harness read the moulded wavefront as
+  0.124818 waves against a 0.132177 baseline — moulding stress *improving* a lens
+  by 5.6%, which should have been suspicious on its face and was not.
+
+The tool's figure is now confirmed by three independent routes: a ribbon-deployed
+binary attached to a live GUI session, the same binary standalone with `-file`,
+and a scratch probe that reproduces either answer on demand — see the pin-order
+entry in the Open list, because the mechanism is not what it looks like.
+
+#### Questions this extension has already answered, and where
+
+Four times in this project's history a conclusion was written that a file already
+on disk contradicted — twice about what to buy, once about a mechanism's
+reachability, once about which mechanism would close a failing case. **Read the
+file that owns the question before writing a conclusion in its domain.**
+
+| standing question | the file that owns it |
+|---|---|
+| Can the optical-memory / C_t rewrite reach its targets, and on what input? | `ct-reachability.py` |
+| What is the measured τ(T) for PC, and where is it valid? | `tau-measured-pc.py` |
+| Has this source been assessed, bought, priced or closed? | `VALIDATION-SOURCES.md` |
+| What does each reference case measure, and what does it currently read? | `VALIDATION-LOG.md` |
+| Why is a constant the value it is, and how well sourced? | the `KSource` / `CMeltSource` strings in `Polymers.cs` |
+
+#### Open
+
+- **The `-run` headline is not the moulding effect on a lens whose image plane is
+  on a solve, and the direct-index route costs the material's dispersion.** Both
+  found 2026-08-29 on a purpose-built all-plastic triplet (PMMA / POLYSTYR / PMMA,
+  EFL 30 mm, F/4.5, ±9°, F-d-C; spherical, mouldable thicknesses, 1 mm flange). The
+  run itself was clean — three surfaces converted, 1540 index points per element,
+  every point accepted, exit 0 — and it reported **+1572%** wavefront, on-axis FFT
+  MTF at 40 lp/mm falling 0.816 → 0.102. Measured against controls, the moulding
+  effect is **0.0801 → 0.0836 waves** and worst-case ΔMTF at 40 lp/mm is **0.026,
+  mixed in sign**. Two separable causes, neither of them moulding:
+  1. **The file's marginal-ray-height solve moved the image plane 211 µm.** Paraxial
+     EFFL reads 30.0096 → 29.7147 mm (−0.98%) with the index data loaded, and the
+     solve follows it. **Real rays do not**: a through-focus scan on a shared 5 µm
+     grid puts best focus at −25 µm in BOTH states, differing by 0.003 waves at the
+     minimum. Pinning the plane collapses the reported change to nothing.
+     ~~*The paraxial shift itself is unexplained and is the open item.*~~
+     **ANSWERED 2026-08-29 BY A POSITIVE CONTROL ON STAR, and the answer is that
+     the shift is not physics.** Chasing the mechanism inside the real field had
+     not worked in three attempts, so instead STAR was fed a field whose paraxial
+     answer is known in closed form — `n(r) = n₀ + a·r²`, on the same point set,
+     through the same import path. A thin slab of that profile adds power
+     `φ = −2at`, exactly linear in `a` by construction. STAR returns it
+     **non-linearly, and by the same amount the real field does**:
+
+     | | tenth/full | first order demands |
+     |---|---|---|
+     | synthetic analytic field | **0.0040** | 0.100 |
+     | real moulding field | **0.0049** | 0.100 |
+
+     So the non-linearity belongs to STAR's ingestion of a direct-index cloud,
+     not to the moulding field, not to the catalogue and not to the physics. The
+     earlier sign flip across the catalogue fix (0.155 → 0.065) needed no
+     material explanation: it is what a response sitting in noise does.
+
+     **The mechanism is a noise floor plus a GRIN-step dependence, both
+     measured.** Sweeping the synthetic amplitude over six decades, `measured /
+     closed form` runs 0.22, **−0.79**, 0.21, **−0.13**, 0.02, 3.20 below a peak
+     Δn of ~1e-6 — it changes SIGN, so below that amplitude the response is
+     noise rather than a small answer — and then settles at 0.82–0.91 from
+     Δn ≈ 1e-5 upward and stays there for two decades. The real field's smooth
+     quadratic component peaks at Δn = 4.8e-6, inside the transition. And the
+     answer moves with the GRIN integration step, a producer-side constant the
+     tool sets by heuristic: at that amplitude ΔEFFL is −0.0292 mm at step 1.0
+     against −0.0032 mm at 0.50, a factor of **9**.
+     **That last point retracts a convergence claim of this project's own.**
+     "Identical to four decimals across GRIN steps 1.0 → 0.02, a 50× range" was
+     established for the *index-shift metric on a NULL cloud* and is quoted
+     below in exactly those terms — it does not hold for paraxial EFFL on a real
+     field, and a convergence result belongs to the quantity it was measured on.
+     Scripts: `validation/mtf-triplet/paraxctl.py`, `paraxsweep.py`.
+     A separate instrument check: my own paraxial y-nu trace reproduces Zemax's
+     unperturbed EFFL to 1.8e-16 relative, so the closed forms above are not
+     resting on an unvalidated trace.
+     **What is still open** is narrower and is Ansys's rather than ours: why the
+     fit discards small index variation, and where exactly the usable floor sits
+     for a general cloud.
+     **RE-DERIVED 2026-08-29 AFTER THE CATALOGUE FIX, and the catalogue is ruled
+     out.** The whole three-arm probe was re-run at `265e826`, because its original
+     evidence was taken against the inverted-dispersion rows. The shift is
+     unchanged to three digits: FULL moves EFFL −0.987% against −0.983% before,
+     and the NULL arm still moves nothing. The exported field is materially the
+     same: I claimed byte-identical and CHECKED, and it is not — the corrected
+     dispersion moves ray heights slightly, so the automatic semi-diameters and
+     hence the export grid move with them (up to 12.6 um radially on element 3,
+     0.2% of its radius). But the Δn VALUES change by at most 1.6e-7, which is
+     0.02%, 0.09% and 0.51% of each element's field span. The anomaly acts on
+     the same field to within half a percent.
+     **AND THE TOOL NOW MEASURES THIS ON EVERY RUN**, since `e4b4110`, so the
+     question is asked of the user's own lens rather than quoted at them from
+     these two. `-run` scans real-ray best focus before and after — both at the
+     d-line, both centred on the design plane — and prints the real shift beside
+     the solve's. On the Cooke: −75 µm before, −75 µm after, against the solve's
+     −294 µm, i.e. the solve chases a paraxial shift real rays do not follow at
+     all (0%).
+  2. **STAR's DirectRefractiveIndex route applies one index at every wavelength.**
+     StarFiles writes absolute `Nd + dn`, i.e. the d-line, so the element loses its
+     own dispersion. Isolated by a NULL cloud (`n = Nd` everywhere, physically a
