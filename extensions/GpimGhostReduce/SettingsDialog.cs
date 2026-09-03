@@ -8,11 +8,11 @@ namespace GpimGhostReduce
 {
     // A ribbon run gets no command line. OpticStudio launches the extension from
     // Programming > User Extensions with no arguments, so without a window the
-    // only way to pick Mode / Top N / Weight would be a shell.
+    // only way to pick Mode / Max pairs / Balance would be a shell.
     class SettingsDialog : Form
     {
         readonly ComboBox _kind;
-        readonly TextBox _top, _weight, _cycles;
+        readonly TextBox _top, _balance, _cycles;
         readonly CheckBox _optimize;
         readonly Label _hint;
         readonly Button _ok;
@@ -45,22 +45,22 @@ namespace GpimGhostReduce
 
             LoadLastRun(o);
 
-            const int GW = 420, PAD = 12;
+            const int GW = 440, PAD = 12;
             int y = PAD;
 
             var g = new GroupBox { Text = "GPIM operands", Left = PAD, Top = y, Width = GW, Height = 168 };
-            g.Controls.Add(new Label { Text = "Ghost type", Left = 14, Top = 25, Width = 160 });
+            g.Controls.Add(new Label { Text = "Ghost type", Left = 14, Top = 25, Width = 180 });
             _kind = new ComboBox
             {
-                Left = 180, Top = 22, Width = 220,
+                Left = 200, Top = 22, Width = 220,
                 DropDownStyle = ComboBoxStyle.DropDownList
             };
             _kind.Items.AddRange(new object[] { "Image ghosts (Mode 1)", "Pupil ghosts (Mode 0)", "Both" });
             _kind.SelectedIndex = o.Kind == GhostKind.Pupil ? 1 : o.Kind == GhostKind.Both ? 2 : 0;
             g.Controls.Add(_kind);
 
-            _top = Field(g, 1, "Top N pairs (0 = all-combos GPIM)", o.TopN.ToString(CI));
-            _weight = Field(g, 2, "Weight (target is always 0)", o.Weight.ToString(CI));
+            _top = Field(g, 1, "Max pairs (0 = auto from scan)", o.TopN.ToString(CI));
+            _balance = Field(g, 2, "Balance vs existing MF (1 = equal)", o.Balance.ToString(CI));
             Controls.Add(g);
             y += g.Height + 8;
 
@@ -78,7 +78,7 @@ namespace GpimGhostReduce
 
             _hint = new Label
             {
-                Left = PAD + 2, Top = y, Width = GW - 4, Height = 72,
+                Left = PAD + 2, Top = y, Width = GW - 4, Height = 88,
                 ForeColor = SystemColors.GrayText
             };
             Controls.Add(_hint);
@@ -92,7 +92,7 @@ namespace GpimGhostReduce
             CancelButton = cancel;
             ClientSize = new Size(GW + 2 * PAD, y + 28 + PAD);
 
-            foreach (var tb in new[] { _top, _weight, _cycles })
+            foreach (var tb in new[] { _top, _balance, _cycles })
                 tb.TextChanged += (s, e) => Recompute();
             _kind.SelectedIndexChanged += (s, e) => Recompute();
             Recompute();
@@ -101,8 +101,8 @@ namespace GpimGhostReduce
         TextBox Field(GroupBox g, int row, string label, string value)
         {
             int top = 22 + row * 28;
-            g.Controls.Add(new Label { Text = label, Left = 14, Top = top + 3, Width = 160 });
-            var tb = new TextBox { Left = 180, Top = top, Width = 220, Text = value };
+            g.Controls.Add(new Label { Text = label, Left = 14, Top = top + 3, Width = 184 });
+            var tb = new TextBox { Left = 200, Top = top, Width = 220, Text = value };
             g.Controls.Add(tb);
             return tb;
         }
@@ -115,36 +115,35 @@ namespace GpimGhostReduce
 
         void Recompute()
         {
-            int top, cycles; double w;
-            if (!TryI(_top, out top) || !TryD(_weight, out w) || !TryI(_cycles, out cycles))
+            int top, cycles; double b;
+            if (!TryI(_top, out top) || !TryD(_balance, out b) || !TryI(_cycles, out cycles))
             {
                 _hint.ForeColor = Color.Firebrick;
                 _hint.Text = "Some field is not a number.";
                 _ok.Enabled = false;
                 return;
             }
-            if (top < 0 || w < 0 || cycles < 0)
+            if (top < 0 || b < 0 || cycles < 0)
             {
                 _hint.ForeColor = Color.Firebrick;
-                _hint.Text = "Top N, weight and cycles must be >= 0.";
+                _hint.Text = "Max pairs, balance and cycles must be >= 0.";
                 _ok.Enabled = false;
                 return;
             }
             _ok.Enabled = true;
             _hint.ForeColor = SystemColors.GrayText;
             string kind = _kind.SelectedIndex == 1 ? "pupil" : _kind.SelectedIndex == 2 ? "image and pupil" : "image";
-            _hint.Text = top == 0
-                ? "One GPIM with Surf1=Surf2=-1 so OpticStudio always tracks the current worst " + kind + " ghost."
-                : string.Format(CI,
-                    "Will scan double-bounce pairs, keep the worst {0} {1} ghost(s), append GPIM target 0.\r\nOriginal merit function is not deleted. Confirm with Ghost Focus Generator + GIA afterwards.",
-                    top, kind);
+            string cap = top == 0 ? "auto (up to 8 hot pairs)" : "at most " + top.ToString(CI);
+            _hint.Text = string.Format(CI,
+                "Full-scan double-bounce {0} ghosts. Keep {1}. Scale GPIM weights so ghosts pull {2:0.###}× as hard as the existing merit function. Original operands are never deleted. DLS is skipped if the file has no weighted MF.",
+                kind, cap, b);
         }
 
         void Apply(Options o)
         {
-            int top, cycles; double w;
+            int top, cycles; double b;
             if (TryI(_top, out top)) o.TopN = top;
-            if (TryD(_weight, out w)) o.Weight = w;
+            if (TryD(_balance, out b)) o.Balance = b;
             if (TryI(_cycles, out cycles)) o.Cycles = cycles;
             o.Optimize = _optimize.Checked;
             o.Kind = _kind.SelectedIndex == 1 ? GhostKind.Pupil : _kind.SelectedIndex == 2 ? GhostKind.Both : GhostKind.Image;
@@ -159,7 +158,7 @@ namespace GpimGhostReduce
                 {
                     "mode=" + (o.Kind == GhostKind.Pupil ? "pupil" : o.Kind == GhostKind.Both ? "both" : "image"),
                     "top=" + o.TopN.ToString(CI),
-                    "weight=" + o.Weight.ToString(CI),
+                    "balance=" + o.Balance.ToString(CI),
                     "optimize=" + (o.Optimize ? "1" : "0"),
                     "cycles=" + o.Cycles.ToString(CI)
                 }));
@@ -188,7 +187,10 @@ namespace GpimGhostReduce
                             else o.Kind = GhostKind.Image;
                             break;
                         case "top": if (int.TryParse(val, NumberStyles.Integer, CI, out i)) o.TopN = i; break;
-                        case "weight": if (double.TryParse(val, NumberStyles.Float, CI, out d)) o.Weight = d; break;
+                        case "balance": if (double.TryParse(val, NumberStyles.Float, CI, out d)) o.Balance = d; break;
+                        case "weight":
+                            // old lastrun.txt: treat as unused; balance is the new knob
+                            break;
                         case "optimize": o.Optimize = val == "1"; break;
                         case "cycles": if (int.TryParse(val, NumberStyles.Integer, CI, out i)) o.Cycles = i; break;
                     }
