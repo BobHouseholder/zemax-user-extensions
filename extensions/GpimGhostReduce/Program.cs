@@ -8,7 +8,7 @@ using ZOSAPI.Tools.Optimization;
 
 namespace GpimGhostReduce
 {
-    // GpimGhostReduce — a ZOS-API User Extension.
+    // GpimGhostReduce — ZOS-API User Extension.
     //
     // Sequential ghost-reduction loop from Ansys Optics
     // "Stray Light Analysis with Ghost Focus Generator"
