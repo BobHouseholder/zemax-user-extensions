@@ -604,7 +604,7 @@ file that owns the question before writing a conclusion in its domain.**
   → 0.58 against the measured 6.0e-4. All eight clauses still pass; the case is still
   MET. The channel reads exactly zero in the CTE = 0 null arm, which is its own
   negative control.
-  **And that +3% is an upper bound, not a measurement.** `λ = η₀/G` near Tg has been
+  **And that +3% is an upper bound, not a measurement.** `λ = η0/G` near Tg has been
   measured in this repo as 1e6–1e7× longer than the polymer's real optical
   retardation time, so this stress barely relaxes and is over-stated. Even so
   favoured, the mechanism supplies 3% — it cannot be the explanation for case 4's
@@ -613,7 +613,7 @@ file that owns the question before writing a conclusion in its domain.**
   channel at all; and the retention transition sits 10 of its 11 degrees below the
   measured τ(T)'s stated validity floor. It also feeds **out-of-plane only**, since
   cooling orientation is equibiaxial in the plane.
-- **`λ = η₀/G` is measurably wrong and measurably NOT the lever.** `tau-measured-pc.py`
+- **`λ = η0/G` is measurably wrong and measurably NOT the lever.** `tau-measured-pc.py`
   puts it **1e6–1e7× longer** than polycarbonate's real optical retardation time near
   Tg — a melt viscosity divided by a plateau modulus, evaluated far below the range it
   was fitted in. Both remaining deficits sit downstream of it, so it looked like the
@@ -910,5 +910,4 @@ A built-in self-test checks the evaluator against the papers' own published
 measured-index tables before every run and refuses on disagreement, so a
 coefficient transcription error can never silently reach a design.
 Out-of-range requests are refused by name — CHARMS stops at ~5.6 µm (LWIR is
-not covered) and below 20 K; the tool never extrapolates. Generated indices
-are ABSOLUTE (vacuum): set the system environment to the working temperature
+not covered) and below 20 K; the tool never extrapolates. Generated indices are ABSOLUTE (vacuum). Full CryoGlass options, Building, Releases and Licence: [docs/catalog.md](docs/catalog.md).
