@@ -8,7 +8,7 @@ using ZOSAPI.Tools.Optimization;
 
 namespace GpimGhostReduce
 {
-    // GpimGhostReduce — ZOS-API User Extension.
+    // GpimGhostReduce — a ZOS-API User Extension.
     //
     // Sequential ghost-reduction loop from Ansys Optics
     // "Stray Light Analysis with Ghost Focus Generator"
@@ -152,15 +152,9 @@ namespace GpimGhostReduce
             }
             else
             {
-                try { App = connection.ConnectToApplication(); } catch { App = null; }
-                if (App == null)
-                {
-                    try { App = connection.ConnectAsExtension(0); } catch { App = null; }
-                }
-                if (App == null || App.PrimarySystem == null)
-                    throw new Exception("could not connect to OpticStudio (use the Programming ribbon or Interactive Extension)");
-                if (!App.IsValidLicenseForAPI)
-                    throw new Exception("license is not valid for ZOS-API: " + App.LicenseStatus);
+                string connectError;
+                if (!ZemaxLocator.TryConnect(out App, out connectError, false))
+                    throw new Exception(connectError);
             }
 
             try
