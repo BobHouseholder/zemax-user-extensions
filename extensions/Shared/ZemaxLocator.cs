@@ -10,7 +10,7 @@ using System.Linq;
 // ZOSAPI_Initializer.Initialize() with no argument resolves through a registration
 // that is not necessarily the newest install. On a machine where an old release was
 // never uninstalled it happily hands back that one - observed resolving to
-// "c:\program files\zemax opticstudio 18.7" on a box running 2026 R1.00 - and every
+// "c:\\program files\\zemax opticstudio 18.7" on a box running 2026 R1.00 - and every
 // connection afterwards fails in a way that reads like a licence problem rather than
 // a path problem: CreateNewApplication returns an application with
 // LicenseStatus.Unknown, and ConnectAsExtension against a modern OpticStudio returns
@@ -18,7 +18,7 @@ using System.Linq;
 //
 // The no-argument call works from a host loaded out of the install directory itself
 // (ZOSAPI.dll sits beside the helper), which is why this never shows up in a REPL and
-// only bites the deployed .exe in {Zemax Data}\ZOS-API\Extensions.
+// only bites the deployed .exe in {Zemax Data}\\ZOS-API\\Extensions.
 //
 // So pick the directory explicitly - newest ZOSAPI.dll wins, a ZEMAX_ROOT environment
 // variable overrides everything - and pass it to the Initialize(string) overload. The
@@ -58,6 +58,54 @@ static class ZemaxLocator
             error = ex.GetType().Name + ": " + ex.Message;
             return false;
         }
+    }
+
+    // Attach path only. Call from Run() AFTER Main has already TryInitialize'd,
+    // or call this and let it TryInitialize first. Never call from Main itself:
+    // the ZOSAPI.IZOSAPI_Application out-parameter would force that assembly to
+    // load when Main is compiled, which is before any locator can run.
+    //
+    // standaloneFile true: locate only. The caller still CreateNewApplication
+    // themselves so a -file standalone path is not rewritten as an attach.
+    //
+    // A stub with no PrimarySystem is NOT a connection: ConnectAsExtension
+    // returns a live-looking application with PrimarySystem == null when no
+    // OpticStudio is listening, and every later call then fails in a way that
+    // reads like a licence fault instead of a missing host.
+    public static bool TryConnect(out ZOSAPI.IZOSAPI_Application app, out string error, bool standaloneFile)
+    {
+        app = null;
+        if (!TryInitialize(out error))
+            return false;
+        if (standaloneFile)
+            return true;
+        return AttachToHost(out app, out error);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    static bool AttachToHost(out ZOSAPI.IZOSAPI_Application app, out string error)
+    {
+        app = null;
+        error = null;
+        var connection = new ZOSAPI.ZOSAPI_Connection();
+        try { app = connection.ConnectToApplication(); } catch { app = null; }
+        if (app == null)
+        {
+            try { app = connection.ConnectAsExtension(0); } catch { app = null; }
+        }
+        if (app == null || app.PrimarySystem == null)
+        {
+            error = "could not connect to OpticStudio (use the Programming ribbon or Interactive Extension)";
+            app = null;
+            return false;
+        }
+        if (!app.IsValidLicenseForAPI)
+        {
+            error = "license is not valid for ZOS-API: " + app.LicenseStatus;
+            app = null;
+            return false;
+        }
+        return true;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
