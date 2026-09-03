@@ -99,7 +99,7 @@ every reversed file in the GUI against the original.
 
 Solves a long-standing ZOS-API gap: layout windows cannot be saved as images from
 the API (see [Feature Request: Layout Window Exports](https://community.zemax.com/got-a-question-7/feature-request-layout-window-exports-2244)
-and [How do I output the image of an analysis in ZOS-API?](https://community.zemax.com/got-a-question-7/how-to-output-the-image-of-an-analysis-in-zos-api-1011) -
+and [How do I output the image of an analysis in ZOS-API?](https://community.zemax.com/got-a-question-7/how-do-i-output-the-image-of-an-analysis-in-zos-api-1011) -
 the ZPL EXPORTJPG workaround only works in interactive mode). LayoutRender draws
 the 2D Y-Z layout headlessly and writes a PNG: surface cross-sections are sampled
 from the sag equations and mapped to global coordinates via GetGlobalMatrix
@@ -796,3 +796,61 @@ file that owns the question before writing a conclusion in its domain.**
   the tool generates against the catalogue material it substitutes for.
 
   **It was two defects, and that is the part worth keeping.** The first was
+  arithmetic - `FitSellmeier` had a flipped numerator sign AND a denominator
+  pairing `yf` with `Lf` instead of the cross terms, giving `c1 = -0.008001`
+  where the same fit done correctly gives `+0.007574`; a negative `c1` inverts
+  the curve. **Fixing only that would have shipped a second wrong answer**: the
+  routine also reconstructed nF and nC as `nd +/- (nd-1)/(2*vd)`, which places
+  nd exactly MIDWAY between them, and real dispersion is curved - for PMMA nd
+  sits 2.35:1 toward C. The corrected algebra alone returns Vd **+80.6** against
+  the +57.4 declared on the same row, so the row would have disagreed with
+  itself. Caught by computing what the "fix" delivered before writing it in.
+
+  The reconstruction is gone. The fit now reproduces the two things an nd/vd row
+  actually promises: `b1` in closed form from the nd constraint, `c1` bisected
+  until the fitted nF - nC equals `(nd-1)/vd`.
+
+  | material | n(0.486) | n(0.588) | n(0.656) | Vd |
+  |---|---|---|---|---|
+  | `PMMA` (MISC) | 1.497761 | 1.491756 | 1.489200 | +57.44 |
+  | `MS_PMMA` | 1.497720 | 1.491700 | 1.489154 | **+57.40** |
+  | `POLYSTYR` (MISC) | 1.604079 | 1.590481 | 1.584949 | +30.87 |
+  | `MS_POLYSTYR` | 1.603992 | 1.590500 | 1.584882 | **+30.90** |
+
+  Every index within ~6e-5 of the real material, against errors up to 9.4e-3
+  before. 22 new self-tests assert, per material, that the fit reproduces its
+  own nd and its own Vd - not merely that the sign is right - plus two
+  regression anchors that fire if either the shipped `-0.008001` or the
+  sign-only `+0.007574` ever returns. The run's own inversion warning, added the
+  same day, now stops firing: that was the falsifiable check and it passed.
+
+  **What it invalidated.** Both the broken and the fixed fit reproduce nd
+  EXACTLY, so d-line results are unchanged - the "like for like" MTF comparison
+  in `validation/mtf-triplet/` still stands, because it was deliberately taken
+  at the d-line. The POLYCHROMATIC numbers there are superseded: the F and C
+  bars of the null-control chart, the "original materials -> baseline" jump
+  (0.174 -> 0.402 waves, now 0.174 -> 0.132), and every `poly_*` state. Both
+  FINDINGS survive - the image-plane artifact was shown at the d-line and by
+  real-ray through-focus, and the direct-index route's monochromatic behaviour
+  is a property of the route - but their magnitudes at F and C are not to be
+  quoted. **The validation reports and their published artifacts still carry the
+  superseded numbers and have not yet been corrected.**
+
+- **The sag is read in full as of 2026-08-20** — base radius, conic, and even or odd
+  aspheric terms, in the standard form and the same one the sibling `AthermalScan`
+  evaluates against this API. It reaches the cavity thickness, the parting line and
+  the z-coordinates written into STAR, so the shape solved and the shape exported are
+  the same one. All four reference cases are byte-identical across the change, which
+  is the point: they are spherical or plano, so nothing there could have caught this.
+  What is still refused is a surface **type** whose parameter cells this solver cannot
+  interpret — toroidal, biconic, Zernike — where only the base radius would survive;
+  `-allow-nonspherical` proceeds anyway and prints what is being approximated.
+  **What remains open is that no reference case is aspheric.** The sag is held against
+  closed forms (an exact parabola at k = -1, a hand-computed hyperbola, the r^4 and
+  r^1 term identities) and against two deliberate sabotages, but nothing measures a
+  moulded asphere's birefringence against a published one — and a sweep on 2026-08-21
+  concluded **that is a gap in the literature, not in the effort**. The closest source
+  that exists is open access and was read in full (Hu & Xue, *Sci. Rep.* **15**:15451,
+  2025): it gives a complete aspheric prescription, gate, material and process for a
+  moulded PMMA lens, and every trial carrying a number runs the mould at 125–135 °C
+  against PMMA's 105 °C Tg — above Tg, which this tool refuses by construction, since
