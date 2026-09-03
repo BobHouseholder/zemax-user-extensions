@@ -141,29 +141,13 @@ namespace EquivalentGlassFinder
 
         static void Run()
         {
-            var connection = new ZOSAPI.ZOSAPI_Connection();
             ZOSAPI.IZOSAPI_Application app = null;
 
-            // Launched from the OpticStudio Programming ribbon -> ConnectToApplication.
-            // Launched from a shell while OpticStudio waits in Interactive Extension
-            // mode -> ConnectAsExtension(0). Support both.
-            try { app = connection.ConnectToApplication(); }
-            catch { app = null; }
-            if (app == null)
+            // Launched from the OpticStudio Programming ribbon or Interactive Extension.
+            string connectError;
+            if (!ZemaxLocator.TryConnect(out app, out connectError, false))
             {
-                try { app = connection.ConnectAsExtension(0); }
-                catch { app = null; }
-            }
-            if (app == null)
-            {
-                Console.WriteLine("FATAL: could not connect to OpticStudio. Launch this tool from the");
-                Console.WriteLine("Programming ribbon, or turn on Programming > Interactive Extension first.");
-                Environment.ExitCode = 1;
-                return;
-            }
-            if (!app.IsValidLicenseForAPI)
-            {
-                Console.WriteLine("FATAL: license is not valid for ZOS-API: " + app.LicenseStatus);
+                Console.WriteLine("FATAL: " + connectError);
                 Environment.ExitCode = 1;
                 return;
             }
