@@ -99,7 +99,7 @@ every reversed file in the GUI against the original.
 
 Solves a long-standing ZOS-API gap: layout windows cannot be saved as images from
 the API (see [Feature Request: Layout Window Exports](https://community.zemax.com/got-a-question-7/feature-request-layout-window-exports-2244)
-and [How do I output the image of an analysis in ZOS-API?](https://community.zemax.com/got-a-question-7/how-do-i-output-the-image-of-an-analysis-in-zos-api-1011) -
+and [How do I output the image of an analysis in ZOS-API?](https://community.zemax.com/got-a-question-7/how-to-output-the-image-of-an-analysis-in-zos-api-1011) -
 the ZPL EXPORTJPG workaround only works in interactive mode). LayoutRender draws
 the 2D Y-Z layout headlessly and writes a PNG: surface cross-sections are sampled
 from the sag equations and mapped to global coordinates via GetGlobalMatrix
@@ -731,3 +731,68 @@ file that owns the question before writing a conclusion in its domain.**
   **The semi-diameters were guilty and were cleared for the wrong reason.** The
   08-29 note compared the VALUES, found they agree to the sixth decimal, and
   looked elsewhere. `pinorder4.py`'s control is what caught it: forcing them to
+  their OWN, UNCHANGED values moved the wavefront the entire gap. The value was
+  never the point - the ACT of writing was.
+
+  **AND THE PROBE THAT WENT LOOKING FIRST DESTROYED THE EFFECT.** `pinorder2.py`
+  fingerprinted 105 pieces of state and reported the orders agreeing to 7e-13
+  waves - no anomaly. It evaluates about fifteen merit operands before reading
+  the wavefront, and reported its own erasure as a finding. Re-running the
+  original probe unmodified, minutes later, reproduced the anomaly exactly.
+
+  **A live bug fell out of it.** `movedWfe` - the "what you see on opening the
+  copy" figure - is read with no intervening write, so it was always stale; and
+  the pin-back that saved the headline number is guarded by
+  `Math.Abs(planeShiftMm) > 0.0`, so on a lens whose plane does not move nothing
+  was written and the reported effect came from a stale read. Fixed by a
+  deliberate refresh (`RefreshAfterStarLoad`), whose own operation is verified in
+  `pinorder7.py` rather than assumed: assigning surface 1's thickness to itself
+  carries 100% of the gap. On the triplet the fix changes nothing, because this
+  path already wrote - it is insurance here and a correction where the plane
+  is fixed.
+
+- **THE RIBBON CLICKS WERE THE MOST PRODUCTIVE TESTS IN THE ARC, and this entry
+  spent a week asking for them after they had happened.** It read "Needs Bob:
+  click the ribbon entry once in the GUI. Everything here ran headless" until
+  2026-08-30, while the same README recorded two rounds of clicks above it. What
+  they actually bought, in order: the first found that every early exit was
+  INVISIBLE on a ribbon launch, because there is no console; the second, once that
+  was fixed, found the real bug - OpticStudio passes `-zpid/-zplt/-zsid` and the
+  tool assumed an empty command line, so every click died in the unknown-argument
+  refusal; the third opened its report. Then on 2026-08-29 a ribbon-deployed
+  binary on a live GUI session refuted the published 176x ratio, which no
+  headless run had questioned in the hours it stood. **Four defects, none
+  reachable from a headless harness.** Left open: nobody has clicked the current
+  build. That is worth noting rather than asking for - the gating and accuracy
+  batches since 08-29 changed the report's TEXT and not its launch path.
+
+- **THE SUSPECTED RUN-TIME REGRESSION WAS NOT ONE - MEASURED 2026-08-29.** The
+  2026-08-29 reporting work appeared to make `-run` three times slower on the
+  same lens: an early Cooke run took ~4 minutes and every later one took 12-17.
+  Two causes were proposed and both were wrong - first that two processes were
+  contending (they were, once, but the pattern outlived it), then that the new
+  measurement code had added work (it does not run inside the element loop).
+
+  Settled by building the pre-batch commit and timing both binaries on the same
+  lens, back to back, one process at a time:
+
+  | build | wall time |
+  |---|---|
+  | `fa61f4c`, before the reporting work | **787 s** |
+  | `d730088`, after it | **806 s** |
+
+  2.4% apart, which is noise. **The reporting work costs nothing.** What remains
+  unexplained is the OUTLIER in the other direction - why one early run took
+  4 minutes - and it is deliberately left unexplained rather than given a third
+  theory. The depth-shape cache was checked and is in-process only, so it cannot
+  carry state between runs. Anyone timing this tool should take 13 minutes for a
+  three-element system as the expectation and treat a 4-minute run as the thing
+  needing explanation.
+
+- **THE GENERATED CATALOGUE HAD INVERTED DISPERSION - FIXED 2026-08-29**
+  (`265e826`). Every MS_* row had index RISING with wavelength: MS_PMMA at
+  Vd -80.6 against real PMMA's +57.4, MS_POLYSTYR -43.5 against +30.9. Found
+  while documenting a *different* dispersion problem, by probing the material
+  the tool generates against the catalogue material it substitutes for.
+
+  **It was two defects, and that is the part worth keeping.** The first was
