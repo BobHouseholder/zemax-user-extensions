@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Text;
 using ZOSAPI;
 using ZOSAPI.Editors;
 using ZOSAPI.Editors.MFE;
@@ -11,28 +10,27 @@ namespace GpimGhostReduce
 {
     // GpimGhostReduce — ZOS-API User Extension.
     //
-    // Implements the sequential ghost-reduction loop from Ansys Optics
+    // Sequential ghost-reduction loop from Ansys Optics
     // "Stray Light Analysis with Ghost Focus Generator"
     // https://optics.ansys.com/hc/en-us/articles/43071067483795-Stray-Light-Analysis-with-Ghost-Focus-Generator
     //
-    // Rank double-bounce image (and optionally pupil) ghosts with GPIM, then
-    // append GPIM operands (target 0) to the EXISTING merit function so a later
-    // optimize pushes the ghost focus off the image plane without throwing away
-    // the design MF. OpticStudio defines GPIM as 1/|z_ghost − z_image|, which is
-    // why the article targets 0.
+    // Never replaces the file's merit function. Full-scan every double-bounce
+    // pair, then append only the GPIM operands that matter, with weights scaled
+    // so ghost pull matches existing MF performance (balance = 1 → equal).
+    // OpticStudio GPIM = 1/|z_ghost − z_image|, so target is always 0.
     //
-    // Geometric Image Analysis of the saved Ghost Focus Generator files is still
-    // a manual check; this extension does the operand half of the article.
+    // OpticStudio 2026 MFE rows are IMFERow / GetOperandCell(MeritColumn).
 
     enum GhostKind { Image = 1, Pupil = 0, Both = -1 }
 
     class Options
     {
         public GhostKind Kind = GhostKind.Image;
-        public int TopN = 3;          // 0 => one GPIM with Surf1=Surf2=-1
-        public double Weight = 1.0;
+        public int TopN = 0;            // 0 = auto from scan, else max pairs
+        public double Weight = 1.0;     // used only when -weight is explicit
+        public double Balance = 1.0;    // ghost vs existing MF
         public bool Optimize;
-        public int Cycles = 10;       // 0 = automatic
+        public int Cycles = 10;
         public string FilePath;
         public string SavePath;
         public bool NoDialog;
@@ -46,6 +44,7 @@ namespace GpimGhostReduce
         public int Surf1;
         public int Surf2;
         public double Gpim;
+        public double Weight;
         public int Wfb;
         public int Wsb;
         public string Label { get { return Mode == 1 ? "image" : "pupil"; } }
@@ -57,11 +56,13 @@ namespace GpimGhostReduce
         static ZOSAPI.IZOSAPI_Application App;
         static CultureInfo CI = CultureInfo.InvariantCulture;
 
-        // Cached GPIM MFE cell indices, filled from the operand's own headers
-        // the first time we insert a GPIM row. Help names Surf1, Surf2, Mode,
-        // WFB, WSB but does not say which Param column they occupy.
         static int ColSurf1 = -1, ColSurf2 = -1, ColMode = -1, ColWfb = -1, ColWsb = -1;
         static bool MapReady;
+
+        const int AutoCap = 8;
+        const double HotFrac = 0.10;
+        const double CoverFrac = 0.80;
+        const double EmptyMf = 1e-12;
 
         static void Main(string[] args)
         {
@@ -93,6 +94,7 @@ namespace GpimGhostReduce
                 {
                     case "-top": Opts.TopN = int.Parse(next(), CI); Opts.Explicit.Add("top"); break;
                     case "-weight": Opts.Weight = double.Parse(next(), CI); Opts.Explicit.Add("weight"); break;
+                    case "-balance": Opts.Balance = double.Parse(next(), CI); Opts.Explicit.Add("balance"); break;
                     case "-mode":
                         Opts.Kind = ParseKind(next());
                         Opts.Explicit.Add("mode");
@@ -104,7 +106,6 @@ namespace GpimGhostReduce
                     case "-nodialog": Opts.NoDialog = true; break;
                     case "-quiet": break;
                     default:
-                        // OpticStudio ribbon launches with -zpid/-zplt/-zsid.
                         if (al.StartsWith("-z")) break;
                         if (al.StartsWith("-"))
                             throw new Exception("unknown flag " + a);
@@ -129,6 +130,7 @@ namespace GpimGhostReduce
         {
             if (o.TopN < 0) throw new Exception("-top must be >= 0");
             if (o.Weight < 0) throw new Exception("-weight must be >= 0");
+            if (o.Balance < 0) throw new Exception("-balance must be >= 0");
             if (o.Cycles < 0) throw new Exception("-cycles must be >= 0");
         }
 
@@ -155,8 +157,6 @@ namespace GpimGhostReduce
                 {
                     try { App = connection.ConnectAsExtension(0); } catch { App = null; }
                 }
-                // ConnectAsExtension returns a live-looking stub with PrimarySystem
-                // == null when nothing is listening — that is not a connection.
                 if (App == null || App.PrimarySystem == null)
                     throw new Exception("could not connect to OpticStudio (use the Programming ribbon or Interactive Extension)");
                 if (!App.IsValidLicenseForAPI)
@@ -195,18 +195,26 @@ namespace GpimGhostReduce
             if (img < 3)
                 throw new Exception("need at least one real surface between object and image");
 
+            var mfe = sys.MFE;
+            int baseline = mfe.NumberOfOperands;
+            int weighted = CountWeighted(mfe);
+            double mfBefore = SafeMf(mfe);
+
             Say("=== GpimGhostReduce ===");
             Say("Article : https://optics.ansys.com/hc/en-us/articles/43071067483795-Stray-Light-Analysis-with-Ghost-Focus-Generator");
             Say("Lens    : " + (string.IsNullOrEmpty(sys.SystemFile) ? "(untitled)" : sys.SystemFile));
             Say(string.Format(CI, "Surfaces: OBJ=0 .. IMA={0}", img));
-            Say("Kind    : " + Opts.Kind + ", top " + Opts.TopN + ", weight " + Opts.Weight.ToString("0.###", CI));
+            Say(string.Format(CI, "Existing MFE: {0} operand(s), {1} weighted, MF={2:E6}",
+                baseline, weighted, mfBefore));
+            Say("Kind    : " + Opts.Kind
+                + (Opts.TopN == 0 ? ", auto pairs" : ", max " + Opts.TopN)
+                + (Opts.Explicit.Contains("weight")
+                    ? ", raw weight " + Opts.Weight.ToString("0.###", CI)
+                    : ", balance " + Opts.Balance.ToString("0.###", CI)));
 
             var modes = new List<int>();
             if (Opts.Kind == GhostKind.Image || Opts.Kind == GhostKind.Both) modes.Add(1);
             if (Opts.Kind == GhostKind.Pupil || Opts.Kind == GhostKind.Both) modes.Add(0);
-
-            var mfe = sys.MFE;
-            double mfBefore = SafeMf(mfe);
 
             var chosen = new List<GhostHit>();
             foreach (int mode in modes)
@@ -214,7 +222,7 @@ namespace GpimGhostReduce
                 if (Cancelled()) return;
                 var ranked = Rank(sys, mfe, img, mode);
                 Say("");
-                Say(mode == 1 ? "-- image ghosts (Mode 1) --" : "-- pupil ghosts (Mode 0) --");
+                Say(mode == 1 ? "-- image ghosts (Mode 1), full scan --" : "-- pupil ghosts (Mode 0), full scan --");
                 if (ranked.Count == 0)
                 {
                     Say("  none with a usable GPIM value");
@@ -224,47 +232,59 @@ namespace GpimGhostReduce
                 for (int i = 0; i < show; i++)
                 {
                     var h = ranked[i];
-                    Say(string.Format(CI, "  {0,2}. Surf {1,2} then {2,2}   GPIM={3:0.6e}  (WFB={4} WSB={5})",
+                    Say(string.Format(CI, "  {0,2}. Surf {1,2} then {2,2}   GPIM={3:E6}  (WFB={4} WSB={5})",
                         i + 1, h.Surf1, h.Surf2, h.Gpim, h.Wfb, h.Wsb));
                 }
-                if (Opts.TopN == 0)
-                {
-                    chosen.Add(new GhostHit { Mode = mode, Surf1 = -1, Surf2 = -1, Gpim = ranked[0].Gpim, Wfb = ranked[0].Wfb, Wsb = ranked[0].Wsb });
-                }
-                else
-                {
-                    int n = Math.Min(Opts.TopN, ranked.Count);
-                    for (int i = 0; i < n; i++) chosen.Add(ranked[i]);
-                }
+                var pick = SelectNeeded(ranked);
+                Say(string.Format(CI, "  keeping {0} of {1} pair(s)", pick.Count, ranked.Count));
+                chosen.AddRange(pick);
             }
 
             if (chosen.Count == 0)
-                throw new Exception("no ghost pairs to constrain — nothing appended to the merit function");
+                throw new Exception("no ghost pairs to constrain — existing merit function unchanged");
 
-            int added = InsertOperands(mfe, chosen);
+            AssignWeights(chosen, mfBefore, weighted);
+            var addedRows = new List<int>();
+            int added = InsertOperands(mfe, chosen, baseline, addedRows);
             Say("");
-            Say("Appended " + added + " GPIM operand(s), target 0, leaving the original merit function in place.");
+            Say("Appended " + added + " GPIM operand(s), target 0. Original " + baseline + " operand(s) left in place.");
 
             double mfAfterInsert = SafeMf(mfe);
-            Say(string.Format(CI, "Merit function: {0:0.6e} -> {1:0.6e} after insert", mfBefore, mfAfterInsert));
+            double designAfterInsert = DesignOnlyMf(mfe, addedRows);
+            Say(string.Format(CI, "Merit function: existing {0:E6} -> combined {1:E6} after insert (design-only {2:E6})",
+                mfBefore, mfAfterInsert, designAfterInsert));
 
+            bool ranOpt = false;
             if (Opts.Optimize)
             {
-                if (Cancelled()) return;
-                Say("Running local DLS (" + (Opts.Cycles == 0 ? "automatic cycles" : Opts.Cycles + " cycles") + ")...");
-                RunLocalOpt(sys);
-                double mfAfterOpt = SafeMf(mfe);
-                Say(string.Format(CI, "Merit function after DLS: {0:0.6e}", mfAfterOpt));
-                Say("Re-ranked after optimize:");
-                foreach (int mode in modes)
+                if (weighted == 0 || !UsableMf(mfBefore))
+                {
+                    Say("Skipping DLS: existing merit function has no weighted operands, so optimize would only chase ghosts and dump image quality.");
+                    Say("Add a normal MF (Optimization Wizard) first, then re-run with -optimize.");
+                }
+                else
                 {
                     if (Cancelled()) return;
-                    var ranked = Rank(sys, mfe, img, mode);
-                    int n = Math.Min(3, ranked.Count);
-                    for (int i = 0; i < n; i++)
+                    Say("Running local DLS (" + (Opts.Cycles == 0 ? "automatic cycles" : Opts.Cycles + " cycles") + ")...");
+                    RunLocalOpt(sys);
+                    ranOpt = true;
+                    double mfAfterOpt = SafeMf(mfe);
+                    double designAfterOpt = DesignOnlyMf(mfe, addedRows);
+                    Say(string.Format(CI, "After DLS: combined MF={0:E6}  design-only MF={1:E6} (was {2:E6})",
+                        mfAfterOpt, designAfterOpt, mfBefore));
+                    if (UsableMf(mfBefore) && UsableMf(designAfterOpt) && designAfterOpt > 2.0 * mfBefore)
+                        Say("Note: design-only MF more than doubled — ghosts and image quality are fighting; try a lower -balance.");
+                    Say("Re-ranked after optimize:");
+                    foreach (int mode in modes)
                     {
-                        var h = ranked[i];
-                        Say(string.Format(CI, "  {0}  Surf {1} then {2}  GPIM={3:0.6e}", h.Label, h.Surf1, h.Surf2, h.Gpim));
+                        if (Cancelled()) return;
+                        var ranked = Rank(sys, mfe, img, mode);
+                        int n = Math.Min(3, ranked.Count);
+                        for (int i = 0; i < n; i++)
+                        {
+                            var h = ranked[i];
+                            Say(string.Format(CI, "  {0}  Surf {1} then {2}  GPIM={3:E6}", h.Label, h.Surf1, h.Surf2, h.Gpim));
+                        }
                     }
                 }
             }
@@ -282,7 +302,9 @@ namespace GpimGhostReduce
             Say("Next (from the article): Analyze > Ghost Focus Generator on the worst pair,");
             Say("save the double-bounce file, Geometric Image Analysis for peak irradiance.");
             Say("GPIM only defocuses the ghost; it does not replace a coating or NSC stray-light check.");
-            app.ProgressMessage = "Done — " + added + " GPIM operand(s) appended.";
+            app.ProgressMessage = ranOpt
+                ? "Done — " + added + " GPIM operand(s) appended and DLS run."
+                : "Done — " + added + " GPIM operand(s) appended; existing MF kept.";
         }
 
         static List<GhostHit> Rank(ZOSAPI.IOpticalSystem sys, IMeritFunctionEditor mfe, int img, int mode)
@@ -300,7 +322,11 @@ namespace GpimGhostReduce
             {
                 for (int s2 = 1; s2 < s1; s2++)
                 {
-                    if (Cancelled()) return hits;
+                    if (Cancelled())
+                    {
+                        mfe.RemoveOperandAt(scratch);
+                        return hits;
+                    }
                     done++;
                     if (done == 1 || done % 25 == 0)
                     {
@@ -317,13 +343,12 @@ namespace GpimGhostReduce
                 }
             }
 
-            // OpticStudio's own worst-of-all probe.
             WriteGpim(op, -1, -1, mode);
             double all = ReadValue(op, mfe);
             int awfb, awsb;
             ReadWorst(op, out awfb, out awsb);
             if (Usable(all))
-                Say(string.Format(CI, "  OpticStudio worst-of-all (Surf1=Surf2=-1): GPIM={0:0.6e}  WFB={1} WSB={2}",
+                Say(string.Format(CI, "  OpticStudio worst-of-all (Surf1=Surf2=-1): GPIM={0:E6}  WFB={1} WSB={2}",
                     all, awfb, awsb));
 
             mfe.RemoveOperandAt(scratch);
@@ -331,23 +356,86 @@ namespace GpimGhostReduce
             return hits;
         }
 
-        static int InsertOperands(IMeritFunctionEditor mfe, List<GhostHit> chosen)
+        static List<GhostHit> SelectNeeded(List<GhostHit> ranked)
+        {
+            var keep = new List<GhostHit>();
+            if (ranked.Count == 0) return keep;
+            int cap = Opts.TopN > 0 ? Opts.TopN : AutoCap;
+            double gmax = ranked[0].Gpim;
+            double total = 0;
+            for (int i = 0; i < ranked.Count; i++) total += ranked[i].Gpim;
+            double acc = 0;
+            for (int i = 0; i < ranked.Count; i++)
+            {
+                if (keep.Count >= cap) break;
+                var h = ranked[i];
+                if (keep.Count > 0 && h.Gpim < HotFrac * gmax) break;
+                keep.Add(h);
+                acc += h.Gpim;
+                if (acc >= CoverFrac * total) break;
+            }
+            if (keep.Count == 0) keep.Add(ranked[0]);
+            return keep;
+        }
+
+        static void AssignWeights(List<GhostHit> chosen, double m0, int weighted)
+        {
+            if (Opts.Explicit.Contains("weight"))
+            {
+                for (int i = 0; i < chosen.Count; i++)
+                    chosen[i].Weight = Opts.Weight;
+                Say("Using explicit GPIM weight " + Opts.Weight.ToString("0.###", CI) + " on every added row.");
+                return;
+            }
+
+            if (weighted == 0 || !UsableMf(m0))
+            {
+                for (int i = 0; i < chosen.Count; i++)
+                    chosen[i].Weight = 1.0;
+                Say("Existing MF is empty — GPIM weight 1.0, no DLS so the lens is not rebuilt around ghosts.");
+                return;
+            }
+
+            int n = chosen.Count;
+            double budget = (Opts.Balance * m0) * (Opts.Balance * m0);
+            Say(string.Format(CI,
+                "Scaling GPIM weights so ghost contribution equals {0:0.###}× existing MF² ({1:E6}).",
+                Opts.Balance, budget));
+            for (int i = 0; i < n; i++)
+            {
+                double g = chosen[i].Gpim;
+                double g2 = g * g;
+                double w;
+                if (g2 < 1e-30) w = 0;
+                else w = budget / (n * g2);
+                if (w > 1e6) w = 1e6;
+                if (w < 1e-6 && w > 0) w = 1e-6;
+                chosen[i].Weight = w;
+                Say(string.Format(CI, "  Surf {0}/{1}  GPIM={2:E6}  weight={3:E6}",
+                    chosen[i].Surf1, chosen[i].Surf2, g, w));
+            }
+        }
+
+        static int InsertOperands(IMeritFunctionEditor mfe, List<GhostHit> chosen, int baseline, List<int> addedRows)
         {
             int added = 0;
-            foreach (var h in chosen)
+            bool header = false;
+            for (int i = 0; i < chosen.Count; i++)
             {
+                var h = chosen[i];
                 if (FindExisting(mfe, h.Mode, h.Surf1, h.Surf2) > 0)
                 {
                     Say(string.Format(CI, "  skip existing GPIM {0} Surf {1}/{2}", h.Label, h.Surf1, h.Surf2));
                     continue;
                 }
-                if (added == 0)
+                if (!header)
                 {
                     int blank = mfe.NumberOfOperands + 1;
                     mfe.InsertNewOperandAt(blank);
                     var bl = mfe.GetOperandAt(blank);
                     bl.ChangeType(MeritOperandType.BLNK);
                     try { SetComment(bl, "GPIM ghost reduce (" + h.Label + ")"); } catch { }
+                    header = true;
                 }
                 int row = mfe.NumberOfOperands + 1;
                 mfe.InsertNewOperandAt(row);
@@ -356,9 +444,12 @@ namespace GpimGhostReduce
                 LearnMap(op);
                 WriteGpim(op, h.Surf1, h.Surf2, h.Mode);
                 op.Target = 0.0;
-                op.Weight = Opts.Weight;
+                op.Weight = h.Weight;
+                addedRows.Add(row);
                 added++;
             }
+            if (mfe.NumberOfOperands < baseline)
+                throw new Exception("existing merit function was shortened — aborting without save");
             return added;
         }
 
@@ -388,15 +479,52 @@ namespace GpimGhostReduce
             return row;
         }
 
-        static void LearnMap(IOperand op)
+        static int CountWeighted(IMeritFunctionEditor mfe)
+        {
+            int n = 0;
+            for (int i = 1; i <= mfe.NumberOfOperands; i++)
+            {
+                var op = mfe.GetOperandAt(i);
+                try
+                {
+                    if (op.Type == MeritOperandType.BLNK) continue;
+                    if (op.Weight > 0) n++;
+                }
+                catch { }
+            }
+            return n;
+        }
+
+        static double DesignOnlyMf(IMeritFunctionEditor mfe, List<int> gpimRows)
+        {
+            var saved = new List<double>();
+            for (int i = 0; i < gpimRows.Count; i++)
+            {
+                var op = mfe.GetOperandAt(gpimRows[i]);
+                saved.Add(op.Weight);
+                op.Weight = 0;
+            }
+            double v = SafeMf(mfe);
+            for (int i = 0; i < gpimRows.Count; i++)
+                mfe.GetOperandAt(gpimRows[i]).Weight = saved[i];
+            try { mfe.CalculateMeritFunction(); } catch { }
+            return v;
+        }
+
+        static IEditorCell GetCell(IMFERow op, int col)
+        {
+            if (col < 0) return null;
+            try { return op.GetOperandCell((MeritColumn)col); }
+            catch { return null; }
+        }
+
+        static void LearnMap(IMFERow op)
         {
             if (MapReady) return;
-            int n = 16;
-            try { if (op.Editor != null) n = Math.Max(8, op.Editor.NumberOfColumns); } catch { }
-            for (int c = 0; c < n; c++)
+            int n = (int)MeritColumn.Contrib;
+            for (int c = 1; c <= n; c++)
             {
-                IEditorCell cell = null;
-                try { cell = op.GetCellAt(c); } catch { continue; }
+                IEditorCell cell = GetCell(op, c);
                 if (cell == null) continue;
                 string h = null;
                 try { h = cell.Header; } catch { }
@@ -408,35 +536,32 @@ namespace GpimGhostReduce
                 else if (u == "WFB") ColWfb = c;
                 else if (u == "WSB") ColWsb = c;
             }
-            // Fall back to the usual Int1/Int2/Int3 packing if headers did not name them.
-            if (ColSurf1 < 0) ColSurf1 = 2;
-            if (ColSurf2 < 0) ColSurf2 = 3;
-            if (ColMode < 0) ColMode = 4;
+            if (ColSurf1 < 0) ColSurf1 = (int)MeritColumn.Param1;
+            if (ColSurf2 < 0) ColSurf2 = (int)MeritColumn.Param2;
+            if (ColMode < 0) ColMode = (int)MeritColumn.Param3;
             MapReady = true;
             Say(string.Format(CI, "  GPIM cells: Surf1=col {0}, Surf2=col {1}, Mode=col {2}, WFB=col {3}, WSB=col {4}",
                 ColSurf1, ColSurf2, ColMode, ColWfb, ColWsb));
         }
 
-        static void WriteGpim(IOperand op, int s1, int s2, int mode)
+        static void WriteGpim(IMFERow op, int s1, int s2, int mode)
         {
             SetInt(op, ColSurf1, s1);
             SetInt(op, ColSurf2, s2);
             SetInt(op, ColMode, mode);
         }
 
-        static void SetInt(IOperand op, int col, int value)
+        static void SetInt(IMFERow op, int col, int value)
         {
-            if (col < 0) return;
-            var cell = op.GetCellAt(col);
+            var cell = GetCell(op, col);
             if (cell == null) return;
             if (cell.DataType == CellDataType.Integer) cell.IntegerValue = value;
             else cell.DoubleValue = value;
         }
 
-        static int ReadInt(IOperand op, int col, int missing)
+        static int ReadInt(IMFERow op, int col, int missing)
         {
-            if (col < 0) return missing;
-            var cell = op.GetCellAt(col);
+            var cell = GetCell(op, col);
             if (cell == null) return missing;
             try
             {
@@ -446,20 +571,14 @@ namespace GpimGhostReduce
             catch { return missing; }
         }
 
-        static void ReadWorst(IOperand op, out int wfb, out int wsb)
+        static void ReadWorst(IMFERow op, out int wfb, out int wsb)
         {
             wfb = ReadInt(op, ColWfb, 0);
             wsb = ReadInt(op, ColWsb, 0);
         }
 
-        static double ReadValue(IOperand op, IMeritFunctionEditor mfe)
+        static double ReadValue(IMFERow op, IMeritFunctionEditor mfe)
         {
-            try
-            {
-                double v = op.Value;
-                if (Usable(v)) return v;
-            }
-            catch { }
             try { mfe.CalculateMeritFunction(); } catch { }
             try { return op.Value; } catch { return double.NaN; }
         }
@@ -472,15 +591,24 @@ namespace GpimGhostReduce
             return true;
         }
 
-        static void SetComment(IOperand op, string text)
+        static bool UsableMf(double v)
         {
-            // BLNK comment lives in the first string cell after Type.
-            int n = 16;
-            try { if (op.Editor != null) n = Math.Max(8, op.Editor.NumberOfColumns); } catch { }
-            for (int c = 1; c < n; c++)
+            if (double.IsNaN(v) || double.IsInfinity(v)) return false;
+            return v > EmptyMf;
+        }
+
+        static void SetComment(IMFERow op, string text)
+        {
+            var cell = GetCell(op, (int)MeritColumn.Comment);
+            if (cell != null && cell.DataType == CellDataType.String)
             {
-                IEditorCell cell = null;
-                try { cell = op.GetCellAt(c); } catch { continue; }
+                cell.Value = text;
+                return;
+            }
+            int n = (int)MeritColumn.Contrib;
+            for (int c = 1; c <= n; c++)
+            {
+                cell = GetCell(op, c);
                 if (cell == null) continue;
                 if (cell.DataType == CellDataType.String)
                 {
