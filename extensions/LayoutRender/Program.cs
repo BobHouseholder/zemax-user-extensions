@@ -116,15 +116,9 @@ namespace LayoutRender
             }
             else
             {
-                try { app = connection.ConnectToApplication(); } catch { app = null; }
-                if (app == null)
-                {
-                    try { app = connection.ConnectAsExtension(0); } catch { app = null; }
-                }
-                if (app == null)
-                    throw new Exception("could not connect to OpticStudio (use the Programming ribbon or Interactive Extension)");
-                if (!app.IsValidLicenseForAPI)
-                    throw new Exception("license is not valid for ZOS-API: " + app.LicenseStatus);
+                string connectError;
+                if (!ZemaxLocator.TryConnect(out app, out connectError, false))
+                    throw new Exception(connectError);
             }
 
             try
