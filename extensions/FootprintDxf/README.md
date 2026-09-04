@@ -24,29 +24,42 @@ For each selected surface (default: optical surfaces `1 .. image-1`):
    with the grid plus a near-edge ring at `r=0.99` for the main hull (default rim
    count `max(128, Rays×8)`, override with `-rimrays N`, clamp 16..1024).
 2. Collect intercept `(x, y)` in the **local surface coordinate system** for rays
-   that hit (error and vignette codes ignored).
+   that hit (error and vignette codes ignored). With `-global`, those points are
+   mapped through `LDE.GetGlobalMatrix` (LayoutRender-style) into a **common
+   assembly frame** before the hull — all layers then share one coordinate system.
+   The 2D DXF uses global **X/Y only**; **Z is ignored**.
 3. Compute the 2D convex hull (Andrew’s monotone chain) of **grid ∪ rim@0.99 ∪
    rim@1** hits. That hull is the footprint envelope. With a dense rim,
    circular/elliptical footprints keep many hull verts instead of a chunky
    ~12–16-gon from the grid alone. The grid still supplies corner hits for
-   vignetted / non-circular apertures.
+   vignetted / non-circular apertures. **Note:** a convex hull overestimates
+   concave vignetted shapes.
 4. Optionally also write separate pupil-rim polylines as `RIM_…` layers (`-rim`).
    Those layers **reuse** the rim@1 hits already traced for the hull (no second
    `TraceHits` of the same rim). Each field gets its **own** layer
    `RIM_SURF_{n}_F{f}` ordered by angle around that field’s centroid — fields are
    **not** atan2-merged into a single ring.
+5. Optionally (`-perfield`) also write **per-field** convex-hull layers
+   `SURF_{n}_F{f}` from the same partitioned hits. The **union** `SURF_{n}`
+   envelope is still written.
+6. Optionally (`-aperture`) draw a clear-aperture keep-out circle/ellipse as
+   `APER_SURF_{n}` from ZOS-API aperture data (`CircularAperture` /
+   `EllipticalAperture`) or `SemiDiameter` when the type is `None` /
+   `FloatingAperture`. Rectangular / other types → WARNING and skip that
+   surface’s aperture (export continues). Overlay uses the **same frame** as the
+   footprints (local or global).
 
-One DXF **LAYER** per surface: always `SURF_{n}`, or `SURF_{n}_{sanitizedComment}`
+One DXF **LAYER** per polyline: always `SURF_{n}`, or `SURF_{n}_{sanitizedComment}`
 when the surface Comment is set. Duplicate names in one export get `_2`, `_3`, …
 suffixes. One closed `POLYLINE` + `VERTEX` + `SEQEND` per hull (ancient-CAD
-friendly; not LWPOLYLINE). Coordinates are local XY in OpticStudio **lens units**;
-`$INSUNITS` is mapped from `SystemData.Units.LensUnits` (mm→4, cm→5, in→1, m→6).
-If the unit is unrecognized, `$INSUNITS` is set to `0` (unitless), a WARNING is
-printed, and the unit name is stamped in the title/TEXT. DXF TEXT entities are
-ASCII-folded; Unicode is kept in the console only. The same envelopes are also
-drawn to a PNG beside the DXF (white background, equal aspect, colours keyed by
-sanitized layer name so the preview matches CAD). The optical system is **never
-modified**.
+friendly; not LWPOLYLINE). Coordinates are local XY in OpticStudio **lens units**
+by default; `$INSUNITS` is mapped from `SystemData.Units.LensUnits` (mm→4, cm→5,
+in→1, m→6). If the unit is unrecognized, `$INSUNITS` is set to `0` (unitless), a
+WARNING is printed, and the unit name is stamped in the title/TEXT. DXF TEXT
+entities are ASCII-folded; Unicode is kept in the console only. The same
+envelopes (including per-field / aperture layers) are also drawn to a PNG beside
+the DXF (white background, equal aspect, colours keyed by sanitized layer name).
+The optical system is **never modified**.
 
 Empty hull (no hits) → WARNING and that surface is skipped; other surfaces still
 write.
@@ -61,10 +74,11 @@ Progress via `ProgressMessage` / `ProgressPercent`; `TerminateRequested` is
 honoured in the ray loops.
 
 The rim checkbox means “also write separate per-field `RIM_…_F{f}` layers”; the
-dense rim is always used for the main SURF hull either way. The dialog has a
-rim-rays field plus **Write PNG preview** (default on → `NoPng`) and **Open
-outputs when done** (default on; unchecked → `Quiet`). Explicit CLI flags still
-win via `Opts.Explicit`.
+dense rim is always used for the main SURF hull either way. Additional checkboxes:
+**per-field hulls**, **global frame**, **aperture overlays**, plus **Write PNG
+preview** (default on → `NoPng`) and **Open outputs when done** (default on;
+unchecked → `Quiet`). The hint notes that a convex hull overestimates concave
+vignetted shapes. Explicit CLI flags still win via `Opts.Explicit`.
 
 ## Build
 
@@ -87,15 +101,19 @@ Then **Programming > Refresh List** (restart may be required on first deploy).
 | `-fields all\|1,2` | Fields (default all) |
 | `-wave primary\|all` | Wavelengths (default all) |
 | `-rim` | Also write per-field pupil-rim polylines as `RIM_SURF_{n}_F{f}` (reuses rim@1) |
+| `-perfield` | Also write per-field hull layers `SURF_{n}_F{f}` (union `SURF_{n}` kept) |
+| `-global` | Transform local `(x,y)` via `GetGlobalMatrix` into a common frame (2D global X/Y; Z ignored) |
+| `-aperture` | Draw clear-aperture overlays as `APER_SURF_{n}` (circular/elliptical/SemiDiameter) |
 | `-nopng` | Skip writing the PNG preview beside the DXF |
 | `-quiet` | Do not auto-open DXF/PNG after a ribbon run (files still written) |
 | `-nodialog` | Skip settings dialog in plugin mode |
-| `-selftest` | Convex-hull + ring-order + layer/units self-check only (no OpticStudio) |
+| `-selftest` | Convex-hull + ring-order + layer/units + transform/ellipse self-check only (no OpticStudio) |
 
 ## How to run
 
 ```
 FootprintDxf.exe -file C:\designs\cooke.zmx -out C:\designs\cooke_footprints.dxf -rays 21
+FootprintDxf.exe -file C:\designs\cooke.zmx -out C:\designs\sample_footprints_nice.dxf -rays 21 -perfield -aperture -global -nodialog -quiet
 ```
 
 Or open the lens in OpticStudio and run **Programming > User Extensions >
