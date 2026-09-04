@@ -39,14 +39,23 @@ namespace FootprintDxf
                 maxR = Math.Max(maxR, Math.Sqrt(f.X * f.X + f.Y * f.Y));
             }
 
+            int rimN = Opts.EffectiveRimRays();
             var pupilSamples = BuildPupilGrid(Opts.Rays);
-            var rimSamples = Opts.Rim ? BuildPupilRim(Math.Max(64, Opts.Rays * 4)) : null;
+            // Dense rim is ALWAYS merged into the main SURF hit cloud (grid ∪ rim).
+            var denseRim = BuildDenseRimSamples(rimN);
+            var hullSamples = new List<(double px, double py)>(pupilSamples.Count + denseRim.Count);
+            hullSamples.AddRange(pupilSamples);
+            hullSamples.AddRange(denseRim);
+            // Optional separate RIM_… layers use the outer rim only (angular order).
+            var rimSamples = Opts.Rim ? BuildPupilRim(rimN, 1.0) : null;
 
             Say("=== FootprintDxf ===");
             Say("Forum : https://community.zemax.com/got-a-question-7/how-can-i-export-beam-footprints-to-a-cad-or-dxf-file-5991");
             Say("Lens  : " + (string.IsNullOrEmpty(sys.SystemFile) ? "(untitled)" : sys.SystemFile));
-            Say(string.Format(CI, "Surfaces: {0}  Fields: {1}  Waves: {2}  Pupil grid: {3}x{3} ({4} in-circle)",
-                string.Join(",", surfList), fieldList.Count, waveList.Count, Opts.Rays, pupilSamples.Count));
+            Say(string.Format(CI,
+                "Surfaces: {0}  Fields: {1}  Waves: {2}  Pupil grid: {3}x{3} ({4} in-circle)  Rim: {5}×2 (r=1+0.99)",
+                string.Join(",", surfList), fieldList.Count, waveList.Count,
+                Opts.Rays, pupilSamples.Count, rimN));
             Say("Coords: local surface XY (lens units, usually mm). System is not modified.");
 
             string outPath = Opts.OutPath;
@@ -72,7 +81,7 @@ namespace FootprintDxf
                 string comment = null;
                 try { comment = (lde.GetSurfaceAt(surf).Comment ?? "").Trim(); } catch { }
 
-                var hits = TraceHits(sys, surf, fieldList, waveList, pupilSamples, maxR, fields);
+                var hits = TraceHits(sys, surf, fieldList, waveList, hullSamples, maxR, fields);
                 if (Cancelled()) return;
 
                 var hull = ConvexHull.Compute(hits);
@@ -99,8 +108,7 @@ namespace FootprintDxf
                 {
                     if (Cancelled()) return;
                     var rimHits = TraceHits(sys, surf, fieldList, waveList, rimSamples, maxR, fields);
-                    // Rim samples are already in angular order around the pupil;
-                    // keep that order as a closed polyline (not re-hulled).
+                    // Angular order around centroid (not re-hulled) for RIM_… layers.
                     var rimPoly = OrderAsClosedRing(rimHits);
                     if (rimPoly.Count >= 3)
                     {
