@@ -131,8 +131,18 @@ namespace FootprintDxf
                 string.IsNullOrEmpty(sys.SystemFile) ? "(untitled)" : sys.SystemFile);
             DxfWriter.Write(outPath, polys, title);
             Say("DXF written to: " + outPath);
-            app.ProgressMessage = "Done. Footprint DXF written to " + Path.GetFileName(outPath);
-            OpenOutputs(app, outPath);
+
+            string pngPath = null;
+            if (!Opts.NoPng)
+            {
+                pngPath = Path.ChangeExtension(outPath, ".png");
+                PngWriter.Write(pngPath, polys, title);
+                Say("PNG written to: " + pngPath);
+            }
+
+            app.ProgressMessage = "Done. Footprint DXF written to " + Path.GetFileName(outPath)
+                + (pngPath != null ? " (+ PNG preview)" : "");
+            OpenOutputs(app, outPath, pngPath);
         }
     }
 }
