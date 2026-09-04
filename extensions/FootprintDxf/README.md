@@ -9,8 +9,10 @@ Forum ask:
 mech CAD.
 
 **LayoutRender** only writes a 2D layout PNG. **DetectorDump** only dumps NSC
-detectors. Neither replaces this. There is no ZOS-API DXF export; the file is
-written as text.
+detectors. Neither replaces this. There is no ZOS-API DXF export; the DXF is
+written as text. A **PNG preview** of the same polylines is written beside the
+DXF by default (skip with `-nopng`) and auto-opened in Plugin mode like
+LayoutRender.
 
 ## What it does
 
@@ -34,7 +36,9 @@ For each selected surface (default: optical surfaces `1 .. image-1`):
 One DXF **LAYER** per surface (`SURF_N`, or the surface Comment when set). One
 closed `POLYLINE` + `VERTEX` + `SEQEND` per hull (ancient-CAD friendly; not
 LWPOLYLINE). Coordinates are local XY in OpticStudio **lens units** (usually mm;
-`$INSUNITS` is set to millimetres). The optical system is **never modified**.
+`$INSUNITS` is set to millimetres). The same envelopes are also drawn to a PNG
+beside the DXF (white background, equal aspect, ACI-ish colours, layer legend).
+The optical system is **never modified**.
 
 Empty hull (no hits) → WARNING and that surface is skipped; other surfaces still
 write.
@@ -50,6 +54,7 @@ honoured in the ray loops.
 
 The rim checkbox means “also write separate `RIM_…` layers”; the dense rim is
 always used for the main SURF hull either way. The dialog has a rim-rays field.
+A PNG preview is written beside the DXF by default (`-nopng` to skip).
 
 ## Build
 
@@ -72,7 +77,8 @@ Then **Programming > Refresh List** (restart may be required on first deploy).
 | `-fields all\|1,2` | Fields (default all) |
 | `-wave primary\|all` | Wavelengths (default all) |
 | `-rim` | Also write separate pupil-rim polylines as `RIM_…` layers |
-| `-quiet` | Do not auto-open the DXF after a ribbon run |
+| `-nopng` | Skip writing the PNG preview beside the DXF |
+| `-quiet` | Do not auto-open DXF/PNG after a ribbon run (files still written) |
 | `-nodialog` | Skip settings dialog in plugin mode |
 | `-selftest` | Convex-hull + ring-order self-check only (no OpticStudio) |
 
