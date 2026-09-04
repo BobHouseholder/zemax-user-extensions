@@ -9,12 +9,12 @@ namespace FootprintDxf
     // Ribbon runs get no command line. OpticStudio launches User Extensions with
     // no arguments, so without a window every knob would only be reachable from
     // a shell. Same pattern as DistortionTarget / GpimGhostReduce.
-    // Cancel returns false — the caller must then write nothing (system untouched).
+    // Cancel returns false - the caller must then write nothing (system untouched).
     class SettingsDialog : Form
     {
         readonly TextBox _out, _rays, _rimRays, _surfaces, _fields;
         readonly ComboBox _wave;
-        readonly CheckBox _includeImage, _rim;
+        readonly CheckBox _includeImage, _rim, _writePng, _openOutputs;
         readonly Label _hint;
         readonly Button _ok;
 
@@ -75,7 +75,7 @@ namespace FootprintDxf
             Controls.Add(gTrace);
             y += gTrace.Height + 8;
 
-            var gFlags = new GroupBox { Text = "Options", Left = PAD, Top = y, Width = GW, Height = 80 };
+            var gFlags = new GroupBox { Text = "Options", Left = PAD, Top = y, Width = GW, Height = 132 };
             _includeImage = new CheckBox
             {
                 Text = "Include image surface when Surfaces = all",
@@ -84,12 +84,26 @@ namespace FootprintDxf
             };
             _rim = new CheckBox
             {
-                Text = "Also write separate RIM_… layers (dense rim always used for main hull)",
+                Text = "Also write separate RIM_... layers (dense rim always used for main hull)",
                 Left = 14, Top = 48, Width = GW - 28,
                 Checked = o.Rim
             };
+            _writePng = new CheckBox
+            {
+                Text = "Write PNG preview",
+                Left = 14, Top = 74, Width = GW - 28,
+                Checked = !o.NoPng
+            };
+            _openOutputs = new CheckBox
+            {
+                Text = "Open outputs when done",
+                Left = 14, Top = 100, Width = GW - 28,
+                Checked = !o.Quiet
+            };
             gFlags.Controls.Add(_includeImage);
             gFlags.Controls.Add(_rim);
+            gFlags.Controls.Add(_writePng);
+            gFlags.Controls.Add(_openOutputs);
             Controls.Add(gFlags);
             y += gFlags.Height + 8;
 
@@ -114,6 +128,8 @@ namespace FootprintDxf
             _wave.SelectedIndexChanged += (s, e) => Recompute();
             _includeImage.CheckedChanged += (s, e) => Recompute();
             _rim.CheckedChanged += (s, e) => Recompute();
+            _writePng.CheckedChanged += (s, e) => Recompute();
+            _openOutputs.CheckedChanged += (s, e) => Recompute();
             Recompute();
         }
 
@@ -150,17 +166,22 @@ namespace FootprintDxf
             _hint.ForeColor = SystemColors.GrayText;
             string wave = _wave.SelectedIndex == 1 ? "primary wavelength only" : "all wavelengths";
             string img = _includeImage.Checked ? " (incl. image)" : "";
-            string rimExtra = _rim.Checked ? " Also writes separate RIM_… layers." : "";
+            string rimExtra = _rim.Checked
+                ? " Also writes per-field RIM_..._F{f} layers (reuses rim@1; no second trace)."
+                : "";
+            string pngNote = _writePng.Checked
+                ? " Also writes a PNG preview beside the DXF."
+                : " PNG preview skipped.";
+            string openNote = _openOutputs.Checked ? "" : " Outputs will not auto-open.";
             _hint.Text = string.Format(CI,
-                "Batch-trace a {0}×{0} pupil grid plus a dense rim ({1} samples at r=1 and r=0.99) " +
-                "on surfaces [{2}]{3}, fields [{4}], {5}. Convex hull of local (x,y) hits → closed " +
-                "DXF polyline per surface (dense rim is always in the main hull). Also writes a PNG " +
-                "preview beside the DXF (same polylines; -nopng to skip). System is not modified.{6}",
+                "Batch-trace a {0}x{0} pupil grid plus a dense rim ({1} samples at r=1 and r=0.99) " +
+                "on surfaces [{2}]{3}, fields [{4}], {5}. Convex hull of local (x,y) hits -> closed " +
+                "DXF polyline per surface (dense rim is always in the main hull).{6}{7}{8} System is not modified.",
                 rays, rimRays,
                 string.IsNullOrWhiteSpace(_surfaces.Text) ? "all" : _surfaces.Text.Trim(),
                 img,
                 string.IsNullOrWhiteSpace(_fields.Text) ? "all" : _fields.Text.Trim(),
-                wave, rimExtra);
+                wave, rimExtra, pngNote, openNote);
         }
 
         void Apply(Options o)
@@ -183,6 +204,11 @@ namespace FootprintDxf
             o.Wave = _wave.SelectedIndex == 1 ? "primary" : "all";
             o.IncludeImage = _includeImage.Checked;
             o.Rim = _rim.Checked;
+            // Map checkboxes -> NoPng / Quiet. Explicit CLI still wins (LoadLastRun + no dialog override of Explicit).
+            if (!o.Explicit.Contains("nopng"))
+                o.NoPng = !_writePng.Checked;
+            if (!o.Explicit.Contains("quiet"))
+                o.Quiet = !_openOutputs.Checked;
             o.OutPath = string.IsNullOrWhiteSpace(_out.Text) ? null : _out.Text.Trim();
         }
 
@@ -200,7 +226,9 @@ namespace FootprintDxf
                     "fields=" + (o.Fields ?? "all"),
                     "wave=" + (o.Wave ?? "all"),
                     "includeimage=" + (o.IncludeImage ? "1" : "0"),
-                    "rim=" + (o.Rim ? "1" : "0")
+                    "rim=" + (o.Rim ? "1" : "0"),
+                    "writepng=" + (o.NoPng ? "0" : "1"),
+                    "openoutputs=" + (o.Quiet ? "0" : "1")
                 }));
             }
             catch { }
@@ -217,6 +245,9 @@ namespace FootprintDxf
                     if (eq <= 0) continue;
                     string k = line.Substring(0, eq).Trim().ToLowerInvariant();
                     string val = line.Substring(eq + 1).Trim();
+                    // Explicit CLI wins. writepng ↔ nopng, openoutputs ↔ quiet.
+                    if (k == "writepng" && o.Explicit.Contains("nopng")) continue;
+                    if (k == "openoutputs" && o.Explicit.Contains("quiet")) continue;
                     if (o.Explicit.Contains(k)) continue;
                     int i;
                     switch (k)
@@ -229,6 +260,10 @@ namespace FootprintDxf
                         case "wave": if (val.Length > 0) o.Wave = val; break;
                         case "includeimage": o.IncludeImage = val == "1"; break;
                         case "rim": o.Rim = val == "1"; break;
+                        case "writepng": o.NoPng = val != "1"; break;
+                        case "openoutputs": o.Quiet = val != "1"; break;
+                        case "nopng": o.NoPng = val == "1"; break; // legacy alias
+                        case "quiet": o.Quiet = val == "1"; break; // legacy alias
                     }
                 }
             }
