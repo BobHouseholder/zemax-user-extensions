@@ -16,13 +16,20 @@ written as text.
 
 For each selected surface (default: optical surfaces `1 .. image-1`):
 
-1. Batch-trace a pupil grid of real rays for every chosen field and wavelength
-   (`OpenBatchRayTrace` / `CreateNormUnpol`, same pattern as LayoutRender).
+1. Batch-trace a pupil **grid** plus a **dense pupil rim** of real rays for every
+   chosen field and wavelength (`OpenBatchRayTrace` / `CreateNormUnpol`, same
+   pattern as LayoutRender). The rim is always included in the main hit cloud
+   (default count `max(128, Rays×8)`, override with `-rimrays N`, clamp 16..1024).
+   A second near-edge ring at radius 0.99 uses the same angular count.
 2. Collect intercept `(x, y)` in the **local surface coordinate system** for rays
    that hit (error and vignette codes ignored).
-3. Compute the 2D convex hull (Andrew’s monotone chain). That hull is the
-   footprint envelope.
-4. Optionally also write denser pupil-rim samples as `RIM_…` layers (`-rim`).
+3. Compute the 2D convex hull (Andrew’s monotone chain) of **grid ∪ rim** hits.
+   That hull is the footprint envelope. With a dense rim, circular/elliptical
+   footprints keep many hull verts instead of a chunky ~12–16-gon from the grid
+   alone. The grid still supplies corner hits for vignetted / non-circular
+   apertures.
+4. Optionally also write separate pupil-rim polylines as `RIM_…` layers (`-rim`),
+   ordered by angle around the centroid (not re-hulled).
 
 One DXF **LAYER** per surface (`SURF_N`, or the surface Comment when set). One
 closed `POLYLINE` + `VERTEX` + `SEQEND` per hull (ancient-CAD friendly; not
@@ -41,6 +48,9 @@ in `%APPDATA%\FootprintDxf\lastrun.txt`. Cancel leaves the system untouched.
 Progress via `ProgressMessage` / `ProgressPercent`; `TerminateRequested` is
 honoured in the ray loops.
 
+The rim checkbox means “also write separate `RIM_…` layers”; the dense rim is
+always used for the main SURF hull either way. The dialog has a rim-rays field.
+
 ## Build
 
 ```
@@ -56,14 +66,15 @@ Then **Programming > Refresh List** (restart may be required on first deploy).
 | `-out <path.dxf>` | Output path (default: `<lens>_footprints.dxf` beside the lens) |
 | `-file <zmx>` | Standalone: load file (no dialog) |
 | `-rays N` | Pupil grid density, odd (default 21) |
+| `-rimrays N` | Dense rim sample count (default `max(128, Rays×8)`; clamp 16..1024). Always merged into the main hull |
 | `-surfaces all\|1,3,5\|1-6\|Comment` | Surfaces (default `all` = 1..image-1) |
 | `-includeimage` | Also include the image surface when `-surfaces all` |
 | `-fields all\|1,2` | Fields (default all) |
 | `-wave primary\|all` | Wavelengths (default all) |
-| `-rim` | Also write denser pupil-rim polylines |
+| `-rim` | Also write separate pupil-rim polylines as `RIM_…` layers |
 | `-quiet` | Do not auto-open the DXF after a ribbon run |
 | `-nodialog` | Skip settings dialog in plugin mode |
-| `-selftest` | Convex-hull self-check only (no OpticStudio) |
+| `-selftest` | Convex-hull + ring-order self-check only (no OpticStudio) |
 
 ## How to run
 
