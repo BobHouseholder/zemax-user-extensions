@@ -182,8 +182,8 @@ namespace FootprintDxf
             if (c.Count != 8) { detail = "circle count " + c.Count; return false; }
             if (Math.Abs(c[0].X - 2) > 1e-12 || Math.Abs(c[0].Y) > 1e-12)
             { detail = "circle east vert " + c[0].X + "," + c[0].Y; return false; }
-            var e = MakeEllipseRing(1, -1, 3, 1, 4);
-            if (e.Count != 4) { detail = "ellipse count"; return false; }
+            var e = MakeEllipseRing(1, -1, 3, 1, 8);
+            if (e.Count != 8) { detail = "ellipse count " + e.Count; return false; }
             if (Math.Abs(e[0].X - 4) > 1e-12 || Math.Abs(e[0].Y - (-1)) > 1e-12)
             { detail = "ellipse east " + e[0].X + "," + e[0].Y; return false; }
             detail = "ok";
