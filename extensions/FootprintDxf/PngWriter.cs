@@ -9,7 +9,8 @@ using System.IO;
 namespace FootprintDxf
 {
     // Headless PNG preview of the same footprint polylines written to DXF.
-    // Pure System.Drawing — no WinForms window. Y-up lens coords → screen Y flip.
+    // Pure System.Drawing - no WinForms window. Y-up lens coords -> screen Y flip.
+    // Colours are keyed by sanitized layer name (same map as DXF LAYER ACI).
     static class PngWriter
     {
         static readonly CultureInfo CI = CultureInfo.InvariantCulture;
@@ -31,6 +32,12 @@ namespace FootprintDxf
         const int Pad = 48;
         const int TitleH = 36;
         const int LegendW = 160;
+
+        static Color ColorForAci(int aci)
+        {
+            if (aci < 1 || aci > 7) aci = 1;
+            return AciColors[aci - 1];
+        }
 
         public static void Write(string path, IList<DxfWriter.LayerPoly> polys, string title)
         {
@@ -86,12 +93,15 @@ namespace FootprintDxf
             float ox = plotL + (plotW - usedW) * 0.5f;
             float oy = plotT + (plotH - usedH) * 0.5f;
 
-            // Lens Y-up → screen Y-down: screenY = oy + usedH - (y - minY) * scale
+            // Lens Y-up -> screen Y-down: screenY = oy + usedH - (y - minY) * scale
             PointF Map(double x, double y) =>
                 new PointF(ox + (float)((x - minX) * scale),
                            oy + usedH - (float)((y - minY) * scale));
 
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path)) ?? ".");
+
+            // Same first-seen layer -> ACI map as DxfWriter.
+            var colorMap = DxfWriter.BuildLayerColorMap(polys);
 
             using (var bmp = new Bitmap(width, height))
             using (var g = Graphics.FromImage(bmp))
@@ -111,17 +121,17 @@ namespace FootprintDxf
                     using (var framePen = new Pen(Color.FromArgb(210, 210, 210), 1f))
                         g.DrawRectangle(framePen, plotL, plotT, plotW, plotH);
 
-                    int colorIdx = 0;
                     var legendItems = new List<(string name, Color c)>();
                     var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
                     foreach (var p in polys)
                     {
                         if (p.Vertices == null || p.Vertices.Count < 3) continue;
-                        Color c = AciColors[colorIdx % AciColors.Length];
-                        colorIdx++;
-
                         string layer = DxfWriter.SanitizeLayer(p.LayerName);
+                        int aci = 1;
+                        colorMap.TryGetValue(layer, out aci);
+                        Color c = ColorForAci(aci);
+
                         if (seen.Add(layer))
                             legendItems.Add((layer, c));
 
@@ -133,8 +143,9 @@ namespace FootprintDxf
                         using (var pen = new Pen(c, 1.8f))
                             g.DrawLines(pen, pts);
 
-                        // Label near first vertex (same idea as DXF TEXT).
-                        string label = !string.IsNullOrEmpty(p.Comment) ? p.Comment : layer;
+                        // Label near first vertex (same idea as DXF TEXT). ASCII-safe.
+                        string label = !string.IsNullOrEmpty(p.Comment)
+                            ? DxfWriter.SanitizeText(p.Comment) : layer;
                         if (!string.IsNullOrEmpty(label))
                         {
                             var lp = pts[0];
