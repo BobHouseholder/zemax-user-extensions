@@ -11,10 +11,10 @@ Ribbon runs report through OpticStudio's progress display and auto-open
 report/image outputs (`-quiet` disables that). Tools that edit the system show
 the edits live.
 
-**Terminate is honoured by five of the ten.** AthermalScan, DetectorDump,
-EquivalentGlassFinder, LayoutRender and GpimGhostReduce poll `TerminateRequested`
-inside their loops. CryoGlass, DistortionTarget, MoldStress, ReverseSystem and
-the AthermalAnalysis window do not — Cancel does nothing there. That gap matters
+**Terminate is honoured by six of the eleven.** AthermalScan, DetectorDump,
+EquivalentGlassFinder, LayoutRender, GpimGhostReduce and FootprintDxf poll
+`TerminateRequested` inside their loops. CryoGlass, DistortionTarget, MoldStress,
+ReverseSystem and the AthermalAnalysis window do not — Cancel does nothing there. That gap matters
 most on DistortionTarget and MoldStress. OpticStudio's template checks the flag
 once before your code runs, which is why checking it is not the same as honouring
 it.
@@ -82,6 +82,20 @@ apertures are drawn at their true offsets.
 
 Options: `-out <path.png>`, `-rays N` (default 7), `-width W -height H`,
 `-noorient`, `-file <path>`, `-quiet`.
+
+
+### FootprintDxf
+
+Exports the envelope of beam footprints on sequential surfaces to a CAD DXF
+(R12 ASCII). Forum:
+[export beam footprints to CAD/DXF](https://community.zemax.com/got-a-question-7/how-can-i-export-beam-footprints-to-a-cad-or-dxf-file-5991).
+Pupil-grid batch trace → local (x,y) hits → convex hull → one closed
+POLYLINE per surface layer. LayoutRender (layout PNG) and DetectorDump (NSC
+detectors) do not replace this. System is not modified.
+
+Options: `-out <path.dxf>`, `-rays N` (default 21), `-surfaces all|1,3|1-6`,
+`-includeimage`, `-fields all|1,2`, `-wave primary|all`, `-rim`, `-file`,
+`-quiet`, `-nodialog`.
 
 ### DistortionTarget
 
@@ -189,7 +203,7 @@ Get-ChildItem extensions -Filter *.csproj -Recurse -Depth 1 |
     ForEach-Object { dotnet build $_.FullName --configuration Release }
 ```
 
-That is nine User Extensions plus the AthermalAnalysis User Analysis. csproj
+That is ten User Extensions plus the AthermalAnalysis User Analysis. csproj
 defaults stay **x64**. An x86 ribbon listing (needed on OpticStudio 2026 R1.01
 here) is an override, not a project edit:
 
@@ -209,7 +223,7 @@ on the next run.
 
 A zip at [`dist/`](dist/) installs without a SDK: extract, read `INSTALL.txt`,
 drag the `ZOS-API` folder onto the Zemax **data** folder (not into `Extensions`
-— one of the ten is a User Analysis). Unsigned; `INSTALL.txt` has `Unblock-File`.
+— one of the eleven is a User Analysis). Unsigned; `INSTALL.txt` has `Unblock-File`.
 `tools\pack.ps1` refuses a dirty tree, an Ansys binary, or a build-machine path.
 Re-pack whenever binaries change. Redistribution of compiled `.exe` files is
 Ansys's terms, not this MIT licence.
