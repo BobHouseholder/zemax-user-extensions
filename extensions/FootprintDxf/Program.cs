@@ -17,32 +17,39 @@ namespace FootprintDxf
     // detectors. Neither is a per-surface footprint envelope for mech CAD.
     // There is no ZOS-API DXF export; this writes the DXF as text.
     //
-    // For each selected surface: batch-trace a pupil grid of real rays for the
-    // chosen fields/wavelengths, collect local (x,y) intercepts that hit
-    // (ignore vignetted/missed), compute the 2D convex hull (Andrew's monotone
-    // chain), and write one closed POLYLINE+VERTEX+SEQEND per surface layer.
-    // Coordinates are local surface XY in OpticStudio lens units (usually mm).
-    // The optical system is never modified.
+    // For each selected surface: batch-trace a pupil grid plus a dense pupil-rim
+    // sample set of real rays for the chosen fields/wavelengths, collect local
+    // (x,y) intercepts that hit (ignore vignetted/missed), compute the 2D
+    // convex hull (Andrew's monotone chain), and write one closed
+    // POLYLINE+VERTEX+SEQEND per surface layer. With a dense rim, circular /
+    // elliptical footprints keep many hull verts instead of a chunky polygon
+    // from the grid alone. Coordinates are local surface XY in OpticStudio
+    // lens units (usually mm). The optical system is never modified.
     //
     // Usage:
     //   (no args)              ribbon / plugin: settings dialog, then export
     //   -out <path.dxf>        output path (default: <lens>_footprints.dxf)
     //   -file <zmx>            standalone: load file, no dialog
     //   -rays N                pupil grid density (odd, default 21)
+    //   -rimrays N             dense rim sample count (default max(128, Rays*8);
+    //                          clamp 16..1024). Always merged into the main hull.
     //   -surfaces all|1,3,5|1-6   surfaces (default all = 1..image-1)
     //   -includeimage          also include the image surface when -surfaces all
     //   -fields all|1,2        fields (default all)
     //   -wave primary|all      wavelengths (default all)
-    //   -rim                   also write denser pupil-rim polylines (RIM_SURF_N)
+    //   -rim                   also write separate pupil-rim polylines (RIM_SURF_N)
     //   -quiet                 do not auto-open the DXF after a ribbon run
     //   -nodialog              skip settings dialog in plugin mode
-    //   -selftest              run convex-hull self-check and exit (no OpticStudio)
+    //   -selftest              run convex-hull + ring-order self-check and exit
+    //                          (no OpticStudio)
 
     class Options
     {
         public string FilePath;
         public string OutPath;
         public int Rays = 21;
+        // 0 = auto → max(128, Rays*8). Explicit override via -rimrays / dialog.
+        public int RimRays = 0;
         public string Surfaces = "all";
         public bool IncludeImage;
         public string Fields = "all";
@@ -53,6 +60,14 @@ namespace FootprintDxf
         public bool SelfTest;
         public readonly HashSet<string> Explicit =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        public int EffectiveRimRays()
+        {
+            int n = RimRays > 0 ? RimRays : Math.Max(128, Rays * 8);
+            if (n < 16) n = 16;
+            if (n > 1024) n = 1024;
+            return n;
+        }
     }
 
     partial class Program
@@ -74,13 +89,20 @@ namespace FootprintDxf
             if (Opts.SelfTest)
             {
                 string detail;
-                if (ConvexHull.SelfCheck(out detail))
+                if (!ConvexHull.SelfCheck(out detail))
                 {
-                    Console.WriteLine("selftest: convex hull OK (" + detail + ")");
+                    Console.WriteLine("FATAL: selftest failed: " + detail);
+                    Environment.ExitCode = 1;
                     return;
                 }
-                Console.WriteLine("FATAL: selftest failed: " + detail);
-                Environment.ExitCode = 1;
+                Console.WriteLine("selftest: convex hull OK (" + detail + ")");
+                if (!OrderAsClosedRingSelfCheck(out detail))
+                {
+                    Console.WriteLine("FATAL: selftest failed: " + detail);
+                    Environment.ExitCode = 1;
+                    return;
+                }
+                Console.WriteLine("selftest: ring order OK (" + detail + ")");
                 return;
             }
 
@@ -112,6 +134,7 @@ namespace FootprintDxf
                     case "-out": Opts.OutPath = next(); Opts.Explicit.Add("out"); break;
                     case "-file": Opts.FilePath = next(); break;
                     case "-rays": Opts.Rays = ParseInt(next(), Opts.Rays); Opts.Explicit.Add("rays"); break;
+                    case "-rimrays": Opts.RimRays = ParseInt(next(), Opts.RimRays); Opts.Explicit.Add("rimrays"); break;
                     case "-surfaces": Opts.Surfaces = next() ?? "all"; Opts.Explicit.Add("surfaces"); break;
                     case "-includeimage": Opts.IncludeImage = true; Opts.Explicit.Add("includeimage"); break;
                     case "-fields": Opts.Fields = next() ?? "all"; Opts.Explicit.Add("fields"); break;
@@ -129,6 +152,11 @@ namespace FootprintDxf
             }
             if (Opts.Rays < 3) Opts.Rays = 3;
             if (Opts.Rays % 2 == 0) Opts.Rays++; // keep odd so a centre ray exists
+            if (Opts.Explicit.Contains("rimrays"))
+            {
+                if (Opts.RimRays < 16) Opts.RimRays = 16;
+                if (Opts.RimRays > 1024) Opts.RimRays = 1024;
+            }
         }
 
         static int ParseInt(string s, int keep)
