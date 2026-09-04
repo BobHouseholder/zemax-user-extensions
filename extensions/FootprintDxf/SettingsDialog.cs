@@ -12,7 +12,7 @@ namespace FootprintDxf
     // Cancel returns false — the caller must then write nothing (system untouched).
     class SettingsDialog : Form
     {
-        readonly TextBox _out, _rays, _surfaces, _fields;
+        readonly TextBox _out, _rays, _rimRays, _surfaces, _fields;
         readonly ComboBox _wave;
         readonly CheckBox _includeImage, _rim;
         readonly Label _hint;
@@ -54,15 +54,19 @@ namespace FootprintDxf
             Controls.Add(gOut);
             y += gOut.Height + 8;
 
-            var gTrace = new GroupBox { Text = "Ray sampling", Left = PAD, Top = y, Width = GW, Height = 140 };
+            var gTrace = new GroupBox { Text = "Ray sampling", Left = PAD, Top = y, Width = GW, Height = 168 };
             _rays = Field(gTrace, 0, "Pupil grid density (odd)", o.Rays.ToString(CI));
-            _surfaces = Field(gTrace, 1, "Surfaces (all | 1,3 | 1-6 | name)", o.Surfaces ?? "all");
-            _fields = Field(gTrace, 2, "Fields (all | 1,2)", o.Fields ?? "all");
+            string rimDefault = o.RimRays > 0
+                ? o.RimRays.ToString(CI)
+                : o.EffectiveRimRays().ToString(CI);
+            _rimRays = Field(gTrace, 1, "Dense rim rays (16..1024)", rimDefault);
+            _surfaces = Field(gTrace, 2, "Surfaces (all | 1,3 | 1-6 | name)", o.Surfaces ?? "all");
+            _fields = Field(gTrace, 3, "Fields (all | 1,2)", o.Fields ?? "all");
 
-            gTrace.Controls.Add(new Label { Text = "Wavelengths", Left = 14, Top = 22 + 3 * 28 + 3, Width = 200 });
+            gTrace.Controls.Add(new Label { Text = "Wavelengths", Left = 14, Top = 22 + 4 * 28 + 3, Width = 200 });
             _wave = new ComboBox
             {
-                Left = 220, Top = 22 + 3 * 28, Width = 240,
+                Left = 220, Top = 22 + 4 * 28, Width = 240,
                 DropDownStyle = ComboBoxStyle.DropDownList
             };
             _wave.Items.AddRange(new object[] { "all", "primary" });
@@ -80,7 +84,7 @@ namespace FootprintDxf
             };
             _rim = new CheckBox
             {
-                Text = "Also write denser pupil-rim polylines (RIM_… layers)",
+                Text = "Also write separate RIM_… layers (dense rim always used for main hull)",
                 Left = 14, Top = 48, Width = GW - 28,
                 Checked = o.Rim
             };
@@ -91,7 +95,7 @@ namespace FootprintDxf
 
             _hint = new Label
             {
-                Left = PAD + 2, Top = y, Width = GW - 4, Height = 72,
+                Left = PAD + 2, Top = y, Width = GW - 4, Height = 88,
                 ForeColor = SystemColors.GrayText
             };
             Controls.Add(_hint);
@@ -105,7 +109,7 @@ namespace FootprintDxf
             CancelButton = cancel;
             ClientSize = new Size(GW + 2 * PAD, y + 28 + PAD);
 
-            foreach (var tb in new[] { _rays, _surfaces, _fields, _out })
+            foreach (var tb in new[] { _rays, _rimRays, _surfaces, _fields, _out })
                 tb.TextChanged += (s, e) => Recompute();
             _wave.SelectedIndexChanged += (s, e) => Recompute();
             _includeImage.CheckedChanged += (s, e) => Recompute();
@@ -127,7 +131,7 @@ namespace FootprintDxf
 
         void Recompute()
         {
-            int rays;
+            int rays, rimRays;
             if (!TryI(_rays, out rays) || rays < 3)
             {
                 _hint.ForeColor = Color.Firebrick;
@@ -135,28 +139,43 @@ namespace FootprintDxf
                 _ok.Enabled = false;
                 return;
             }
+            if (!TryI(_rimRays, out rimRays) || rimRays < 16 || rimRays > 1024)
+            {
+                _hint.ForeColor = Color.Firebrick;
+                _hint.Text = "Dense rim rays must be an integer in [16, 1024].";
+                _ok.Enabled = false;
+                return;
+            }
             _ok.Enabled = true;
             _hint.ForeColor = SystemColors.GrayText;
             string wave = _wave.SelectedIndex == 1 ? "primary wavelength only" : "all wavelengths";
             string img = _includeImage.Checked ? " (incl. image)" : "";
-            string rim = _rim.Checked ? " Plus rim polylines." : "";
+            string rimExtra = _rim.Checked ? " Also writes separate RIM_… layers." : "";
             _hint.Text = string.Format(CI,
-                "Batch-trace a {0}×{0} pupil grid on surfaces [{1}]{2}, fields [{3}], {4}. " +
-                "Convex hull of local (x,y) hits → closed DXF polyline per surface. System is not modified.{5}",
-                rays, string.IsNullOrWhiteSpace(_surfaces.Text) ? "all" : _surfaces.Text.Trim(),
+                "Batch-trace a {0}×{0} pupil grid plus a dense rim ({1} samples at r=1 and r=0.99) " +
+                "on surfaces [{2}]{3}, fields [{4}], {5}. Convex hull of local (x,y) hits → closed " +
+                "DXF polyline per surface (dense rim is always in the main hull). System is not modified.{6}",
+                rays, rimRays,
+                string.IsNullOrWhiteSpace(_surfaces.Text) ? "all" : _surfaces.Text.Trim(),
                 img,
                 string.IsNullOrWhiteSpace(_fields.Text) ? "all" : _fields.Text.Trim(),
-                wave, rim);
+                wave, rimExtra);
         }
 
         void Apply(Options o)
         {
-            int rays;
+            int rays, rimRays;
             if (TryI(_rays, out rays))
             {
                 if (rays < 3) rays = 3;
                 if (rays % 2 == 0) rays++;
                 o.Rays = rays;
+            }
+            if (TryI(_rimRays, out rimRays))
+            {
+                if (rimRays < 16) rimRays = 16;
+                if (rimRays > 1024) rimRays = 1024;
+                o.RimRays = rimRays;
             }
             o.Surfaces = string.IsNullOrWhiteSpace(_surfaces.Text) ? "all" : _surfaces.Text.Trim();
             o.Fields = string.IsNullOrWhiteSpace(_fields.Text) ? "all" : _fields.Text.Trim();
@@ -175,6 +194,7 @@ namespace FootprintDxf
                 {
                     "out=" + (o.OutPath ?? ""),
                     "rays=" + o.Rays.ToString(CI),
+                    "rimrays=" + o.RimRays.ToString(CI),
                     "surfaces=" + (o.Surfaces ?? "all"),
                     "fields=" + (o.Fields ?? "all"),
                     "wave=" + (o.Wave ?? "all"),
@@ -202,6 +222,7 @@ namespace FootprintDxf
                     {
                         case "out": if (val.Length > 0) o.OutPath = val; break;
                         case "rays": if (int.TryParse(val, NumberStyles.Integer, CI, out i)) o.Rays = i; break;
+                        case "rimrays": if (int.TryParse(val, NumberStyles.Integer, CI, out i)) o.RimRays = i; break;
                         case "surfaces": if (val.Length > 0) o.Surfaces = val; break;
                         case "fields": if (val.Length > 0) o.Fields = val; break;
                         case "wave": if (val.Length > 0) o.Wave = val; break;
