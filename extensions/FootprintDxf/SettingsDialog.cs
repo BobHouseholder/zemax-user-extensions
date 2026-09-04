@@ -14,7 +14,7 @@ namespace FootprintDxf
     {
         readonly TextBox _out, _rays, _rimRays, _surfaces, _fields;
         readonly ComboBox _wave;
-        readonly CheckBox _includeImage, _rim, _writePng, _openOutputs;
+        readonly CheckBox _includeImage, _rim, _perField, _global, _aperture, _writePng, _openOutputs;
         readonly Label _hint;
         readonly Button _ok;
 
@@ -75,7 +75,7 @@ namespace FootprintDxf
             Controls.Add(gTrace);
             y += gTrace.Height + 8;
 
-            var gFlags = new GroupBox { Text = "Options", Left = PAD, Top = y, Width = GW, Height = 132 };
+            var gFlags = new GroupBox { Text = "Options", Left = PAD, Top = y, Width = GW, Height = 210 };
             _includeImage = new CheckBox
             {
                 Text = "Include image surface when Surfaces = all",
@@ -88,20 +88,41 @@ namespace FootprintDxf
                 Left = 14, Top = 48, Width = GW - 28,
                 Checked = o.Rim
             };
+            _perField = new CheckBox
+            {
+                Text = "Also write per-field hull layers SURF_n_Ff (union SURF_n kept)",
+                Left = 14, Top = 74, Width = GW - 28,
+                Checked = o.PerField
+            };
+            _global = new CheckBox
+            {
+                Text = "Global / decentered frame (GetGlobalMatrix; stack surfaces in one drawing)",
+                Left = 14, Top = 100, Width = GW - 28,
+                Checked = o.Global
+            };
+            _aperture = new CheckBox
+            {
+                Text = "Draw clear-aperture overlays (APER_SURF_n)",
+                Left = 14, Top = 126, Width = GW - 28,
+                Checked = o.Aperture
+            };
             _writePng = new CheckBox
             {
                 Text = "Write PNG preview",
-                Left = 14, Top = 74, Width = GW - 28,
+                Left = 14, Top = 152, Width = GW - 28,
                 Checked = !o.NoPng
             };
             _openOutputs = new CheckBox
             {
                 Text = "Open outputs when done",
-                Left = 14, Top = 100, Width = GW - 28,
+                Left = 14, Top = 178, Width = GW - 28,
                 Checked = !o.Quiet
             };
             gFlags.Controls.Add(_includeImage);
             gFlags.Controls.Add(_rim);
+            gFlags.Controls.Add(_perField);
+            gFlags.Controls.Add(_global);
+            gFlags.Controls.Add(_aperture);
             gFlags.Controls.Add(_writePng);
             gFlags.Controls.Add(_openOutputs);
             Controls.Add(gFlags);
@@ -109,7 +130,7 @@ namespace FootprintDxf
 
             _hint = new Label
             {
-                Left = PAD + 2, Top = y, Width = GW - 4, Height = 104,
+                Left = PAD + 2, Top = y, Width = GW - 4, Height = 128,
                 ForeColor = SystemColors.GrayText
             };
             Controls.Add(_hint);
@@ -128,6 +149,9 @@ namespace FootprintDxf
             _wave.SelectedIndexChanged += (s, e) => Recompute();
             _includeImage.CheckedChanged += (s, e) => Recompute();
             _rim.CheckedChanged += (s, e) => Recompute();
+            _perField.CheckedChanged += (s, e) => Recompute();
+            _global.CheckedChanged += (s, e) => Recompute();
+            _aperture.CheckedChanged += (s, e) => Recompute();
             _writePng.CheckedChanged += (s, e) => Recompute();
             _openOutputs.CheckedChanged += (s, e) => Recompute();
             Recompute();
@@ -169,19 +193,30 @@ namespace FootprintDxf
             string rimExtra = _rim.Checked
                 ? " Also writes per-field RIM_..._F{f} layers (reuses rim@1; no second trace)."
                 : "";
+            string pfExtra = _perField.Checked
+                ? " Also writes per-field SURF_n_Ff hulls (union SURF_n kept)."
+                : "";
+            string globNote = _global.Checked
+                ? " Coordinates: global XY via GetGlobalMatrix (Z ignored)."
+                : " Coordinates: local surface XY.";
+            string aperNote = _aperture.Checked
+                ? " Also draws APER_SURF_n clear-aperture overlays."
+                : "";
             string pngNote = _writePng.Checked
                 ? " Also writes a PNG preview beside the DXF."
                 : " PNG preview skipped.";
             string openNote = _openOutputs.Checked ? "" : " Outputs will not auto-open.";
             _hint.Text = string.Format(CI,
                 "Batch-trace a {0}x{0} pupil grid plus a dense rim ({1} samples at r=1 and r=0.99) " +
-                "on surfaces [{2}]{3}, fields [{4}], {5}. Convex hull of local (x,y) hits -> closed " +
-                "DXF polyline per surface (dense rim is always in the main hull).{6}{7}{8} System is not modified.",
+                "on surfaces [{2}]{3}, fields [{4}], {5}. Convex hull of (x,y) hits -> closed " +
+                "DXF polyline per surface (dense rim is always in the main hull). " +
+                "Note: convex hull overestimates concave vignetted shapes." +
+                "{6}{7}{8}{9}{10}{11} System is not modified.",
                 rays, rimRays,
                 string.IsNullOrWhiteSpace(_surfaces.Text) ? "all" : _surfaces.Text.Trim(),
                 img,
                 string.IsNullOrWhiteSpace(_fields.Text) ? "all" : _fields.Text.Trim(),
-                wave, rimExtra, pngNote, openNote);
+                wave, rimExtra, pfExtra, globNote, aperNote, pngNote, openNote);
         }
 
         void Apply(Options o)
@@ -204,6 +239,12 @@ namespace FootprintDxf
             o.Wave = _wave.SelectedIndex == 1 ? "primary" : "all";
             o.IncludeImage = _includeImage.Checked;
             o.Rim = _rim.Checked;
+            if (!o.Explicit.Contains("perfield"))
+                o.PerField = _perField.Checked;
+            if (!o.Explicit.Contains("global"))
+                o.Global = _global.Checked;
+            if (!o.Explicit.Contains("aperture"))
+                o.Aperture = _aperture.Checked;
             // Map checkboxes -> NoPng / Quiet. Explicit CLI still wins (LoadLastRun + no dialog override of Explicit).
             if (!o.Explicit.Contains("nopng"))
                 o.NoPng = !_writePng.Checked;
@@ -227,6 +268,9 @@ namespace FootprintDxf
                     "wave=" + (o.Wave ?? "all"),
                     "includeimage=" + (o.IncludeImage ? "1" : "0"),
                     "rim=" + (o.Rim ? "1" : "0"),
+                    "perfield=" + (o.PerField ? "1" : "0"),
+                    "global=" + (o.Global ? "1" : "0"),
+                    "aperture=" + (o.Aperture ? "1" : "0"),
                     "writepng=" + (o.NoPng ? "0" : "1"),
                     "openoutputs=" + (o.Quiet ? "0" : "1")
                 }));
@@ -245,7 +289,7 @@ namespace FootprintDxf
                     if (eq <= 0) continue;
                     string k = line.Substring(0, eq).Trim().ToLowerInvariant();
                     string val = line.Substring(eq + 1).Trim();
-                    // Explicit CLI wins. writepng ↔ nopng, openoutputs ↔ quiet.
+                    // Explicit CLI wins. writepng <-> nopng, openoutputs <-> quiet.
                     if (k == "writepng" && o.Explicit.Contains("nopng")) continue;
                     if (k == "openoutputs" && o.Explicit.Contains("quiet")) continue;
                     if (o.Explicit.Contains(k)) continue;
@@ -260,6 +304,9 @@ namespace FootprintDxf
                         case "wave": if (val.Length > 0) o.Wave = val; break;
                         case "includeimage": o.IncludeImage = val == "1"; break;
                         case "rim": o.Rim = val == "1"; break;
+                        case "perfield": o.PerField = val == "1"; break;
+                        case "global": o.Global = val == "1"; break;
+                        case "aperture": o.Aperture = val == "1"; break;
                         case "writepng": o.NoPng = val != "1"; break;
                         case "openoutputs": o.Quiet = val != "1"; break;
                         case "nopng": o.NoPng = val == "1"; break; // legacy alias
