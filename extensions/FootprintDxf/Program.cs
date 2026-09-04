@@ -7,7 +7,7 @@ using System.Text;
 
 namespace FootprintDxf
 {
-    // FootprintDxf — ZOS-API User Extension.
+    // FootprintDxf - ZOS-API User Extension.
     //
     // Exports the envelope of beam footprints on sequential surfaces to a CAD
     // DXF (R12 / AC1009 ASCII). Harvey.Spencer's forum ask:
@@ -25,7 +25,13 @@ namespace FootprintDxf
     // POLYLINE+VERTEX+SEQEND per surface layer. With a dense rim, circular /
     // elliptical footprints keep many hull verts instead of a chunky polygon
     // from the grid alone. Coordinates are local surface XY in OpticStudio
-    // lens units (usually mm). The optical system is never modified.
+    // lens units; $INSUNITS is mapped from SystemData.Units.LensUnits (mm/cm/
+    // in/m). Layers are always SURF_{n} or SURF_{n}_{comment}. The optical
+    // system is never modified.
+    //
+    // Dense rim@1 is traced once and merged with grid+r=0.99 for the hull.
+    // Optional -rim reuses those rim@1 hits for per-field RIM_SURF_{n}_F{f}
+    // layers (no second TraceHits; fields are never atan2-merged into one ring).
     //
     // Usage:
     //   (no args)              ribbon / plugin: settings dialog, then export
@@ -38,19 +44,20 @@ namespace FootprintDxf
     //   -includeimage          also include the image surface when -surfaces all
     //   -fields all|1,2        fields (default all)
     //   -wave primary|all      wavelengths (default all)
-    //   -rim                   also write separate pupil-rim polylines (RIM_SURF_N)
+    //   -rim                   also write per-field pupil-rim polylines
+    //                          (RIM_SURF_N_Ff); reuses rim@1 (no second trace)
     //   -nopng                 skip writing the PNG preview beside the DXF
     //   -quiet                 do not auto-open DXF/PNG after a ribbon run
     //   -nodialog              skip settings dialog in plugin mode
-    //   -selftest              run convex-hull + ring-order self-check and exit
-    //                          (no OpticStudio)
+    //   -selftest              run convex-hull + ring-order + layer/units
+    //                          self-check and exit (no OpticStudio)
 
     class Options
     {
         public string FilePath;
         public string OutPath;
         public int Rays = 21;
-        // 0 = auto → max(128, Rays*8). Explicit override via -rimrays / dialog.
+        // 0 = auto -> max(128, Rays*8). Explicit override via -rimrays / dialog.
         public int RimRays = 0;
         public string Surfaces = "all";
         public bool IncludeImage;
@@ -106,6 +113,20 @@ namespace FootprintDxf
                     return;
                 }
                 Console.WriteLine("selftest: ring order OK (" + detail + ")");
+                if (!LayerNameSelfCheck(out detail))
+                {
+                    Console.WriteLine("FATAL: selftest failed: " + detail);
+                    Environment.ExitCode = 1;
+                    return;
+                }
+                Console.WriteLine("selftest: layer names OK (" + detail + ")");
+                if (!UnitsMapSelfCheck(out detail))
+                {
+                    Console.WriteLine("FATAL: selftest failed: " + detail);
+                    Environment.ExitCode = 1;
+                    return;
+                }
+                Console.WriteLine("selftest: units/text OK (" + detail + ")");
                 return;
             }
 
@@ -144,7 +165,7 @@ namespace FootprintDxf
                     case "-wave": Opts.Wave = next() ?? "all"; Opts.Explicit.Add("wave"); break;
                     case "-rim": Opts.Rim = true; Opts.Explicit.Add("rim"); break;
                     case "-nopng": Opts.NoPng = true; Opts.Explicit.Add("nopng"); break;
-                    case "-quiet": Opts.Quiet = true; break;
+                    case "-quiet": Opts.Quiet = true; Opts.Explicit.Add("quiet"); break;
                     case "-nodialog": Opts.NoDialog = true; break;
                     case "-selftest": Opts.SelfTest = true; break;
                     default:
