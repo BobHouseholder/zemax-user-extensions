@@ -8,6 +8,44 @@ namespace FootprintDxf
 {
     partial class Program
     {
+        // Map OpticStudio lens units -> AutoCAD $INSUNITS. Returns false if unknown
+        // (caller should omit or set 0 and stamp the unit name in title/TEXT).
+        static bool TryMapInsUnits(ZOSAPI.SystemData.ZemaxSystemUnits lensUnits,
+            out int insUnits, out string label)
+        {
+            switch (lensUnits)
+            {
+                case ZOSAPI.SystemData.ZemaxSystemUnits.Millimeters:
+                    insUnits = 4; label = "mm"; return true;
+                case ZOSAPI.SystemData.ZemaxSystemUnits.Centimeters:
+                    insUnits = 5; label = "cm"; return true;
+                case ZOSAPI.SystemData.ZemaxSystemUnits.Inches:
+                    insUnits = 1; label = "in"; return true;
+                case ZOSAPI.SystemData.ZemaxSystemUnits.Meters:
+                    insUnits = 6; label = "m"; return true;
+                default:
+                    insUnits = 0; label = lensUnits.ToString(); return false;
+            }
+        }
+
+        // Pure helper for -selftest (no ZOS). Mirrors TryMapInsUnits mapping.
+        static bool TryMapInsUnitsByName(string unitName, out int insUnits, out string label)
+        {
+            switch ((unitName ?? "").Trim().ToLowerInvariant())
+            {
+                case "millimeters": case "mm":
+                    insUnits = 4; label = "mm"; return true;
+                case "centimeters": case "cm":
+                    insUnits = 5; label = "cm"; return true;
+                case "inches": case "in":
+                    insUnits = 1; label = "in"; return true;
+                case "meters": case "m":
+                    insUnits = 6; label = "m"; return true;
+                default:
+                    insUnits = 0; label = unitName ?? "unknown"; return false;
+            }
+        }
+
         static List<ConvexHull.Pt> TraceHits(
             ZOSAPI.IOpticalSystem sys,
             int surf,
@@ -17,39 +55,56 @@ namespace FootprintDxf
             double maxR,
             ZOSAPI.SystemData.IFields fields)
         {
+            var byField = TraceHitsByField(sys, surf, fieldList, waveList, samples, maxR, fields);
             var hits = new List<ConvexHull.Pt>();
-            int nRays = fieldList.Count * waveList.Count * samples.Count;
-            if (nRays == 0) return hits;
+            foreach (var kv in byField)
+                hits.AddRange(kv.Value);
+            return hits;
+        }
+
+        // Same batching as TraceHits, but groups successful hits by field index so
+        // rim layers can be written per-field without a second TraceHits.
+        static Dictionary<int, List<ConvexHull.Pt>> TraceHitsByField(
+            ZOSAPI.IOpticalSystem sys,
+            int surf,
+            List<int> fieldList,
+            List<int> waveList,
+            List<(double px, double py)> samples,
+            double maxR,
+            ZOSAPI.SystemData.IFields fields)
+        {
+            var byField = new Dictionary<int, List<ConvexHull.Pt>>();
+            foreach (int fi in fieldList)
+                byField[fi] = new List<ConvexHull.Pt>();
+
+            int nF = fieldList.Count, nW = waveList.Count, nS = samples.Count;
+            int nRays = nF * nW * nS;
+            if (nRays == 0) return byField;
 
             // Cap a single batch to keep memory sane on huge grids.
             const int batchCap = 20000;
             int offset = 0;
             while (offset < nRays)
             {
-                if (Cancelled()) return hits;
+                if (Cancelled()) return byField;
                 int thisBatch = Math.Min(batchCap, nRays - offset);
                 var trace = sys.Tools.OpenBatchRayTrace();
                 try
                 {
                     var data = trace.CreateNormUnpol(thisBatch, ZOSAPI.Tools.RayTrace.RaysType.Real, surf);
-                    int added = 0;
-                    int skip = offset;
-                    foreach (int fi in fieldList)
+                    // Linear index -> (field, wave, sample); no O(n²) skip re-scan.
+                    for (int bi = 0; bi < thisBatch; bi++)
                     {
-                        var f = fields.GetField(fi);
+                        int idx = offset + bi;
+                        int fi = idx / (nW * nS);
+                        int rem = idx % (nW * nS);
+                        int wi = rem / nS;
+                        int si = rem % nS;
+                        var f = fields.GetField(fieldList[fi]);
                         double hx = f.X / maxR, hy = f.Y / maxR;
-                        foreach (int w in waveList)
-                        {
-                            foreach (var s in samples)
-                            {
-                                if (skip > 0) { skip--; continue; }
-                                if (added >= thisBatch) goto filled;
-                                data.AddRay(w, hx, hy, s.px, s.py, ZOSAPI.Tools.RayTrace.OPDMode.None);
-                                added++;
-                            }
-                        }
+                        data.AddRay(waveList[wi], hx, hy, samples[si].px, samples[si].py,
+                            ZOSAPI.Tools.RayTrace.OPDMode.None);
                     }
-                filled:
                     trace.RunAndWaitForCompletion();
                     data.StartReadingResults();
                     int rayNum, errCode, vigCode;
@@ -59,13 +114,18 @@ namespace FootprintDxf
                     {
                         if (errCode != 0) continue;
                         if (vigCode != 0) continue; // ignore vignetted
-                        hits.Add(new ConvexHull.Pt(x, y));
+                        // rayNum is 1-based within the batch.
+                        int idx = offset + (rayNum - 1);
+                        if (idx < 0 || idx >= nRays) continue;
+                        int fi = idx / (nW * nS);
+                        if (fi < 0 || fi >= nF) continue;
+                        byField[fieldList[fi]].Add(new ConvexHull.Pt(x, y));
                     }
                 }
                 finally { trace.Close(); }
                 offset += thisBatch;
             }
-            return hits;
+            return byField;
         }
 
         static List<(double px, double py)> BuildPupilGrid(int n)
@@ -96,18 +156,8 @@ namespace FootprintDxf
             return list;
         }
 
-        // Dense rim always used for the main SURF hull: full rim at r=1 plus a
-        // near-edge ring at r=0.99 (helps numerical vignetting). Same angular count.
-        static List<(double px, double py)> BuildDenseRimSamples(int n)
-        {
-            var list = new List<(double, double)>(n * 2);
-            list.AddRange(BuildPupilRim(n, 1.0));
-            list.AddRange(BuildPupilRim(n, 0.99));
-            return list;
-        }
-
         // Sort hits by atan2 around the centroid into a closed ring. Used for
-        // optional -rim RIM_… layers only (main SURF layers stay convex hull).
+        // optional -rim RIM_... layers only (main SURF layers stay convex hull).
         // Drops exact consecutive duplicates after sorting.
         static List<ConvexHull.Pt> OrderAsClosedRing(List<ConvexHull.Pt> hits)
         {
@@ -192,11 +242,60 @@ namespace FootprintDxf
             return true;
         }
 
+        // Always include surface index. Prefer SURF_{n} or SURF_{n}_{sanitizedComment}.
         static string LayerName(int surf, string comment)
         {
+            string name = "SURF_" + surf.ToString(CI);
             if (!string.IsNullOrWhiteSpace(comment))
-                return DxfWriter.SanitizeLayer(comment);
-            return "SURF_" + surf.ToString(CI);
+            {
+                string sanitized = DxfWriter.SanitizeLayer(comment);
+                if (!string.IsNullOrEmpty(sanitized) &&
+                    !sanitized.Equals("SURF", StringComparison.OrdinalIgnoreCase))
+                    name = name + "_" + sanitized;
+            }
+            return DxfWriter.SanitizeLayer(name);
+        }
+
+        static bool LayerNameSelfCheck(out string detail)
+        {
+            string a = LayerName(3, null);
+            if (a != "SURF_3") { detail = "null comment -> SURF_3, got " + a; return false; }
+            string b = LayerName(3, "");
+            if (b != "SURF_3") { detail = "empty comment -> SURF_3, got " + b; return false; }
+            string c = LayerName(5, "Front Element");
+            if (!c.StartsWith("SURF_5_", StringComparison.Ordinal))
+            { detail = "commented layer must start SURF_5_, got " + c; return false; }
+            if (!c.Contains("Front") && !c.Contains("Element"))
+            { detail = "sanitized comment missing from " + c; return false; }
+            var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            string u1 = DxfWriter.EnsureUniqueLayer("SURF_1", used);
+            string u2 = DxfWriter.EnsureUniqueLayer("SURF_1", used);
+            if (u1 != "SURF_1" || u2 != "SURF_1_2")
+            { detail = "uniqueness expected SURF_1 / SURF_1_2, got " + u1 + " / " + u2; return false; }
+            detail = "ok";
+            return true;
+        }
+
+        static bool UnitsMapSelfCheck(out string detail)
+        {
+            int iu; string lab;
+            if (!TryMapInsUnitsByName("Millimeters", out iu, out lab) || iu != 4 || lab != "mm")
+            { detail = "mm map failed"; return false; }
+            if (!TryMapInsUnitsByName("Inches", out iu, out lab) || iu != 1 || lab != "in")
+            { detail = "in map failed"; return false; }
+            if (!TryMapInsUnitsByName("Centimeters", out iu, out lab) || iu != 5 || lab != "cm")
+            { detail = "cm map failed"; return false; }
+            if (!TryMapInsUnitsByName("Meters", out iu, out lab) || iu != 6 || lab != "m")
+            { detail = "m map failed"; return false; }
+            if (TryMapInsUnitsByName("Furlongs", out iu, out lab) || iu != 0)
+            { detail = "unknown should be false/0"; return false; }
+            string folded = DxfWriter.SanitizeText("Café - S1");
+            if (folded.IndexOf((char)0xE9) >= 0)
+            { detail = "SanitizeText left Latin-1: " + folded; return false; }
+            if (string.IsNullOrEmpty(folded) || folded.IndexOf('S') < 0)
+            { detail = "SanitizeText emptied text: " + folded; return false; }
+            detail = "ok";
+            return true;
         }
     }
 }
