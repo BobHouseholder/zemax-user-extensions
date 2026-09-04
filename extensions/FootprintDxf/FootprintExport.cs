@@ -53,8 +53,8 @@ namespace FootprintDxf
 
             int rimN = Opts.EffectiveRimRays();
             var pupilSamples = BuildPupilGrid(Opts.Rays);
-            // Dense rim: outer rim@1 traced once (reused for -rim); near-edge 0.99
-            // merged with the grid for the hull. No second TraceHits of rim@1.
+            // Dense rim: outer rim@1 traced once (reused for -rim / -perfield); near-edge
+            // 0.99 merged with the grid for the hull. No second TraceHits of rim@1.
             var rim1Samples = BuildPupilRim(rimN, 1.0);
             var rim099Samples = BuildPupilRim(rimN, 0.99);
             var innerSamples = new List<(double px, double py)>(pupilSamples.Count + rim099Samples.Count);
@@ -68,9 +68,23 @@ namespace FootprintDxf
                 "Surfaces: {0}  Fields: {1}  Waves: {2}  Pupil grid: {3}x{3} ({4} in-circle)  Rim: {5}x2 (r=1+0.99)",
                 string.Join(",", surfList), fieldList.Count, waveList.Count,
                 Opts.Rays, pupilSamples.Count, rimN));
-            Say(string.Format(CI,
-                "Coords: local surface XY (lens units = {0}). $INSUNITS={1}. System is not modified.",
-                unitsLabel, insUnitsCode));
+            if (Opts.Global)
+            {
+                Say(string.Format(CI,
+                    "Coords: GLOBAL frame via LDE.GetGlobalMatrix (lens units = {0}). " +
+                    "2D DXF uses global X/Y; Z ignored. $INSUNITS={1}. System is not modified.",
+                    unitsLabel, insUnitsCode));
+            }
+            else
+            {
+                Say(string.Format(CI,
+                    "Coords: local surface XY (lens units = {0}). $INSUNITS={1}. System is not modified.",
+                    unitsLabel, insUnitsCode));
+            }
+            if (Opts.PerField)
+                Say("Per-field: also writing SURF_{n}_F{f} hull layers (union SURF_{n} kept).");
+            if (Opts.Aperture)
+                Say("Aperture: writing APER_SURF_{n} clear-aperture overlays when available.");
 
             string outPath = Opts.OutPath;
             if (string.IsNullOrEmpty(outPath))
@@ -96,19 +110,49 @@ namespace FootprintDxf
                 string comment = null;
                 try { comment = (lde.GetSurfaceAt(surf).Comment ?? "").Trim(); } catch { }
 
-                // grid + r=0.99 (all fields), then rim@1 once (by field) - merge for hull.
-                var innerHits = TraceHits(sys, surf, fieldList, waveList, innerSamples, maxR, fields);
+                GlobalFrame frame = default(GlobalFrame);
+                bool useGlobal = false;
+                if (Opts.Global)
+                {
+                    frame = TryGetGlobalFrame(lde, surf);
+                    if (!frame.Valid)
+                    {
+                        Console.WriteLine(string.Format(CI,
+                            "WARNING: surface {0} - GetGlobalMatrix failed; using local XY for this surface.",
+                            surf));
+                    }
+                    else useGlobal = true;
+                }
+
+                // grid + r=0.99 by field, then rim@1 by field - merge for union hull.
+                // Partitioned hits also feed -perfield / -rim without a second TraceHits.
+                var innerByField = TraceHitsByField(sys, surf, fieldList, waveList, innerSamples, maxR, fields);
                 if (Cancelled()) return;
                 var rimByField = TraceHitsByField(sys, surf, fieldList, waveList, rim1Samples, maxR, fields);
                 if (Cancelled()) return;
 
-                var hits = new List<ConvexHull.Pt>(innerHits.Count + rim1Samples.Count * fieldList.Count);
-                hits.AddRange(innerHits);
-                int rimHitTotal = 0;
-                foreach (var kv in rimByField)
+                if (useGlobal)
                 {
-                    hits.AddRange(kv.Value);
-                    rimHitTotal += kv.Value.Count;
+                    innerByField = TransformHitsByFieldXY(innerByField, frame);
+                    rimByField = TransformHitsByFieldXY(rimByField, frame);
+                }
+
+                var hits = new List<ConvexHull.Pt>();
+                int innerHitTotal = 0, rimHitTotal = 0;
+                foreach (int fi in fieldList)
+                {
+                    List<ConvexHull.Pt> ih;
+                    if (innerByField.TryGetValue(fi, out ih) && ih != null)
+                    {
+                        hits.AddRange(ih);
+                        innerHitTotal += ih.Count;
+                    }
+                    List<ConvexHull.Pt> rh;
+                    if (rimByField.TryGetValue(fi, out rh) && rh != null)
+                    {
+                        hits.AddRange(rh);
+                        rimHitTotal += rh.Count;
+                    }
                 }
 
                 var hull = ConvexHull.Compute(hits);
@@ -129,7 +173,39 @@ namespace FootprintDxf
                     });
                     Say(string.Format(CI,
                         "  Surf {0}: {1} hits (inner {2} + rim@1 {3}) -> hull {4} verts  layer={5}",
-                        surf, hits.Count, innerHits.Count, rimHitTotal, hull.Count, layer));
+                        surf, hits.Count, innerHitTotal, rimHitTotal, hull.Count, layer));
+                }
+
+                // Optional per-field SURF_{n}_F{f} hulls (union layer above still written).
+                if (Opts.PerField)
+                {
+                    foreach (int fi in fieldList)
+                    {
+                        if (Cancelled()) return;
+                        var fieldHits = new List<ConvexHull.Pt>();
+                        List<ConvexHull.Pt> ih, rh;
+                        if (innerByField.TryGetValue(fi, out ih) && ih != null) fieldHits.AddRange(ih);
+                        if (rimByField.TryGetValue(fi, out rh) && rh != null) fieldHits.AddRange(rh);
+                        var fHull = ConvexHull.Compute(fieldHits);
+                        if (fHull.Count < 3)
+                        {
+                            Console.WriteLine(string.Format(CI,
+                                "WARNING: surface {0} field {1} - no usable per-field hull ({2} hit(s)); skipping.",
+                                surf, fi, fieldHits.Count));
+                            continue;
+                        }
+                        string fLayer = DxfWriter.EnsureUniqueLayer(
+                            layer + "_F" + fi.ToString(CI), usedLayers);
+                        polys.Add(new DxfWriter.LayerPoly
+                        {
+                            LayerName = fLayer,
+                            Comment = "S" + surf + " F" + fi.ToString(CI),
+                            Vertices = fHull
+                        });
+                        Say(string.Format(CI,
+                            "  Surf {0} field {1}: {2} hits -> hull {3} verts  layer={4}",
+                            surf, fi, fieldHits.Count, fHull.Count, fLayer));
+                    }
                 }
 
                 // Optional RIM_... layers: reuse rim@1 hits - one layer per field.
@@ -157,6 +233,34 @@ namespace FootprintDxf
                             surf, fi, rimHits.Count, rimPoly.Count, rimLayer));
                     }
                 }
+
+                // Optional clear-aperture overlay (same frame as footprints).
+                if (Opts.Aperture)
+                {
+                    List<ConvexHull.Pt> aperVerts;
+                    string aperKind, aperWarn;
+                    if (!TryBuildApertureOverlay(lde, surf, out aperVerts, out aperKind, out aperWarn))
+                    {
+                        Console.WriteLine(string.Format(CI,
+                            "WARNING: surface {0} - aperture overlay skipped ({1}).",
+                            surf, aperWarn ?? "no data"));
+                    }
+                    else
+                    {
+                        if (useGlobal)
+                            aperVerts = TransformHitsXY(aperVerts, frame);
+                        string aperLayer = DxfWriter.EnsureUniqueLayer("APER_" + layer, usedLayers);
+                        polys.Add(new DxfWriter.LayerPoly
+                        {
+                            LayerName = aperLayer,
+                            Comment = "aper S" + surf + " " + aperKind,
+                            Vertices = aperVerts
+                        });
+                        Say(string.Format(CI,
+                            "  Surf {0}: aperture {1} -> {2} verts  layer={3}",
+                            surf, aperKind, aperVerts.Count, aperLayer));
+                    }
+                }
             }
 
             if (Cancelled()) return;
@@ -166,7 +270,8 @@ namespace FootprintDxf
 
             string lensName = Path.GetFileName(
                 string.IsNullOrEmpty(sys.SystemFile) ? "(untitled)" : sys.SystemFile);
-            string title = "FootprintDxf " + lensName + " [" + unitsLabel + "]";
+            string title = "FootprintDxf " + lensName + " [" + unitsLabel + "]"
+                + (Opts.Global ? " [global XY]" : "");
             // Always pass insUnitsCode (0 when unknown - stamped in title above).
             DxfWriter.Write(outPath, polys, title, insUnitsCode);
             Say("DXF written to: " + outPath);
