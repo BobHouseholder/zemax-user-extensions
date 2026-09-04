@@ -84,23 +84,112 @@ namespace FootprintDxf
             return list;
         }
 
-        static List<(double px, double py)> BuildPupilRim(int n)
+        // Angular samples on a circle of the given normalised pupil radius.
+        static List<(double px, double py)> BuildPupilRim(int n, double radius = 1.0)
         {
             var list = new List<(double, double)>(n);
             for (int i = 0; i < n; i++)
             {
                 double a = 2.0 * Math.PI * i / n;
-                list.Add((Math.Cos(a), Math.Sin(a)));
+                list.Add((radius * Math.Cos(a), radius * Math.Sin(a)));
             }
             return list;
         }
 
-        // For rim samples traced across many fields/waves the hit cloud is not
-        // ordered; take the convex hull of rim hits as the closed ring (same
-        // envelope product, denser when rim alone is requested with the grid).
+        // Dense rim always used for the main SURF hull: full rim at r=1 plus a
+        // near-edge ring at r=0.99 (helps numerical vignetting). Same angular count.
+        static List<(double px, double py)> BuildDenseRimSamples(int n)
+        {
+            var list = new List<(double, double)>(n * 2);
+            list.AddRange(BuildPupilRim(n, 1.0));
+            list.AddRange(BuildPupilRim(n, 0.99));
+            return list;
+        }
+
+        // Sort hits by atan2 around the centroid into a closed ring. Used for
+        // optional -rim RIM_… layers only (main SURF layers stay convex hull).
+        // Drops exact consecutive duplicates after sorting.
         static List<ConvexHull.Pt> OrderAsClosedRing(List<ConvexHull.Pt> hits)
         {
-            return ConvexHull.Compute(hits);
+            if (hits == null || hits.Count == 0) return new List<ConvexHull.Pt>();
+            double cx = 0, cy = 0;
+            for (int i = 0; i < hits.Count; i++)
+            {
+                cx += hits[i].X;
+                cy += hits[i].Y;
+            }
+            cx /= hits.Count;
+            cy /= hits.Count;
+
+            var ordered = new List<ConvexHull.Pt>(hits);
+            ordered.Sort((a, b) =>
+            {
+                double aa = Math.Atan2(a.Y - cy, a.X - cx);
+                double bb = Math.Atan2(b.Y - cy, b.X - cx);
+                int c = aa.CompareTo(bb);
+                if (c != 0) return c;
+                // Stable tie-break for identical angles.
+                c = a.X.CompareTo(b.X);
+                return c != 0 ? c : a.Y.CompareTo(b.Y);
+            });
+
+            var ring = new List<ConvexHull.Pt>(ordered.Count);
+            for (int i = 0; i < ordered.Count; i++)
+            {
+                var p = ordered[i];
+                if (ring.Count > 0
+                    && ring[ring.Count - 1].X == p.X
+                    && ring[ring.Count - 1].Y == p.Y)
+                    continue;
+                ring.Add(p);
+            }
+            // Also drop wrap-around duplicate (first == last).
+            if (ring.Count >= 2
+                && ring[0].X == ring[ring.Count - 1].X
+                && ring[0].Y == ring[ring.Count - 1].Y)
+                ring.RemoveAt(ring.Count - 1);
+            return ring;
+        }
+
+        // Scrambled unit-circle samples must sort by atan2 around the input
+        // centroid; exact consecutive duplicates must be dropped.
+        static bool OrderAsClosedRingSelfCheck(out string detail)
+        {
+            double s = Math.Sqrt(0.5);
+            var pts = new List<ConvexHull.Pt>
+            {
+                new ConvexHull.Pt(0, 1),
+                new ConvexHull.Pt(-s, -s),
+                new ConvexHull.Pt(1, 0),
+                new ConvexHull.Pt(s, s),
+                new ConvexHull.Pt(-1, 0),
+                new ConvexHull.Pt(0, -1),
+                new ConvexHull.Pt(-s, s),
+                new ConvexHull.Pt(s, -s),
+                new ConvexHull.Pt(1, 0), // duplicate of east
+            };
+            double cx = 0, cy = 0;
+            for (int i = 0; i < pts.Count; i++) { cx += pts[i].X; cy += pts[i].Y; }
+            cx /= pts.Count; cy /= pts.Count;
+
+            var ring = OrderAsClosedRing(pts);
+            if (ring.Count != 8)
+            {
+                detail = "expected 8 ring verts after dedupe, got " + ring.Count;
+                return false;
+            }
+            for (int i = 1; i < ring.Count; i++)
+            {
+                double a0 = Math.Atan2(ring[i - 1].Y - cy, ring[i - 1].X - cx);
+                double a1 = Math.Atan2(ring[i].Y - cy, ring[i].X - cx);
+                if (a1 < a0 - 1e-12)
+                {
+                    detail = "ring not angle-ordered at index " + i;
+                    return false;
+                }
+            }
+            detail = "ok";
+            return true;
         }
 
         static string LayerName(int surf, string comment)
