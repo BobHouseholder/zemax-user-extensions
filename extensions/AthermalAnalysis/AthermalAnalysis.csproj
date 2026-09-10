@@ -32,6 +32,8 @@
       repo has already paid for more than once.
     -->
     <Compile Include="..\AthermalScan\Program.cs" />
+    <Compile Include="..\AthermalScan\Program.Analyze.cs" />
+    <Compile Include="..\AthermalScan\Program.Thermal.cs" />
     <Compile Include="..\AthermalScan\Reports.cs" />
     <Compile Include="..\AthermalScan\ScanSettingsDialog.cs" />
     <Compile Include="..\Shared\ZemaxLocator.cs" />
