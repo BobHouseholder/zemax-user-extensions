@@ -38,9 +38,7 @@
 # licence position rests on the zip containing nothing but our own IL.
 #
 # See the Releases section of the README before publishing anything this produces.
-# The repository's stated position is that no binary is published; this script
-# exists so that cutting one is a repeatable operation rather than an improvised
-# one, not because the position has changed.
+# Publishes via dist\*.zip and GitHub Releases. This script is the repeatable cut step.
 
 [CmdletBinding()]
 param(
