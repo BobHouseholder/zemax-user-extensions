@@ -1,4 +1,4 @@
-# Zemax OpticStudio User Extensions
+﻿# Zemax OpticStudio User Extensions
 
 ZOS-API add-ins for Ansys Zemax OpticStudio 2026 R1.01. Each is a self-contained
 C# (.NET Framework 4.8) console app. Build output deploys to
@@ -14,7 +14,7 @@ the edits live.
 **Terminate is honoured by six of the eleven.** AthermalScan, DetectorDump,
 EquivalentGlassFinder, LayoutRender, GpimGhostReduce and FootprintDxf poll
 `TerminateRequested` inside their loops. CryoGlass, DistortionTarget, MoldStress,
-ReverseSystem and the AthermalAnalysis window do not — Cancel does nothing there. That gap matters
+ReverseSystem and the AthermalAnalysis window do not â€” Cancel does nothing there. That gap matters
 most on DistortionTarget and MoldStress. OpticStudio's template checks the flag
 once before your code runs, which is why checking it is not the same as honouring
 it.
@@ -52,7 +52,7 @@ Options: `-catalog NAME`, `-includeObsolete`, `-report`, `-reopt`, `-save`,
 
 ### ReverseSystem
 
-Reverses a sequential system in place — refractive or reflective, including
+Reverses a sequential system in place â€” refractive or reflective, including
 coordinate breaks, negative-thickness virtual gaps, folds and double-pass Mangin
 elements, which built-in Reverse Elements does not
 ([flip the whole system](https://community.zemax.com/got-a-question-7/how-to-flip-the-whole-optical-system-1367),
@@ -73,7 +73,7 @@ Options: `-save`, `-keepconj`, `-refocus`, `-rayaim`, `-keepaperture`,
 
 ### LayoutRender
 
-Headless 2D Y-Z layout PNG — the ZOS-API cannot save layout windows
+Headless 2D Y-Z layout PNG â€” the ZOS-API cannot save layout windows
 ([layout exports](https://community.zemax.com/got-a-question-7/feature-request-layout-window-exports-2244)).
 Sag sampled and mapped via `GetGlobalMatrix`; glass gaps closed; per-field ray
 fans from the batch tracer. A PCA of traced points orients folded/tilted systems;
@@ -89,7 +89,7 @@ Options: `-out <path.png>`, `-rays N` (default 7), `-width W -height H`,
 Exports the envelope of beam footprints on sequential surfaces to a CAD DXF
 (R12 ASCII). Forum:
 [export beam footprints to CAD/DXF](https://community.zemax.com/got-a-question-7/how-can-i-export-beam-footprints-to-a-cad-or-dxf-file-5991).
-Pupil-grid batch trace → local (x,y) hits → convex hull → one closed
+Pupil-grid batch trace â†’ local (x,y) hits â†’ convex hull â†’ one closed
 POLYLINE per surface layer. LayoutRender (layout PNG) and DetectorDump (NSC
 detectors) do not replace this. System is not modified.
 
@@ -136,9 +136,9 @@ Refuses rather than guessing when TEMP/PRES already live in the MCE, when
 value-computing solves sit on radii/thicknesses it must write (`-freezesolves`
 freezes them), or when *Adjust Index Data To Environment* is off without
 `-temp0`/`-pressure`. Absolute-index catalogs (CryoGlass) need `-vacuum`.
-Non-glass gaps expand along the **clear** semi-diameter edge — Make Thermal's
+Non-glass gaps expand along the **clear** semi-diameter edge â€” Make Thermal's
 pickup model, including TCE 0 moving a gap when adjacent radii change. Air gaps
-on a Cooke triplet agree with OpticStudio to 14 significant figures at ΔT = 50 K.
+on a Cooke triplet agree with OpticStudio to 14 significant figures at Î”T = 50 K.
 Semi-diameters and non-asphere length parameters are still not scaled.
 
 `-outdir` is honoured even when `-out` is also set (the folder + the `-out`
@@ -151,8 +151,8 @@ Options: `-tmin/-tmax/-steps`, `-track L`, `-pressure P`, `-vacuum`,
 
 ### MoldStress
 
-Estimates moulded Δn and stress birefringence in sequential plastic elements and
-applies both through STAR. **Requires OpticStudio Enterprise** — without STAR it
+Estimates moulded Î”n and stress birefringence in sequential plastic elements and
+applies both through STAR. **Requires OpticStudio Enterprise** â€” without STAR it
 computes but cannot apply. It is an **estimate**, not a mould-flow run and not
 validated against a moulded part. Moldex3D / Moldflow solve this properly; this
 exists for an Enterprise seat at concept stage with no mould-flow licence.
@@ -162,8 +162,8 @@ surface types are refused. A polymer catalog with `BD` records is required
 (`-writecatalog`; four of five entries are provisional). Default: edge gate at
 +Y (ring above 12 mm), parting at the rim.
 
-Four published ref cases; `-refcase2` does not meet its criterion. The 585× and
-176× retardance/wavefront ratios previously quoted here are **withdrawn** —
+Four published ref cases; `-refcase2` does not meet its criterion. The 585Ã— and
+176Ã— retardance/wavefront ratios previously quoted here are **withdrawn** â€”
 `GetRetardanceMap` is not retardance. Diary and both retractions:
 [`VALIDATION-LOG.md`](extensions/MoldStress/VALIDATION-LOG.md).
 
@@ -177,14 +177,14 @@ Options: see [extensions/MoldStress](extensions/MoldStress) (`-run`, `-full`,
 
 ### CryoGlass
 
-NASA GSFC **CHARMS** cryogenic n(λ,T) (Leviton & Frey Sellmeier, ~20–300 K,
-Si 1.1–5.6 µm and Ge 1.9–5.5 µm) frozen at working temperature T0 into an `.AGF`
+NASA GSFC **CHARMS** cryogenic n(Î»,T) (Leviton & Frey Sellmeier, ~20â€“300 K,
+Si 1.1â€“5.6 Âµm and Ge 1.9â€“5.5 Âµm) frozen at working temperature T0 into an `.AGF`
 with exact Sellmeier1 coefficients plus a local Schott thermal fit. OpticStudio
 cannot override index computation; the catalog is the workaround. Indices are
-**absolute (vacuum)** — set pressure 0. TCE is written 0 (CHARMS has none).
+**absolute (vacuum)** â€” set pressure 0. TCE is written 0 (CHARMS has none).
 
 Self-test vs the papers' measured tables runs before every generation and
-refuses on disagreement. Out-of-range λ/T is refused; nothing is extrapolated.
+refuses on disagreement. Out-of-range Î»/T is refused; nothing is extrapolated.
 CHARMS options, validation and Building/Releases/Licence:
 [docs/catalog.md](docs/catalog.md),
 [VALIDATION.md](extensions/CryoGlass/VALIDATION.md).
@@ -214,22 +214,27 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\pack.ps1 -x86
 
 `DeployToZemax` copies `.exe` + `.exe.config` to the Zemax data folder after
 each build (`HKCU\Software\Zemax@ZemaxRoot`). A new extension may need
-**Programming > Refresh List and an OpticStudio restart** — Refresh List alone
+**Programming > Refresh List and an OpticStudio restart** â€” Refresh List alone
 did not list an x64 `GpimGhostReduce` until an x86 rebuild plus restart. User
 analyses always need a restart. Replacing an already-listed add-in takes effect
 on the next run.
 
 ## Releases
 
-A zip at [`dist/`](dist/) installs without a SDK: extract, read `INSTALL.txt`,
+**Non-compilers:** download the latest zip from
+[Releases](https://github.com/BobHouseholder/zemax-user-extensions/releases)
+(also mirrored under [`dist/`](dist/) on `main`). Extract, read `INSTALL.txt`,
 drag the `ZOS-API` folder onto the Zemax **data** folder (not into `Extensions`
-— one of the eleven is a User Analysis). Unsigned; `INSTALL.txt` has `Unblock-File`.
+- one of the eleven is a User Analysis). Binaries are **x64** .NET Framework 4.8,
+unsigned; `INSTALL.txt` has `Unblock-File`. Built against the OpticStudio release
+named in the zip / `manifest.txt` (ZOS-API resolves at run time against yours).
+
 `tools\pack.ps1` refuses a dirty tree, an Ansys binary, or a build-machine path.
-Re-pack whenever binaries change. Redistribution of compiled `.exe` files is
-Ansys's terms, not this MIT licence.
+Re-pack and cut a Release whenever binaries change. Redistribution of compiled
+.exe files is Ansys's terms, not this MIT licence.
 
 ## Licence
 
-MIT — [LICENSE](LICENSE). Copyright (c) 2026 Bob Householder. Covers this
+MIT â€” [LICENSE](LICENSE). Copyright (c) 2026 Bob Householder. Covers this
 repository's source only. The extensions link against Ansys ZOS-API assemblies,
 which are not included and are not under this licence.
