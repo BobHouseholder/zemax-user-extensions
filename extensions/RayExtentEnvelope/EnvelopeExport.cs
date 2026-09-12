@@ -112,6 +112,9 @@ namespace RayExtentEnvelope
             Say(F("Extreme fields: {0}  Primary wave: {1}  Rim samples: {2}  Stations: {3}",
                 string.Join(",", extremeFields), wave, Opts.RimRays, string.Join(",", stationsSurf)));
             Say("System is not modified.");
+            Say(Opts.NoClap
+                ? "Rmax mode: rayExtent (-noclap) = max(rayR, fieldH) - no CLAP/Semi floor"
+                : "Rmax mode: CA floor = max(rayR, CLAP, fieldH)");
 
             app.ProgressPercent = 5;
             app.ProgressMessage = "Tracing max-extent pupil-rim rays...";
@@ -143,7 +146,9 @@ namespace RayExtentEnvelope
                 clap = SanitizeRadius(clap);
                 fieldH = SanitizeRadius(fieldH);
                 rayR = SanitizeRadius(rayR);
-                double floored = Math.Max(rayR, Math.Max(clap, fieldH));
+                double floored = Opts.NoClap
+                    ? Math.Max(rayR, fieldH)
+                    : Math.Max(rayR, Math.Max(clap, fieldH));
                 floored = SanitizeRadius(floored);
                 // Skip infinite-conjugate object (Z ~ -1e10) or non-finite radii.
                 if (surf == 0 && !IsFiniteObjectStation(si))
@@ -179,8 +184,8 @@ namespace RayExtentEnvelope
                 if (floored > rayR + 1e-12)
                     Say(F("  Surf {0}: ray R={1:G6}  CLAP={2:G6}  fieldH={3:G6} -> floor R={4:G6}",
                         surf, rayR, clap, fieldH, floored));
-                Say(F("  Surf {0}: vertexZ={1:G6}  rimZ={2:G6} ({3})  rayR={4:G6}  CLAP={5:G6}  floorR={6:G6}  hits={7}",
-                    surf, vertexZ, stationZ, zSrc, rayR, clap, floored, hits));
+                Say(F("  Surf {0}: vertexZ={1:G6}  rimZ={2:G6} ({3})  rayR={4:G6}  fieldH={5:G6}  CLAP={6:G6}  floorR={7:G6}  hits={8}",
+                    surf, vertexZ, stationZ, zSrc, rayR, fieldH, clap, floored, hits));
                 stations.Add(new Station
                 {
                     Surf = surf,
@@ -315,7 +320,7 @@ namespace RayExtentEnvelope
             bool hasMat = !string.IsNullOrEmpty(s.Material) && s.Material != "-"
                 && !s.Material.Equals("MIRROR", StringComparison.OrdinalIgnoreCase);
             if (hasMat) return false;
-            // Flat Standard (or similar) air surface with no power â€” dummy spacer.
+            // Flat Standard (or similar) air surface with no power ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â dummy spacer.
             bool flat = s.Radius == 0 || Math.Abs(s.Radius) > 1e10;
             if (s.Type == ZOSAPI.Editors.LDE.SurfaceType.Standard && flat) return true;
             if (s.Type == ZOSAPI.Editors.LDE.SurfaceType.Paraxial) return true;
