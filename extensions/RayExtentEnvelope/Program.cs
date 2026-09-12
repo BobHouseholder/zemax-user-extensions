@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -22,7 +22,10 @@ namespace RayExtentEnvelope
     //   -width W -height H    PNG size (default 1400x900)
     //   -nodialog             accepted (Phase 1 has no dialog)
     //   -quiet                do not auto-open outputs in plugin mode
-    //   -noclap / -rayExtent  Rmax = max(rayR, fieldH); do NOT floor to CLAP/Semi (default floors to CA)
+    //   -clap                 restore old CA floor: Rmax = max(rayR, CLAP, fieldH)
+    //                         (default is no CLAP/Semi floor: max(rayR, fieldH))
+    //   -noclap / -rayExtent  aliases for the default no-CLAP mode (kept for scripts)
+    //   -vertexZ              station Z = Frame.Z (vertex) instead of rim Z
     class Options
     {
         public string FilePath;
@@ -36,8 +39,10 @@ namespace RayExtentEnvelope
         public int Height = 900;
         public bool Quiet;
         public bool NoDialog;
-        /// <summary>When true, Rmax = max(rayR, fieldH) with no CLAP/Semi floor.</summary>
-        public bool NoClap;
+        /// <summary>When true (default), Rmax = max(rayR, fieldH) with no CLAP/Semi floor.</summary>
+        public bool NoClap = true;
+        /// <summary>When true, station Z = Frame.Z (vertex). Default uses rim Z.</summary>
+        public bool UseVertexZ;
     }
 
     partial class Program
@@ -92,8 +97,10 @@ namespace RayExtentEnvelope
                     case "-height": Opts.Height = ParseInt(next(), Opts.Height); break;
                     case "-quiet": Opts.Quiet = true; break;
                     case "-nodialog": Opts.NoDialog = true; break;
+                    case "-clap": Opts.NoClap = false; break;
                     case "-noclap":
                     case "-rayextent": Opts.NoClap = true; break;
+                    case "-vertexz": Opts.UseVertexZ = true; break;
                     default:
                         if (al.StartsWith("-z")) break;
                         if (al.StartsWith("-"))

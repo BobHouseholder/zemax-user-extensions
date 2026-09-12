@@ -1,4 +1,4 @@
-# RayExtentEnvelope
+﻿# RayExtentEnvelope
 
 ZOS-API User Extension. Shows the **maximum radial extent of rays** through a
 sequential system - extreme fields times a pupil-rim sample set - as:
@@ -17,16 +17,19 @@ The optical system is **never modified** and **never saved**.
 - Pupil rim at r=1 (default 48 samples; `-rimrays N`, clamp 16..256). No dense
   interior pupil grid is used for drawing.
 - At each envelope station, batch-trace those rays, map hits with
-  `GetGlobalMatrix`, then set
-  **R = max(ray_envelope_r, clear_aperture/CLAP, field_height_at_that_plane)**
-  so vignette cannot pinch the keep-out below optical CA (e.g. phone/image
-  plane). Station **Z uses the surface rim** (global Z of the max-R ray hit,
-  or `Frame.Z + Sag(R)` when no hit) so the polyline follows the asphere rim
-  rather than pinching through glass at the vertex. Paraxial/phone stations
-  with floating DIAM inherit CLAP from the previous drawn glass surface.
-  R is **not** floored to MEMA.
-  Pass **`-noclap`** / **`-rayExtent`** to skip the CLAP/Semi floor
-  (`R = max(ray_envelope_r, field_height)`); default remains the CA floor.
+  `GetGlobalMatrix`, then set **R = max(ray_envelope_r, field_height)** by
+  default (no CLAP/Semi floor — matches ray-extent keep-outs such as Concept-24
+  phone ~0.256). Station **Z uses the surface rim** (global Z of the max-R ray
+  hit, or `Frame.Z + Sag(R)` when no hit) so the polyline follows the asphere
+  rim rather than pinching through glass at the vertex. R is **not** floored
+  to MEMA.
+  - **`-clap`** restores the old CA floor:
+    `R = max(ray_envelope_r, clear_aperture/CLAP, field_height)`.
+  - **`-vertexZ`** uses vertex `Frame.Z` for station Z instead of rim Z.
+  - **`-noclap`** / **`-rayExtent`** are aliases for the default no-CLAP mode
+    (kept so older scripts still parse).
+  Paraxial/phone stations with floating DIAM still report inherited CLAP in the
+  log when `-clap` is used.
 - **Drawn:** glass spans (non-empty material) and the stop aperture. **Skipped:**
   CoordinateBreaks and dummy flat air surfaces with no optical power/material.
 
@@ -39,7 +42,7 @@ STEP generation is pure C# (AP214 `FACETED_BREP`); no Python helper.
    planes (Z ~ 1e10) are skipped.
 2. Drawn optical surfaces (glass + stop) through **AutoLastStation**.
 3. **AutoLastStation** = last Paraxial/ParaxialXY before the formal image when
-   unused surfaces follow it (post-image flare / dummy air) ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â e.g. Concept-24
+   unused surfaces follow it (post-image flare / dummy air) — e.g. Concept-24
    through S9 (phone), excluding S10+S11. Otherwise the formal image surface
    (typical Cooke-style objectives).
 
@@ -56,6 +59,9 @@ Surface 0 is allowed in explicit lists.
 | `-rimrays N` | Pupil rim samples (default 48) |
 | `-surfaces auto\|all\|0,2,4\|0-9` | Envelope stations (default `auto`; see above) |
 | `-width W` `-height H` | PNG size (default 1400x900) |
+| `-clap` | Floor Rmax to CLAP/Semi: `max(rayR, CLAP, fieldH)` (default is no CLAP floor) |
+| `-noclap` / `-rayExtent` | Aliases for default no-CLAP mode (`max(rayR, fieldH)`) |
+| `-vertexZ` | Station Z = `Frame.Z` (vertex) instead of rim Z |
 | `-nodialog` | Accepted (Phase 1 has no settings dialog) |
 | `-quiet` | Do not auto-open outputs after a ribbon run |
 
@@ -75,3 +81,4 @@ Copy `bin\Release\RayExtentEnvelope.exe` (+ `.config` if present) to
 copy /Y "...\Samples\Sequential\Objectives\Cooke 40 degree field.zmx" C:\Temp\Cooke_RayExtent.zmx
 RayExtentEnvelope.exe -file C:\Temp\Cooke_RayExtent.zmx -out C:\Temp\Cooke_RayExtent -nodialog -quiet
 ```
+
