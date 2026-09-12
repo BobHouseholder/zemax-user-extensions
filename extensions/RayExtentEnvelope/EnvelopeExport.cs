@@ -113,8 +113,11 @@ namespace RayExtentEnvelope
                 string.Join(",", extremeFields), wave, Opts.RimRays, string.Join(",", stationsSurf)));
             Say("System is not modified.");
             Say(Opts.NoClap
-                ? "Rmax mode: rayExtent (-noclap) = max(rayR, fieldH) - no CLAP/Semi floor"
-                : "Rmax mode: CA floor = max(rayR, CLAP, fieldH)");
+                ? "Rmax mode: rayExtent (default) = max(rayR, fieldH) - no CLAP/Semi floor"
+                : "Rmax mode: CA floor (-clap) = max(rayR, CLAP, fieldH)");
+            Say(Opts.UseVertexZ
+                ? "Station Z: vertex (-vertexZ) = Frame.Z"
+                : "Station Z: rim (default) = ray-hit Z, else Frame.Z+sag");
 
             app.ProgressPercent = 5;
             app.ProgressMessage = "Tracing max-extent pupil-rim rays...";
@@ -161,12 +164,16 @@ namespace RayExtentEnvelope
                     Say(F("  Surf {0}: skipped (non-finite station Z={1:G6} R={2:G6})", surf, si.Frame.Z, floored));
                     continue;
                 }
-                // Station Z = rim Z (ray hit on surface), not vertex Frame.Z.
-                // Prefer global Z of the traced rim-ray that produced rayR; else Frame.Z+Sag(Rmax).
+                // Station Z = rim Z by default (ray hit, else Frame.Z+Sag); -vertexZ uses Frame.Z.
                 double vertexZ = si.Frame.Z;
                 double stationZ;
                 string zSrc;
-                if (hasRimHit && rayR > 0)
+                if (Opts.UseVertexZ)
+                {
+                    stationZ = vertexZ;
+                    zSrc = "vertex";
+                }
+                else if (hasRimHit && rayR > 0)
                 {
                     stationZ = rimHitZ;
                     zSrc = "rayHit";

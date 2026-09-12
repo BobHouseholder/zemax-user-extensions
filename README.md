@@ -105,8 +105,10 @@ rim only. Writes a Y-Z **PNG** (glass + stop + envelope) and a **STEP** of lens
 solids of revolution plus a solid envelope cone. System is not modified.
 Skips CoordinateBreaks and dummy air surfaces.
 
+Default keep-out: rim-Z stations and `R = max(rayR, fieldH)` (no CLAP floor).
 Options: `-file`, `-out`, `-png`, `-step`, `-rimrays`, `-surfaces`,
-`-nodialog`, `-quiet`.
+`-clap` (restore CLAP floor), `-vertexZ` (vertex Z), `-noclap`/`-rayExtent`
+(aliases for default), `-nodialog`, `-quiet`.
 ### DistortionTarget
 
 Chrome-on-glass dot target in NSC: a plate plus an **Array** of chrome dots
