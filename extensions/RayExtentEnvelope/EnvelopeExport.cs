@@ -133,16 +133,17 @@ namespace RayExtentEnvelope
                 var si = surfs.FirstOrDefault(s => s.Index == surf);
                 if (si == null || !si.Frame.Valid) continue;
 
-                double rmax = 0;
+                double rayR = 0;
+                double rimHitZ = double.NaN;
                 int hits = 0;
-                TraceRimMaxRadius(sys, surf, extremeFields, wave, rim, maxFieldR, fieldsApi, si.Frame,
-                    ref rmax, ref hits);
+                bool hasRimHit = TraceRimMaxRadius(sys, surf, extremeFields, wave, rim, maxFieldR, fieldsApi, si.Frame,
+                    ref rayR, ref rimHitZ, ref hits);
                 double clap = ClearRadiusForStation(si, surfs, lde);
                 double fieldH = FieldHeightAtStation(sys, surf, extremeFields, wave, maxFieldR, fieldsApi, si.Frame);
                 clap = SanitizeRadius(clap);
                 fieldH = SanitizeRadius(fieldH);
-                rmax = SanitizeRadius(rmax);
-                double floored = Math.Max(rmax, Math.Max(clap, fieldH));
+                rayR = SanitizeRadius(rayR);
+                double floored = Math.Max(rayR, Math.Max(clap, fieldH));
                 floored = SanitizeRadius(floored);
                 // Skip infinite-conjugate object (Z ~ -1e10) or non-finite radii.
                 if (surf == 0 && !IsFiniteObjectStation(si))
@@ -155,18 +156,38 @@ namespace RayExtentEnvelope
                     Say(F("  Surf {0}: skipped (non-finite station Z={1:G6} R={2:G6})", surf, si.Frame.Z, floored));
                     continue;
                 }
-                if (floored > rmax + 1e-12)
+                // Station Z = rim Z (ray hit on surface), not vertex Frame.Z.
+                // Prefer global Z of the traced rim-ray that produced rayR; else Frame.Z+Sag(Rmax).
+                double vertexZ = si.Frame.Z;
+                double stationZ;
+                string zSrc;
+                if (hasRimHit && rayR > 0)
+                {
+                    stationZ = rimHitZ;
+                    zSrc = "rayHit";
+                }
+                else
+                {
+                    stationZ = RimZFromSag(si, floored);
+                    zSrc = "sag";
+                }
+                if (double.IsNaN(stationZ) || double.IsInfinity(stationZ))
+                {
+                    Say(F("  Surf {0}: skipped (non-finite rim Z from {1})", surf, zSrc));
+                    continue;
+                }
+                if (floored > rayR + 1e-12)
                     Say(F("  Surf {0}: ray R={1:G6}  CLAP={2:G6}  fieldH={3:G6} -> floor R={4:G6}",
-                        surf, rmax, clap, fieldH, floored));
-                rmax = floored;
+                        surf, rayR, clap, fieldH, floored));
+                Say(F("  Surf {0}: vertexZ={1:G6}  rimZ={2:G6} ({3})  rayR={4:G6}  CLAP={5:G6}  floorR={6:G6}  hits={7}",
+                    surf, vertexZ, stationZ, zSrc, rayR, clap, floored, hits));
                 stations.Add(new Station
                 {
                     Surf = surf,
-                    Z = si.Frame.Z,
-                    Rmax = rmax,
+                    Z = stationZ,
+                    Rmax = floored,
                     Hits = hits
                 });
-                Say(F("  Surf {0}: hits={1}  Rmax={2:G6}  Z={3:G6}", surf, hits, rmax, si.Frame.Z));
             }
 
             if (stations.All(s => s.Rmax <= 0))
@@ -294,7 +315,7 @@ namespace RayExtentEnvelope
             bool hasMat = !string.IsNullOrEmpty(s.Material) && s.Material != "-"
                 && !s.Material.Equals("MIRROR", StringComparison.OrdinalIgnoreCase);
             if (hasMat) return false;
-            // Flat Standard (or similar) air surface with no power — dummy spacer.
+            // Flat Standard (or similar) air surface with no power â€” dummy spacer.
             bool flat = s.Radius == 0 || Math.Abs(s.Radius) > 1e10;
             if (s.Type == ZOSAPI.Editors.LDE.SurfaceType.Standard && flat) return true;
             if (s.Type == ZOSAPI.Editors.LDE.SurfaceType.Paraxial) return true;
@@ -556,15 +577,21 @@ namespace RayExtentEnvelope
             return list;
         }
 
-        static void TraceRimMaxRadius(
+        /// <summary>
+        /// Trace extreme-field pupil-rim rays to <paramref name="surf"/>.
+        /// Updates <paramref name="rmax"/> to the max global radial hit and
+        /// <paramref name="rimHitZ"/> to the global Z of that same max-R hit
+        /// (surface rim Z, not vertex Z). Returns whether a finite rim hit exists.
+        /// </summary>
+        static bool TraceRimMaxRadius(
             ZOSAPI.IOpticalSystem sys, int surf, List<int> fieldList, int wave,
             List<(double px, double py)> samples, double maxR,
             ZOSAPI.SystemData.IFields fields, Frame frame,
-            ref double rmax, ref int hits)
+            ref double rmax, ref double rimHitZ, ref int hits)
         {
-            rmax = 0; hits = 0;
+            rmax = 0; rimHitZ = double.NaN; hits = 0;
             int nRays = fieldList.Count * samples.Count;
-            if (nRays == 0) return;
+            if (nRays == 0) return false;
             var trace = sys.Tools.OpenBatchRayTrace();
             try
             {
@@ -588,11 +615,31 @@ namespace RayExtentEnvelope
                     if (!frame.Valid) continue;
                     var g = frame.ToGlobal(x, y, z);
                     double rho = Math.Sqrt(g.gx * g.gx + g.gy * g.gy);
-                    if (rho > rmax) rmax = rho;
+                    if (rho > rmax)
+                    {
+                        rmax = rho;
+                        rimHitZ = g.gz;
+                    }
                     hits++;
                 }
             }
             finally { trace.Close(); }
+            return hits > 0 && !double.IsNaN(rmax) && !double.IsInfinity(rmax) && rmax > 0
+                && !double.IsNaN(rimHitZ) && !double.IsInfinity(rimHitZ);
+        }
+
+        /// <summary>
+        /// Global Z of the surface at radial height R (local Y = R, X = 0):
+        /// Frame.ToGlobal(0, R, Sag(surface, R)).gz. Untilited/centered this is
+        /// Frame.Z + sag; with tilt the rim point is transformed properly.
+        /// </summary>
+        static double RimZFromSag(SurfInfo si, double r)
+        {
+            double sag = Sag(si, r);
+            if (double.IsNaN(sag) || double.IsInfinity(sag)) sag = 0;
+            if (!si.Frame.Valid) return si.Frame.Z + sag;
+            var g = si.Frame.ToGlobal(0, r, sag);
+            return g.gz;
         }
 
         static List<(List<PointF> pts, string kind)> BuildLensPolylines(List<SurfInfo> surfs)

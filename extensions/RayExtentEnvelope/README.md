@@ -19,9 +19,12 @@ The optical system is **never modified** and **never saved**.
 - At each envelope station, batch-trace those rays, map hits with
   `GetGlobalMatrix`, then set
   **R = max(ray_envelope_r, clear_aperture/CLAP, field_height_at_that_plane)**
-  so vignette cannot pinch the keep-out below mechanical CA (e.g. phone/image
-  plane). Paraxial/phone stations with floating DIAM inherit CLAP from the
-  previous drawn glass surface.
+  so vignette cannot pinch the keep-out below optical CA (e.g. phone/image
+  plane). Station **Z uses the surface rim** (global Z of the max-R ray hit,
+  or `Frame.Z + Sag(R)` when no hit) so the polyline follows the asphere rim
+  rather than pinching through glass at the vertex. Paraxial/phone stations
+  with floating DIAM inherit CLAP from the previous drawn glass surface.
+  R is **not** floored to MEMA.
 - **Drawn:** glass spans (non-empty material) and the stop aperture. **Skipped:**
   CoordinateBreaks and dummy flat air surfaces with no optical power/material.
 
