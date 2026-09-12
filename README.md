@@ -1,4 +1,4 @@
-﻿# Zemax OpticStudio User Extensions
+# Zemax OpticStudio User Extensions
 
 ZOS-API add-ins for Ansys Zemax OpticStudio 2026 R1.01. Each is a self-contained
 C# (.NET Framework 4.8) console app. Build output deploys to
@@ -11,8 +11,8 @@ Ribbon runs report through OpticStudio's progress display and auto-open
 report/image outputs (`-quiet` disables that). Tools that edit the system show
 the edits live.
 
-**Terminate is honoured by six of the eleven.** AthermalScan, DetectorDump,
-EquivalentGlassFinder, LayoutRender, GpimGhostReduce and FootprintDxf poll
+**Terminate is honoured by seven of the twelve.** AthermalScan, DetectorDump,
+EquivalentGlassFinder, LayoutRender, GpimGhostReduce, FootprintDxf and RayExtentEnvelope poll
 `TerminateRequested` inside their loops. CryoGlass, DistortionTarget, MoldStress,
 ReverseSystem and the AthermalAnalysis window do not â€” Cancel does nothing there. That gap matters
 most on DistortionTarget and MoldStress. OpticStudio's template checks the flag
@@ -97,6 +97,16 @@ Options: `-out <path.dxf>`, `-rays N` (default 21), `-surfaces all|1,3|1-6`,
 `-includeimage`, `-fields all|1,2`, `-wave primary|all`, `-rim`, `-file`,
 `-quiet`, `-nodialog`.
 
+
+### RayExtentEnvelope
+
+Max radial ray-extent envelope for a sequential system: extreme fields x pupil
+rim only. Writes a Y-Z **PNG** (glass + stop + envelope) and a **STEP** of lens
+solids of revolution plus a solid envelope cone. System is not modified.
+Skips CoordinateBreaks and dummy air surfaces.
+
+Options: `-file`, `-out`, `-png`, `-step`, `-rimrays`, `-surfaces`,
+`-nodialog`, `-quiet`.
 ### DistortionTarget
 
 Chrome-on-glass dot target in NSC: a plate plus an **Array** of chrome dots
@@ -225,7 +235,7 @@ on the next run.
 [Releases](https://github.com/BobHouseholder/zemax-user-extensions/releases)
 (also mirrored under [`dist/`](dist/) on `main`). Extract, read `INSTALL.txt`,
 drag the `ZOS-API` folder onto the Zemax **data** folder (not into `Extensions`
-- one of the eleven is a User Analysis). Binaries are **x64** .NET Framework 4.8,
+- one of the twelve is a User Analysis). Binaries are **x64** .NET Framework 4.8,
 unsigned; `INSTALL.txt` has `Unblock-File`. Built against the OpticStudio release
 named in the zip / `manifest.txt` (ZOS-API resolves at run time against yours).
 
