@@ -213,7 +213,7 @@ Get-ChildItem extensions -Filter *.csproj -Recurse -Depth 1 |
     ForEach-Object { dotnet build $_.FullName --configuration Release }
 ```
 
-That is ten User Extensions plus the AthermalAnalysis User Analysis. csproj
+That is eleven User Extensions plus the AthermalAnalysis User Analysis. csproj
 defaults stay **x64**. An x86 ribbon listing (needed on OpticStudio 2026 R1.01
 here) is an override, not a project edit:
 
