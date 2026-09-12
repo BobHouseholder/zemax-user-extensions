@@ -18,7 +18,7 @@ namespace RayExtentEnvelope
     //   -out <base|dir>       output base path or directory
     //   -png / -step          emit PNG and/or STEP (default: both)
     //   -rimrays N            pupil rim samples (default 48, clamp 16..256)
-    //   -surfaces all|1,3|1-6 stations for envelope (default: auto drawn)
+    //   -surfaces auto|all|0,2|0-9 stations (default auto: object..phone/image; see README)
     //   -width W -height H    PNG size (default 1400x900)
     //   -nodialog             accepted (Phase 1 has no dialog)
     //   -quiet                do not auto-open outputs in plugin mode
