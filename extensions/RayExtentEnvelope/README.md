@@ -25,6 +25,8 @@ The optical system is **never modified** and **never saved**.
   rather than pinching through glass at the vertex. Paraxial/phone stations
   with floating DIAM inherit CLAP from the previous drawn glass surface.
   R is **not** floored to MEMA.
+  Pass **`-noclap`** / **`-rayExtent`** to skip the CLAP/Semi floor
+  (`R = max(ray_envelope_r, field_height)`); default remains the CA floor.
 - **Drawn:** glass spans (non-empty material) and the stop aperture. **Skipped:**
   CoordinateBreaks and dummy flat air surfaces with no optical power/material.
 
@@ -37,7 +39,7 @@ STEP generation is pure C# (AP214 `FACETED_BREP`); no Python helper.
    planes (Z ~ 1e10) are skipped.
 2. Drawn optical surfaces (glass + stop) through **AutoLastStation**.
 3. **AutoLastStation** = last Paraxial/ParaxialXY before the formal image when
-   unused surfaces follow it (post-image flare / dummy air) — e.g. Concept-24
+   unused surfaces follow it (post-image flare / dummy air) ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â e.g. Concept-24
    through S9 (phone), excluding S10+S11. Otherwise the formal image surface
    (typical Cooke-style objectives).
 

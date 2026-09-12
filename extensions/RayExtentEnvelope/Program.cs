@@ -22,6 +22,7 @@ namespace RayExtentEnvelope
     //   -width W -height H    PNG size (default 1400x900)
     //   -nodialog             accepted (Phase 1 has no dialog)
     //   -quiet                do not auto-open outputs in plugin mode
+    //   -noclap / -rayExtent  Rmax = max(rayR, fieldH); do NOT floor to CLAP/Semi (default floors to CA)
     class Options
     {
         public string FilePath;
@@ -35,6 +36,8 @@ namespace RayExtentEnvelope
         public int Height = 900;
         public bool Quiet;
         public bool NoDialog;
+        /// <summary>When true, Rmax = max(rayR, fieldH) with no CLAP/Semi floor.</summary>
+        public bool NoClap;
     }
 
     partial class Program
@@ -89,6 +92,8 @@ namespace RayExtentEnvelope
                     case "-height": Opts.Height = ParseInt(next(), Opts.Height); break;
                     case "-quiet": Opts.Quiet = true; break;
                     case "-nodialog": Opts.NoDialog = true; break;
+                    case "-noclap":
+                    case "-rayextent": Opts.NoClap = true; break;
                     default:
                         if (al.StartsWith("-z")) break;
                         if (al.StartsWith("-"))
