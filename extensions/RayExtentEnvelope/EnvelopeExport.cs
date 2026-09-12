@@ -137,6 +137,28 @@ namespace RayExtentEnvelope
                 int hits = 0;
                 TraceRimMaxRadius(sys, surf, extremeFields, wave, rim, maxFieldR, fieldsApi, si.Frame,
                     ref rmax, ref hits);
+                double clap = ClearRadiusForStation(si, surfs, lde);
+                double fieldH = FieldHeightAtStation(sys, surf, extremeFields, wave, maxFieldR, fieldsApi, si.Frame);
+                clap = SanitizeRadius(clap);
+                fieldH = SanitizeRadius(fieldH);
+                rmax = SanitizeRadius(rmax);
+                double floored = Math.Max(rmax, Math.Max(clap, fieldH));
+                floored = SanitizeRadius(floored);
+                // Skip infinite-conjugate object (Z ~ -1e10) or non-finite radii.
+                if (surf == 0 && !IsFiniteObjectStation(si))
+                {
+                    Say(F("  Surf {0}: skipped (infinite/non-finite object plane)", surf));
+                    continue;
+                }
+                if (!(floored > 0) || Math.Abs(si.Frame.Z) > 1e8)
+                {
+                    Say(F("  Surf {0}: skipped (non-finite station Z={1:G6} R={2:G6})", surf, si.Frame.Z, floored));
+                    continue;
+                }
+                if (floored > rmax + 1e-12)
+                    Say(F("  Surf {0}: ray R={1:G6}  CLAP={2:G6}  fieldH={3:G6} -> floor R={4:G6}",
+                        surf, rmax, clap, fieldH, floored));
+                rmax = floored;
                 stations.Add(new Station
                 {
                     Surf = surf,
@@ -147,12 +169,13 @@ namespace RayExtentEnvelope
                 Say(F("  Surf {0}: hits={1}  Rmax={2:G6}  Z={3:G6}", surf, hits, rmax, si.Frame.Z));
             }
 
-            if (stations.All(s => s.Hits == 0 || s.Rmax <= 0))
-                throw new Exception("no ray hits for envelope - check fields/apertures");
+            if (stations.All(s => s.Rmax <= 0))
+                throw new Exception("no envelope radii - check fields/apertures/CLAP");
 
             // Monotone radial envelope vs Z (keep max R if duplicate Z).
+            // Allow CLAP/object floors even when ray hits are zero (e.g. object plane).
             var env = stations
-                .Where(s => s.Hits > 0 && s.Rmax > 0)
+                .Where(s => s.Rmax > 0)
                 .GroupBy(s => Math.Round(s.Z, 9))
                 .Select(g => new Station { Z = g.First().Z, Rmax = g.Max(x => x.Rmax), Surf = g.First().Surf, Hits = g.Sum(x => x.Hits) })
                 .OrderBy(s => s.Z)
@@ -200,7 +223,8 @@ namespace RayExtentEnvelope
         {
             var surfs = new List<SurfInfo>();
             string prevMedium = "";
-            for (int i = 1; i <= imgIdx; i++)
+            // Include surface 0 (object) so keep-out can start at the object plane.
+            for (int i = 0; i <= imgIdx; i++)
             {
                 var row = lde.GetSurfaceAt(i);
                 var s = new SurfInfo { Index = i, Type = row.Type, IsStop = (i == stopIdx) };
@@ -323,10 +347,23 @@ namespace RayExtentEnvelope
         {
             if (string.IsNullOrWhiteSpace(spec) || spec.Equals("auto", StringComparison.OrdinalIgnoreCase))
             {
-                // Drawn surface stations + image for a complete cone.
-                var list = surfs.Where(s => s.Draw && s.Type != ZOSAPI.Editors.LDE.SurfaceType.CoordinateBreak)
-                    .Select(s => s.Index).ToList();
-                if (!list.Contains(imgIdx)) list.Add(imgIdx);
+                // Default stations:
+                //   - include finite object (surface 0); skip infinite conjugates
+                //   - drawn optical surfaces (glass + stop) up through AutoLastStation
+                //   - AutoLastStation = paraxial phone/stop when unused post-image air follows
+                //     (e.g. Concept-24: through S9, exclude S10+S11); else formal image
+                int last = AutoLastStation(surfs, imgIdx);
+                var list = new List<int>();
+                var obj = surfs.FirstOrDefault(s => s.Index == 0);
+                if (obj != null && IsFiniteObjectStation(obj)) list.Add(0);
+                foreach (var s in surfs)
+                {
+                    if (s.Index <= 0) continue;
+                    if (s.Index > last) continue;
+                    if (s.Type == ZOSAPI.Editors.LDE.SurfaceType.CoordinateBreak) continue;
+                    if (s.Draw || s.Index == last) list.Add(s.Index);
+                }
+                if (!list.Contains(last) && last >= 0) list.Add(last);
                 list.Sort();
                 return list.Distinct().ToList();
             }
@@ -348,17 +385,164 @@ namespace RayExtentEnvelope
                     {
                         if (a > b) { int t = a; a = b; b = t; }
                         for (int i = a; i <= b; i++)
-                            if (i >= 1 && i <= imgIdx) result.Add(i);
+                            if (i >= 0 && i <= imgIdx) result.Add(i);
                     }
                 }
                 else
                 {
                     int v;
-                    if (int.TryParse(p, NumberStyles.Integer, CI, out v) && v >= 1 && v <= imgIdx)
+                    if (int.TryParse(p, NumberStyles.Integer, CI, out v) && v >= 0 && v <= imgIdx)
                         result.Add(v);
                 }
             }
             return result.Distinct().OrderBy(x => x).ToList();
+        }
+
+        static bool IsFiniteObjectStation(SurfInfo obj)
+        {
+            if (obj == null || obj.Index != 0) return false;
+            if (!obj.Frame.Valid) return false;
+            if (Math.Abs(obj.Frame.Z) > 1e8) return false;
+            if (double.IsInfinity(obj.Thickness) || Math.Abs(obj.Thickness) > 1e8) return false;
+            double semi = SanitizeRadius(Math.Abs(obj.SemiDiameter));
+            // Finite conjugates have a usable object semi or finite thickness to surface 1.
+            return semi > 0 || (Math.Abs(obj.Thickness) > 1e-12 && Math.Abs(obj.Thickness) < 1e8);
+        }
+
+        static double SanitizeRadius(double r)
+        {
+            if (double.IsNaN(r) || double.IsInfinity(r)) return 0;
+            if (Math.Abs(r) > 1e8) return 0;
+            return Math.Max(0, r);
+        }
+
+        /// <summary>
+        /// Last envelope station for -surfaces auto.
+        /// If a Paraxial/ParaxialXY surface exists before the formal image and unused
+        /// surfaces follow it (post-image flare / dummy air), stop there (phone plane).
+        /// Otherwise use the formal image surface (Cooke and typical objectives).
+        /// </summary>
+        static int AutoLastStation(List<SurfInfo> surfs, int imgIdx)
+        {
+            SurfInfo parax = null;
+            foreach (var s in surfs)
+            {
+                if (s.Index <= 0) continue;
+                if (s.Type == ZOSAPI.Editors.LDE.SurfaceType.Paraxial
+                    || s.Type == ZOSAPI.Editors.LDE.SurfaceType.ParaxialXY)
+                    parax = s;
+            }
+            if (parax != null && parax.Index < imgIdx)
+            {
+                bool trailingAfter = surfs.Any(s => s.Index > parax.Index
+                    && s.Type != ZOSAPI.Editors.LDE.SurfaceType.CoordinateBreak);
+                if (trailingAfter)
+                    return parax.Index;
+            }
+            return imgIdx;
+        }
+
+        /// <summary>
+        /// Mechanical clear radius (CLAP / circular aperture / SemiDiameter).
+        /// For Paraxial/phone stations with floating tiny DIAM, walk back to the
+        /// previous drawn glass surface so vignette cannot pinch below mechanical CA.
+        /// </summary>
+        static double ClearRadiusForStation(SurfInfo si, List<SurfInfo> surfs,
+            ZOSAPI.Editors.LDE.ILensDataEditor lde)
+        {
+            double clap = ReadClearRadius(lde, si);
+            bool paraxLike = si.Type == ZOSAPI.Editors.LDE.SurfaceType.Paraxial
+                || si.Type == ZOSAPI.Editors.LDE.SurfaceType.ParaxialXY
+                || si.Index == 0;
+            if (paraxLike || clap < 1e-9)
+            {
+                for (int i = surfs.Count - 1; i >= 0; i--)
+                {
+                    var p = surfs[i];
+                    if (p.Index >= si.Index) continue;
+                    if (p.Type == ZOSAPI.Editors.LDE.SurfaceType.CoordinateBreak) continue;
+                    if (p.Type == ZOSAPI.Editors.LDE.SurfaceType.Paraxial
+                        || p.Type == ZOSAPI.Editors.LDE.SurfaceType.ParaxialXY) continue;
+                    if (!p.Draw && p.Index != 0) continue;
+                    double prev = ReadClearRadius(lde, p);
+                    if (prev > clap) clap = prev;
+                    if (prev > 1e-9 && p.Index > 0) break; // nearest prior mechanical CA
+                }
+            }
+            // Object: prefer its own SemiDiameter (often the entrance keep-out).
+            if (si.Index == 0)
+            {
+                double semi = 0;
+                try { semi = Math.Abs(si.SemiDiameter); } catch { }
+                if (semi > clap) clap = semi;
+            }
+            return clap;
+        }
+
+        static double ReadClearRadius(ZOSAPI.Editors.LDE.ILensDataEditor lde, SurfInfo si)
+        {
+            double yHalf = 0;
+            try { yHalf = Math.Abs(si.SemiDiameter); } catch { yHalf = 0; }
+            try
+            {
+                var ad = lde.GetSurfaceAt(si.Index).ApertureData;
+                var st = ad.CurrentTypeSettings;
+                switch (ad.CurrentType)
+                {
+                    case ZOSAPI.Editors.LDE.SurfaceApertureTypes.CircularAperture:
+                    case ZOSAPI.Editors.LDE.SurfaceApertureTypes.CircularObscuration:
+                        var c = (ZOSAPI.Editors.LDE.ISurfaceApertureCircular)st;
+                        yHalf = Math.Max(yHalf, Math.Abs(c.MaximumRadius));
+                        break;
+                    case ZOSAPI.Editors.LDE.SurfaceApertureTypes.RectangularAperture:
+                        var r = (ZOSAPI.Editors.LDE.ISurfaceApertureRectangular)st;
+                        yHalf = Math.Max(yHalf, Math.Max(Math.Abs(r.XHalfWidth), Math.Abs(r.YHalfWidth)));
+                        break;
+                    case ZOSAPI.Editors.LDE.SurfaceApertureTypes.EllipticalAperture:
+                        var e = (ZOSAPI.Editors.LDE.ISurfaceApertureElliptical)st;
+                        yHalf = Math.Max(yHalf, Math.Max(Math.Abs(e.XHalfWidth), Math.Abs(e.YHalfWidth)));
+                        break;
+                }
+            }
+            catch { }
+            return SanitizeRadius(yHalf);
+        }
+
+        /// <summary>
+        /// Extreme-field chief-ray radial height at the station (field height at that plane).
+        /// </summary>
+        static double FieldHeightAtStation(
+            ZOSAPI.IOpticalSystem sys, int surf, List<int> fieldList, int wave,
+            double maxR, ZOSAPI.SystemData.IFields fields, Frame frame)
+        {
+            if (!frame.Valid || fieldList == null || fieldList.Count == 0 || maxR <= 0) return 0;
+            double rmax = 0;
+            var trace = sys.Tools.OpenBatchRayTrace();
+            try
+            {
+                var data = trace.CreateNormUnpol(fieldList.Count, ZOSAPI.Tools.RayTrace.RaysType.Real, surf);
+                foreach (int fi in fieldList)
+                {
+                    var f = fields.GetField(fi);
+                    double hx = f.X / maxR, hy = f.Y / maxR;
+                    data.AddRay(wave, hx, hy, 0, 0, ZOSAPI.Tools.RayTrace.OPDMode.None);
+                }
+                trace.RunAndWaitForCompletion();
+                data.StartReadingResults();
+                int rayNum, errCode, vigCode;
+                double x, y, z, l, m, n, l2, m2, n2, opd, inten;
+                while (data.ReadNextResult(out rayNum, out errCode, out vigCode,
+                    out x, out y, out z, out l, out m, out n, out l2, out m2, out n2, out opd, out inten))
+                {
+                    if (errCode != 0) continue;
+                    var g = frame.ToGlobal(x, y, z);
+                    double rho = Math.Sqrt(g.gx * g.gx + g.gy * g.gy);
+                    if (rho > rmax) rmax = rho;
+                }
+            }
+            catch { }
+            finally { try { trace.Close(); } catch { } }
+            return rmax;
         }
 
         static List<(double px, double py)> BuildPupilRim(int n, double radius)
