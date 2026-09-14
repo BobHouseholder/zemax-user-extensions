@@ -24,7 +24,7 @@ namespace RayExtentEnvelope
         {
             public int Index;
             public ZOSAPI.Editors.LDE.SurfaceType Type;
-            public double Radius, Conic, SemiDiameter, Thickness;
+            public double Radius, Conic, SemiDiameter, MechanicalSemiDiameter, Thickness;
             public double[] Pars = new double[9];
             public string Material = "";
             public string EffMedium = "";
@@ -214,6 +214,36 @@ namespace RayExtentEnvelope
                 .OrderBy(s => s.Z)
                 .ToList();
 
+            // Object-at-0 CAD frame: shift all Z so surface-0 (finite object) is at Z=0.
+            // Matches Concept-24 L1L2L3 / KEEP_OUT_plus_L1L2L3 STEPs (not Zemax L1-at-0).
+            double zObj = 0;
+            var objSurf = surfs.FirstOrDefault(s => s.Index == 0);
+            if (objSurf != null && objSurf.Frame.Valid && IsFiniteObjectStation(objSurf))
+                zObj = objSurf.Frame.Z;
+            if (Math.Abs(zObj) > 1e-12 && Math.Abs(zObj) < 1e8)
+            {
+                Say(F("Frame: object-at-0 (Zemax object Z={0:G6} -> CAD Z=0; shift={1:G6} mm)",
+                    zObj, -zObj));
+                foreach (var st in env) st.Z -= zObj;
+                foreach (var st in stations) st.Z -= zObj;
+                foreach (var s in surfs)
+                {
+                    if (s.Frame.Valid) s.Frame.Z -= zObj;
+                    if (s.Section != null)
+                    {
+                        for (int i = 0; i < s.Section.Count; i++)
+                        {
+                            var pt = s.Section[i];
+                            s.Section[i] = new PointF(pt.X - (float)zObj, pt.Y);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                Say("Frame: object-at-0 (object already ~0 or infinite conjugate; no Z shift)");
+            }
+
             var lenses = BuildLensSolids(surfs);
             var lensLines = BuildLensPolylines(surfs);
             var stopLines = BuildStopPolylines(surfs);
@@ -234,15 +264,32 @@ namespace RayExtentEnvelope
             if (Opts.WantStep)
             {
                 app.ProgressMessage = "Writing STEP...";
-                var lensTuples = lenses.Select(L => (
-                    L.Name,
-                    L.ProfileRz,
-                    L.Frame.R,
-                    L.Frame.X, L.Frame.Y, L.Frame.Z,
-                    L.Frame.Valid)).ToList();
+                // Default: KEEP_OUT + MEMA L1/L2/... . -envelopeOnly = KEEP_OUT only.
+                var lensTuples = Opts.EnvelopeOnly
+                    ? lenses.Where(_ => false).Select(L => (
+                        L.Name,
+                        L.ProfileRz,
+                        L.Frame.R,
+                        L.Frame.X, L.Frame.Y, L.Frame.Z,
+                        L.Frame.Valid)).ToList()
+                    : lenses.Select(L => (
+                        L.Name,
+                        L.ProfileRz,
+                        L.Frame.R,
+                        L.Frame.X, L.Frame.Y, L.Frame.Z,
+                        L.Frame.Valid)).ToList();
                 var envTuples2 = env.Select(s => (s.Z, s.Rmax)).ToList();
+                if (envTuples2.Count >= 2)
+                {
+                    Say(F("KEEP_OUT Z span: {0:G6} .. {1:G6} mm (object-at-0)",
+                        envTuples2[0].Z, envTuples2[envTuples2.Count - 1].Z));
+                }
+                if (!Opts.EnvelopeOnly && lensTuples.Count > 0)
+                    Say("MEMA lenses: " + string.Join(", ", lensTuples.Select(t => t.Name)));
                 StepWriter.Write(stepPath, lensTuples, envTuples2, 32);
-                Say("STEP : " + stepPath + "  (" + new FileInfo(stepPath).Length + " bytes)");
+                Say("STEP : " + stepPath + "  (" + new FileInfo(stepPath).Length + " bytes)"
+                    + (Opts.EnvelopeOnly ? "  [KEEP_OUT only]" : "  [KEEP_OUT+MEMA]"));
+                if (!string.IsNullOrEmpty(StepWriter.LastWriteMode)) Say("STEP mode: " + StepWriter.LastWriteMode);
             }
 
             app.ProgressMessage = "Done. RayExtentEnvelope outputs written.";
@@ -265,6 +312,7 @@ namespace RayExtentEnvelope
                 try { s.Conic = row.Conic; } catch { s.Conic = 0; }
                 if (Math.Abs(s.Conic) > 1e10) s.Conic = 0;
                 try { s.SemiDiameter = row.SemiDiameter; } catch { s.SemiDiameter = 0; }
+                try { s.MechanicalSemiDiameter = row.MechanicalSemiDiameter; } catch { s.MechanicalSemiDiameter = 0; }
                 try { s.Thickness = row.Thickness; } catch { s.Thickness = 0; }
                 for (int p = 1; p <= 8; p++)
                 {
@@ -327,7 +375,7 @@ namespace RayExtentEnvelope
             bool hasMat = !string.IsNullOrEmpty(s.Material) && s.Material != "-"
                 && !s.Material.Equals("MIRROR", StringComparison.OrdinalIgnoreCase);
             if (hasMat) return false;
-            // Flat Standard (or similar) air surface with no power ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â dummy spacer.
+            // Flat Standard (or similar) air surface with no power ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â dummy spacer.
             bool flat = s.Radius == 0 || Math.Abs(s.Radius) > 1e10;
             if (s.Type == ZOSAPI.Editors.LDE.SurfaceType.Standard && flat) return true;
             if (s.Type == ZOSAPI.Editors.LDE.SurfaceType.Paraxial) return true;
@@ -703,7 +751,11 @@ namespace RayExtentEnvelope
 
         static List<LensSolid> BuildLensSolids(List<SurfInfo> surfs)
         {
+            // Full MEMA blanks (MechanicalSemiDiameter), named L1/L2/L3...
+            // Optical faces sampled to CLAP/Semi; flange out to MEMA OD.
+            // NOT the old CLAP-stub LENS_* naming.
             var solids = new List<LensSolid>();
+            int lensOrd = 0;
             for (int i = 0; i < surfs.Count; i++)
             {
                 var a = surfs[i];
@@ -719,33 +771,66 @@ namespace RayExtentEnvelope
                     break;
                 }
                 if (b == null) continue;
-                double ra = Math.Max(a.SemiDiameter, 1e-6);
-                double rb = Math.Max(b.SemiDiameter, 1e-6);
-                double rEdge = Math.Min(ra, rb);
+                lensOrd++;
+                double clapA = Math.Max(SanitizeRadius(Math.Abs(a.SemiDiameter)), 1e-6);
+                double clapB = Math.Max(SanitizeRadius(Math.Abs(b.SemiDiameter)), 1e-6);
+                double memaA = SanitizeRadius(Math.Abs(a.MechanicalSemiDiameter));
+                double memaB = SanitizeRadius(Math.Abs(b.MechanicalSemiDiameter));
+                double mema = Math.Max(Math.Max(memaA, memaB), Math.Max(clapA, clapB));
+                if (!(mema > 0)) mema = Math.Max(clapA, clapB);
+                double t = a.Thickness;
                 int n = 24;
                 var profile = new List<(double z, double r)>();
-                // Front: axis -> rim (local z = sag)
+                // Front optical: axis -> CLAP
                 for (int k = 0; k <= n; k++)
                 {
-                    double r = rEdge * k / n;
+                    double r = clapA * k / n;
                     double z = Sag(a, r);
                     if (double.IsNaN(z)) z = 0;
                     profile.Add((z, r));
                 }
-                // Back rim -> axis. Back local z must be expressed in front local frame:
-                // approximate axial systems: z_back_in_front = Thickness_a + sag_b(r)
-                // (Cooke / most sequential refractive trains).
-                double t = a.Thickness;
-                for (int k = n; k >= 0; k--)
+                double zFrontClap = Sag(a, clapA);
+                if (double.IsNaN(zFrontClap)) zFrontClap = 0;
+                // Front land CLAP -> MEMA (constant Z at front CA rim)
+                if (mema > clapA + 1e-9)
                 {
-                    double r = rEdge * k / n;
+                    for (int k = 1; k <= 8; k++)
+                    {
+                        double r = clapA + (mema - clapA) * k / 8.0;
+                        profile.Add((zFrontClap, r));
+                    }
+                }
+                double zBackClap = Sag(b, clapB);
+                if (double.IsNaN(zBackClap)) zBackClap = 0;
+                double zBackAtMema = t + zBackClap;
+                double zFrontAtMema = zFrontClap;
+                // Edge at MEMA (front land Z -> back land Z)
+                if (Math.Abs(zBackAtMema - zFrontAtMema) > 1e-12)
+                    profile.Add((zBackAtMema, mema));
+                // Back land MEMA -> CLAP
+                if (mema > clapB + 1e-9)
+                {
+                    for (int k = 7; k >= 0; k--)
+                    {
+                        double r = clapB + (mema - clapB) * k / 8.0;
+                        profile.Add((t + zBackClap, r));
+                    }
+                }
+                else
+                {
+                    profile.Add((t + zBackClap, clapB));
+                }
+                // Back optical: CLAP -> axis
+                for (int k = n - 1; k >= 0; k--)
+                {
+                    double r = clapB * k / n;
                     double zb = Sag(b, r);
                     if (double.IsNaN(zb)) zb = 0;
                     profile.Add((t + zb, r));
                 }
                 solids.Add(new LensSolid
                 {
-                    Name = "LENS_" + a.Index + "_" + b.Index + "_" + Sanitize(a.Material),
+                    Name = "L" + lensOrd.ToString(CI),
                     ProfileRz = profile,
                     Frame = a.Frame
                 });
