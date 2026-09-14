@@ -3,12 +3,16 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Diagnostics;
 using System.Text;
 
 namespace RayExtentEnvelope
 {
-    // Minimal AP214 STEP writer: faceted BREP solids of revolution (lenses + envelope).
-    // Pure C# — no external CAD kernel.
+    // STEP writer for solids of revolution (MEMA L1/L2/... + KEEP_OUT).
+    // Caller decides whether to pass lens profiles; default is KEEP_OUT + MEMA lenses.
+    // Preferred: mesh -> temp STL -> tools/stl_to_rhino_step.py (OCC sew +
+    // UnifySameDomain + AP214IS/MM/surfacecurve.mode=0) for Rhino-visible solids.
+    // Fallback: pure-C# FACETED_BREP (opens empty in Rhino).
     static class StepWriter
     {
         static readonly CultureInfo CI = CultureInfo.InvariantCulture;
@@ -62,15 +66,28 @@ namespace RayExtentEnvelope
                     // already ends on axis; add start axis point if first isn't on axis
                 }
                 if (profile[0].r > 1e-15) profile.Insert(0, (profile[0].z, 0));
-                meshes.Add(RevolveProfile(profile, circSegs, "RAY_ENVELOPE"));
+                meshes.Add(RevolveProfile(profile, circSegs, "KEEP_OUT"));
             }
 
             if (meshes.Count == 0)
                 throw new Exception("StepWriter: no solids to write");
 
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path)) ?? ".");
+            string stlTmp = path + ".mesh.stl";
+            WriteAsciiStl(stlTmp, meshes);
+            if (TryOccRhinoStep(stlTmp, path))
+            {
+                LastWriteMode = "OCC named-solids UnifySameDomain AP214IS/MM (Rhino)";
+                try { File.Delete(stlTmp); } catch { }
+                return;
+            }
             File.WriteAllText(path, EmitStep(meshes), new UTF8Encoding(false));
+            LastWriteMode = "FACETED_BREP fallback (OCC/python unavailable)";
+            try { File.Delete(stlTmp); } catch { }
         }
+
+        /// <summary>How the last Write produced STEP: OCC Rhino path or faceted fallback.</summary>
+        public static string LastWriteMode = "";
 
         static Mesh RevolveProfile(List<(double z, double r)> profile, int nSeg, string name)
         {
@@ -131,7 +148,7 @@ namespace RayExtentEnvelope
                     if (axis0 && axis1) continue;
                     if (axis0)
                     {
-                        // triangle a(=axis), c, d  — but a==b
+                        // triangle a(=axis), c, d  ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â but a==b
                         if (c != d && a != c) mesh.Tris.Add(new[] { a, c, d });
                     }
                     else if (axis1)
@@ -254,6 +271,138 @@ namespace RayExtentEnvelope
             if (shapeItems.Count == 0)
                 throw new Exception("StepWriter: failed to emit any FACETED_BREP solids");
             return sb.ToString();
+        }
+
+
+        static void WriteAsciiStl(string path, List<Mesh> meshes)
+        {
+            var sb = new StringBuilder();
+            foreach (var mesh in meshes)
+            {
+                string sname = Sanitize(string.IsNullOrEmpty(mesh.Name) ? "SOLID" : mesh.Name);
+                sb.AppendLine("solid " + sname);
+                foreach (var t in mesh.Tris)
+                {
+                    if (t[0] == t[1] || t[1] == t[2] || t[0] == t[2]) continue;
+                    var a = mesh.Verts[t[0]];
+                    var b = mesh.Verts[t[1]];
+                    var c = mesh.Verts[t[2]];
+                    double ux = b.X - a.X, uy = b.Y - a.Y, uz = b.Z - a.Z;
+                    double vx = c.X - a.X, vy = c.Y - a.Y, vz = c.Z - a.Z;
+                    double nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+                    double nl = Math.Sqrt(nx * nx + ny * ny + nz * nz);
+                    if (nl > 1e-30) { nx /= nl; ny /= nl; nz /= nl; }
+                    sb.AppendLine(string.Format(CI, "  facet normal {0:G17} {1:G17} {2:G17}", nx, ny, nz));
+                    sb.AppendLine("    outer loop");
+                    sb.AppendLine(string.Format(CI, "      vertex {0:G17} {1:G17} {2:G17}", a.X, a.Y, a.Z));
+                    sb.AppendLine(string.Format(CI, "      vertex {0:G17} {1:G17} {2:G17}", b.X, b.Y, b.Z));
+                    sb.AppendLine(string.Format(CI, "      vertex {0:G17} {1:G17} {2:G17}", c.X, c.Y, c.Z));
+                    sb.AppendLine("    endloop");
+                    sb.AppendLine("  endfacet");
+                }
+                sb.AppendLine("endsolid " + sname);
+            }
+            File.WriteAllText(path, sb.ToString(), new UTF8Encoding(false));
+        }
+
+        static bool TryOccRhinoStep(string stlPath, string stepPath)
+        {
+            string script = FindOccScript();
+            if (script == null) return false;
+            string py = FindPython();
+            if (py == null) return false;
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = py,
+                    Arguments = (py == "py" ? "-3 " : "") + "\"" + script + "\" \"" + stlPath + "\" \"" + stepPath + "\" --named-solids",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+                using (var p = Process.Start(psi))
+                {
+                    if (p == null) return false;
+                    string stdout = p.StandardOutput.ReadToEnd();
+                    string stderr = p.StandardError.ReadToEnd();
+                    if (!p.WaitForExit(300000)) { try { p.Kill(); } catch { } return false; }
+                    if (p.ExitCode != 0) return false;
+                }
+                if (!File.Exists(stepPath) || new FileInfo(stepPath).Length < 64) return false;
+                                // Rhino-friendly: MANIFOLD + ADVANCED_FACE + mm. Multi-solid OK (KEEP_OUT+L*).
+                string head = File.ReadAllText(stepPath);
+                if (head.IndexOf("MANIFOLD_SOLID_BREP", StringComparison.Ordinal) < 0) return false;
+                if (head.IndexOf("ADVANCED_FACE", StringComparison.Ordinal) < 0) return false;
+                if (head.IndexOf("MILLI", StringComparison.Ordinal) < 0
+                    || head.IndexOf("METRE", StringComparison.Ordinal) < 0) return false;
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        static string FindOccScript()
+        {
+            string env = Environment.GetEnvironmentVariable("RAYEXTENT_STL_TO_STEP");
+            if (!string.IsNullOrWhiteSpace(env) && File.Exists(env)) return env;
+
+            var cands = new List<string>();
+            string baseDir = AppDomain.CurrentDomain.BaseDirectory ?? ".";
+            cands.Add(Path.Combine(baseDir, "stl_to_rhino_step.py"));
+            cands.Add(Path.Combine(baseDir, "tools", "stl_to_rhino_step.py"));
+            // Walk up from baseDir and from cwd looking for tools/stl_to_rhino_step.py
+            foreach (string start in new[] { baseDir, Directory.GetCurrentDirectory() })
+            {
+                try
+                {
+                    var dir = new DirectoryInfo(Path.GetFullPath(start));
+                    for (int i = 0; i < 8 && dir != null; i++, dir = dir.Parent)
+                    {
+                        cands.Add(Path.Combine(dir.FullName, "tools", "stl_to_rhino_step.py"));
+                        cands.Add(Path.Combine(dir.FullName, "stl_to_rhino_step.py"));
+                    }
+                }
+                catch { }
+            }
+            foreach (var c in cands)
+                if (!string.IsNullOrEmpty(c) && File.Exists(c)) return c;
+            return null;
+        }
+
+        static string FindPython()
+        {
+            string env = Environment.GetEnvironmentVariable("RAYEXTENT_PYTHON");
+            if (!string.IsNullOrWhiteSpace(env) && File.Exists(env)) return env;
+            foreach (string name in new[] { "python", "python3", "py" })
+            {
+                try
+                {
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = name,
+                        Arguments = name == "py" ? "-3 -c \"import OCP; print('ok')\"" : "-c \"import OCP; print('ok')\"",
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        CreateNoWindow = true
+                    };
+                    using (var p = Process.Start(psi))
+                    {
+                        if (p == null) continue;
+                        string o = p.StandardOutput.ReadToEnd();
+                        p.WaitForExit(15000);
+                        if (p.ExitCode == 0 && o.IndexOf("ok", StringComparison.OrdinalIgnoreCase) >= 0)
+                            return name == "py" ? "py" : name;
+                    }
+                }
+                catch { }
+            }
+            // py launcher needs special args prefix when invoking script
+            return null;
         }
 
         static string Sanitize(string s)

@@ -32,4 +32,7 @@
     <Compile Include="../Shared/ZemaxLocator.cs" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="..\..\tools\stl_to_rhino_step.py" Link="stl_to_rhino_step.py" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

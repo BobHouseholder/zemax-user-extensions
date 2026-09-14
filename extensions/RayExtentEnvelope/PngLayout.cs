@@ -46,7 +46,7 @@ namespace RayExtentEnvelope
             minY -= 0.06f * dy; maxY += 0.06f * dy;
             dx = maxX - minX; dy = maxY - minY;
 
-            int margin = 60, footer = 52;
+            int margin = 60, footer = 64;
             float scale = Math.Min((width - 2f * margin) / dx, (height - 2f * margin - footer) / dy);
             float ox = margin - minX * scale + (width - 2f * margin - dx * scale) / 2f;
             float oy = height - margin - footer + minY * scale
@@ -105,21 +105,29 @@ namespace RayExtentEnvelope
                 double bar = Math.Pow(10, Math.Floor(Math.Log10(span * 0.25)));
                 if (span * 0.25 / bar >= 5) bar *= 5;
                 else if (span * 0.25 / bar >= 2) bar *= 2;
-                float bx0 = margin, by = height - footer + 8;
+                // Scale bar in mm, kept inside the footer so it is never clipped.
+                float bx0 = margin;
+                float by = height - footer + 14;
+                float barPx = (float)(bar * scale);
+                if (bx0 + barPx > width - margin) barPx = Math.Max(20f, width - margin - bx0);
                 using (var pen = new Pen(Color.Black, 2f))
                 using (var font = new Font("Segoe UI", 11f))
                 using (var brush = new SolidBrush(Color.Black))
                 using (var gray = new SolidBrush(Color.FromArgb(90, 90, 90)))
                 {
-                    g.DrawLine(pen, bx0, by, bx0 + (float)(bar * scale), by);
-                    g.DrawLine(pen, bx0, by - 4, bx0, by + 4);
-                    g.DrawLine(pen, bx0 + (float)(bar * scale), by - 4, bx0 + (float)(bar * scale), by + 4);
-                    g.DrawString(string.Format(CI, "{0:G4} lens units", bar), font, brush,
-                        bx0 + (float)(bar * scale) + 8, by - 10);
+                    g.DrawLine(pen, bx0, by, bx0 + barPx, by);
+                    g.DrawLine(pen, bx0, by - 5, bx0, by + 5);
+                    g.DrawLine(pen, bx0 + barPx, by - 5, bx0 + barPx, by + 5);
+                    string barLabel = string.Format(CI, "{0:G4} mm", bar);
+                    var barSz = g.MeasureString(barLabel, font);
+                    float labelX = bx0 + barPx + 8;
+                    if (labelX + barSz.Width > width - 8)
+                        labelX = Math.Max(8f, bx0 + barPx - barSz.Width);
+                    g.DrawString(barLabel, font, brush, labelX, by - barSz.Height - 2);
                     string hdr = (string.IsNullOrEmpty(title) ? "system" : title)
                         + "  -  max ray-extent envelope (RayExtentEnvelope)";
-                    g.DrawString(hdr, font, brush, margin, height - footer + 26);
-                    g.DrawString("Black: glass   Blue dash: stop   Red: radial envelope", font, gray,
+                    g.DrawString(hdr, font, brush, margin, height - footer + 36);
+                    g.DrawString("Black: glass   Blue dash: stop   Red: radial envelope   Frame: object Z=0", font, gray,
                         margin, 12);
                 }
 

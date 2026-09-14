@@ -10,8 +10,8 @@ namespace RayExtentEnvelope
     //
     // Shows the max radial extent of rays (extreme fields x pupil rim) through a
     // sequential system: a 2D Y-Z PNG outline (glass + stop + envelope) and a
-    // STEP with solid-of-revolution lens solids plus a solid max-ray envelope.
-    // System is never modified / never saved.
+    // STEP defaults to KEEP_OUT + MEMA L1/L2/... solids (object-at-0 frame).
+    // -envelopeOnly emits KEEP_OUT alone. No CLAP LENS_* stubs. System never saved.
     //
     // Usage:
     //   -file <zmx>           standalone load
@@ -26,6 +26,9 @@ namespace RayExtentEnvelope
     //                         (default is no CLAP/Semi floor: max(rayR, fieldH))
     //   -noclap / -rayExtent  aliases for the default no-CLAP mode (kept for scripts)
     //   -vertexZ              station Z = Frame.Z (vertex) instead of rim Z
+    //   -envelopeOnly         STEP = KEEP_OUT only (omit MEMA L1/L2/... solids)
+    //   -nolenses             alias of -envelopeOnly
+    //   -lenses               include MEMA L1/L2/... solids (default; explicit)
     class Options
     {
         public string FilePath;
@@ -43,6 +46,11 @@ namespace RayExtentEnvelope
         public bool NoClap = true;
         /// <summary>When true, station Z = Frame.Z (vertex). Default uses rim Z.</summary>
         public bool UseVertexZ;
+        /// <summary>
+        /// When true, STEP is KEEP_OUT only (no MEMA L1/L2/... solids).
+        /// Default false = KEEP_OUT + full MEMA lens solids (object-at-0).
+        /// </summary>
+        public bool EnvelopeOnly;
     }
 
     partial class Program
@@ -101,6 +109,9 @@ namespace RayExtentEnvelope
                     case "-noclap":
                     case "-rayextent": Opts.NoClap = true; break;
                     case "-vertexz": Opts.UseVertexZ = true; break;
+                    case "-envelopeonly":
+                    case "-nolenses": Opts.EnvelopeOnly = true; break;
+                    case "-lenses": Opts.EnvelopeOnly = false; break;
                     default:
                         if (al.StartsWith("-z")) break;
                         if (al.StartsWith("-"))

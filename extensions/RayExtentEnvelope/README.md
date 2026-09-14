@@ -1,12 +1,17 @@
-﻿# RayExtentEnvelope
+# RayExtentEnvelope
 
 ZOS-API User Extension. Shows the **maximum radial extent of rays** through a
 sequential system - extreme fields times a pupil-rim sample set - as:
 
 1. **PNG** - 2D Y-Z outline of glass elements and the stop, plus the max-ray
    radial envelope (+R / -R vs global Z)
-2. **STEP** - faceted BREP solids of revolution for each glass element, plus a
-   solid-of-revolution of the radial envelope ("max ray cone")
+2. **STEP** - one assembly with named products:
+   - `KEEP_OUT` — ray-extent envelope (max-ray cone)
+   - `L1`, `L2`, `L3`, … — **full MEMA** lens solids (MechanicalSemiDiameter blank;
+     optical faces to CLAP, flange to MEMA). **Not** old CLAP-stub `LENS_*` naming.
+   Default = KEEP_OUT + MEMA lenses together. Pass `-envelopeOnly` for KEEP_OUT only.
+   Frame is **object-at-0** (finite object shifted to Z=0), matching Concept-24
+   `KEEP_OUT_plus_L1L2L3` STEPs.
 
 The optical system is **never modified** and **never saved**.
 
@@ -33,7 +38,9 @@ The optical system is **never modified** and **never saved**.
 - **Drawn:** glass spans (non-empty material) and the stop aperture. **Skipped:**
   CoordinateBreaks and dummy flat air surfaces with no optical power/material.
 
-STEP generation is pure C# (AP214 `FACETED_BREP`); no Python helper.
+STEP generation prefers an OCC post-process (`tools/stl_to_rhino_step.py`: sew → named solids / keep-out shell by max Z-span → `ShapeUpgrade_UnifySameDomain` → `STEPControl_Controller.Init` + AP214IS/MM/`write.surfacecurve.mode=0`, XCAF product names). Default export is KEEP_OUT + MEMA `L*` solids. Requires Python with `OCP`/`cadquery-ocp` on PATH (or `RAYEXTENT_PYTHON` / `RAYEXTENT_STL_TO_STEP`). Falls back to pure-C# `FACETED_BREP` if OCC is unavailable (Rhino opens that dialect empty).
+
+PNG includes a labeled **scale bar in mm** (footer, not clipped).
 
 ## Default stations (`-surfaces auto`)
 
@@ -62,6 +69,8 @@ Surface 0 is allowed in explicit lists.
 | `-clap` | Floor Rmax to CLAP/Semi: `max(rayR, CLAP, fieldH)` (default is no CLAP floor) |
 | `-noclap` / `-rayExtent` | Aliases for default no-CLAP mode (`max(rayR, fieldH)`) |
 | `-vertexZ` | Station Z = `Frame.Z` (vertex) instead of rim Z |
+| `-envelopeOnly` / `-nolenses` | STEP = `KEEP_OUT` only (omit MEMA `L*` solids) |
+| `-lenses` | Include MEMA `L1`/`L2`/… solids (default; explicit) |
 | `-nodialog` | Accepted (Phase 1 has no settings dialog) |
 | `-quiet` | Do not auto-open outputs after a ribbon run |
 
