@@ -13,7 +13,7 @@
 # running a .ps1 from file is disabled outright:
 #     powershell -NoProfile -ExecutionPolicy Bypass -File tools\pack.ps1
 #
-# TEN add-ins: nine User Extensions + AthermalAnalysis User Analysis.
+# THIRTEEN add-ins: twelve User Extensions + AthermalAnalysis User Analysis.
 #
 # Build first - this packs what is in bin\Release (or bin\<platform>\Release),
 # it does not compile. Default pack is x64, matching the csproj PlatformTarget;
@@ -180,7 +180,7 @@ READ THIS FIRST IF YOU HAVE INSTALLED AN ANSYS EXTENSION BEFORE
 --------------------------------------------------------------
 Ansys's own extension zips - the CODE V Converter, for instance - are extracted
 INTO the Extensions folder. Do not do that with this one. This zip carries TWO
-destinations, because it has TEN add-ins (nine User Extensions plus the
+destinations, because it has THIRTEEN add-ins (twelve User Extensions plus the
 AthermalAnalysis User Analysis), so its top level is a ZOS-API folder rather
 than loose .exe files.
 Extracting it into Extensions would give you
@@ -222,7 +222,8 @@ Or right-click each .exe, Properties, tick Unblock, OK.
 
 CANCEL DOES NOT WORK EVERYWHERE
 -------------------------------
-AthermalScan, DetectorDump, EquivalentGlassFinder and LayoutRender poll for the
+AthermalScan, DetectorDump, DetectorPowerSum, EquivalentGlassFinder,
+LayoutRender, GpimGhostReduce, FootprintDxf and RayExtentEnvelope poll for the
 Terminate button and stop at the next iteration. CryoGlass, DistortionTarget,
 MoldStress, ReverseSystem and the AthermalAnalysis window do not - Cancel does
 nothing there and the run continues to completion.
