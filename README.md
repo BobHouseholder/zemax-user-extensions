@@ -11,8 +11,8 @@ Ribbon runs report through OpticStudio's progress display and auto-open
 report/image outputs (`-quiet` disables that). Tools that edit the system show
 the edits live.
 
-**Terminate is honoured by seven of the twelve.** AthermalScan, DetectorDump,
-EquivalentGlassFinder, LayoutRender, GpimGhostReduce, FootprintDxf and RayExtentEnvelope poll
+**Terminate is honoured by eight of the thirteen.** AthermalScan, DetectorDump,
+DetectorPowerSum, EquivalentGlassFinder, LayoutRender, GpimGhostReduce, FootprintDxf and RayExtentEnvelope poll
 `TerminateRequested` inside their loops. CryoGlass, DistortionTarget, MoldStress,
 ReverseSystem and the AthermalAnalysis window do not â€” Cancel does nothing there. That gap matters
 most on DistortionTarget and MoldStress. OpticStudio's template checks the flag
@@ -134,6 +134,23 @@ Options: `-dir <folder>`, `-trace` (`-nosplit`/`-noscatter`/`-nopol`),
 `-data N` (0 flux / 1 irradiance / 2 intensity), `-log`, `-nocsv`/`-nopng`/`-nonative`,
 `-file <path>`, `-quiet`.
 
+### DetectorPowerSum
+
+Sums the total power over every **Detector Rectangle** in the NCE - the same
+sum-of-all-pixels flux `NSDD` pixel 0 and the Detector Viewer's Total Power
+report - and prints a per-detector table (pixels, hits, power) plus the grand
+total, labelled radiometric (W), photometric (lm) or radiant energy (J) from
+the system source-units setting. `-all` adds every other detector type as a
+separate sub-total; a type that cannot report total flux through
+`GetDetectorData` prints `n/a` and is excluded rather than counted as zero.
+Optional NSC trace first. System is not modified.
+
+Validated on five NSC systems (153 detectors on the largest); on a
+deterministic split trace the totals match `NSDD` readouts exactly.
+
+Options: `-trace` (`-nosplit`/`-noscatter`/`-nopol`), `-all`, `-out <path>`,
+`-file <path>`, `-quiet`.
+
 ### AthermalScan
 
 Passive athermalization for a uniform-environment system, replacing a manual
@@ -215,7 +232,7 @@ Get-ChildItem extensions -Filter *.csproj -Recurse -Depth 1 |
     ForEach-Object { dotnet build $_.FullName --configuration Release }
 ```
 
-That is eleven User Extensions plus the AthermalAnalysis User Analysis. csproj
+That is twelve User Extensions plus the AthermalAnalysis User Analysis. csproj
 defaults stay **x64**. An x86 ribbon listing (needed on OpticStudio 2026 R1.01
 here) is an override, not a project edit:
 
@@ -237,7 +254,7 @@ on the next run.
 [Releases](https://github.com/BobHouseholder/zemax-user-extensions/releases)
 (also mirrored under [`dist/`](dist/) on `main`). Extract, read `INSTALL.txt`,
 drag the `ZOS-API` folder onto the Zemax **data** folder (not into `Extensions`
-- one of the twelve is a User Analysis). Binaries are **x64** .NET Framework 4.8,
+- one of the thirteen is a User Analysis). Binaries are **x64** .NET Framework 4.8,
 unsigned; `INSTALL.txt` has `Unblock-File`. Built against the OpticStudio release
 named in the zip / `manifest.txt` (ZOS-API resolves at run time against yours).
 
