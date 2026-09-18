@@ -14,6 +14,34 @@ namespace RayExtentEnvelope
     {
         static readonly CultureInfo CI = CultureInfo.InvariantCulture;
 
+        /// <summary>Nice 1-2-5 mm step nearest to <paramref name="rough"/>.</summary>
+        static double NiceMmStep(double rough)
+        {
+            if (rough <= 0 || double.IsNaN(rough) || double.IsInfinity(rough)) return 1;
+            double exp = Math.Pow(10, Math.Floor(Math.Log10(rough)));
+            double f = rough / exp;
+            double nice;
+            if (f <= 1.0) nice = 1;
+            else if (f <= 2.0) nice = 2;
+            else if (f <= 5.0) nice = 5;
+            else nice = 10;
+            return nice * exp;
+        }
+
+        /// <summary>
+        /// One nice 1-2-5 notch finer than an existing nice scale-bar length
+        /// (bar=2->1, bar=5->2, bar=10->5, bar=1->0.5).
+        /// </summary>
+        static double HalfNiceMm(double bar)
+        {
+            if (bar <= 0 || double.IsNaN(bar) || double.IsInfinity(bar)) return 1;
+            double exp = Math.Pow(10, Math.Floor(Math.Log10(bar)));
+            double f = Math.Round(bar / exp);
+            if (f <= 1.0) return 0.5 * exp;
+            if (f <= 2.0) return 1.0 * exp;
+            return 2.0 * exp;
+        }
+
         public static void Write(
             string path,
             List<(List<PointF> pts, string kind)> lensLines,
@@ -53,6 +81,25 @@ namespace RayExtentEnvelope
                 + (height - 2f * margin - footer - dy * scale) / -2f;
             PointF Map(PointF p) => new PointF(ox + p.X * scale, oy - p.Y * scale);
 
+            // Preferred scale length from view span (1-2-5), then major grid is one
+            // nice notch finer. Scale bar length is then forced equal to that
+            // major grid spacing so bar and grid always match (same mm value).
+            double span = dx;
+            double bar = Math.Pow(10, Math.Floor(Math.Log10(Math.Max(span * 0.25, 1e-12))));
+            if (span * 0.25 / bar >= 5) bar *= 5;
+            else if (span * 0.25 / bar >= 2) bar *= 2;
+
+            // Grid majors: one nice notch finer than the preferred bar length
+            // (e.g. preferred 2 mm -> 1 mm majors). If that would pack lines
+            // under ~25 px, step up to a nicer spacing from on-screen density.
+            double gridStep = HalfNiceMm(bar);
+            if (gridStep * scale < 25.0)
+                gridStep = NiceMmStep(25.0 / (double)scale);
+            if (gridStep < 1e-6) gridStep = 1;
+
+            // Scale bar length = major grid spacing (label uses same mm value).
+            bar = gridStep;
+
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path)) ?? ".");
 
             using (var bmp = new Bitmap(width, height))
@@ -60,6 +107,26 @@ namespace RayExtentEnvelope
             {
                 g.SmoothingMode = SmoothingMode.AntiAlias;
                 g.Clear(Color.White);
+
+                Console.WriteLine(string.Format(CI,
+                    "PNG grid: {0:G4} mm (scale bar {1:G4} mm)", gridStep, bar));
+                using (var gridPen = new Pen(Color.FromArgb(220, 220, 220), 1f))
+                {
+                    double x0 = Math.Ceiling(minX / gridStep) * gridStep;
+                    for (double x = x0; x <= maxX + 1e-9; x += gridStep)
+                    {
+                        var a = Map(new PointF((float)x, minY));
+                        var b = Map(new PointF((float)x, maxY));
+                        g.DrawLine(gridPen, a, b);
+                    }
+                    double y0 = Math.Ceiling(minY / gridStep) * gridStep;
+                    for (double y = y0; y <= maxY + 1e-9; y += gridStep)
+                    {
+                        var a = Map(new PointF(minX, (float)y));
+                        var b = Map(new PointF(maxX, (float)y));
+                        g.DrawLine(gridPen, a, b);
+                    }
+                }
 
                 if (env != null && env.Count >= 2)
                 {
@@ -101,10 +168,6 @@ namespace RayExtentEnvelope
                     g.DrawLine(axisPen, Map(new PointF(minX, 0)), Map(new PointF(maxX, 0)));
                 }
 
-                double span = dx;
-                double bar = Math.Pow(10, Math.Floor(Math.Log10(span * 0.25)));
-                if (span * 0.25 / bar >= 5) bar *= 5;
-                else if (span * 0.25 / bar >= 2) bar *= 2;
                 // Scale bar in mm, kept inside the footer so it is never clipped.
                 float bx0 = margin;
                 float by = height - footer + 14;
@@ -127,8 +190,11 @@ namespace RayExtentEnvelope
                     string hdr = (string.IsNullOrEmpty(title) ? "system" : title)
                         + "  -  max ray-extent envelope (RayExtentEnvelope)";
                     g.DrawString(hdr, font, brush, margin, height - footer + 36);
-                    g.DrawString("Black: glass   Blue dash: stop   Red: radial envelope   Frame: object Z=0", font, gray,
-                        margin, 12);
+                    g.DrawString(
+                        string.Format(CI,
+                            "Black: glass   Blue dash: stop   Red: radial envelope   Light gray: {0:G4} mm grid   Frame: object Z=0",
+                            gridStep),
+                        font, gray, margin, 12);
                 }
 
                 bmp.Save(path, ImageFormat.Png);
