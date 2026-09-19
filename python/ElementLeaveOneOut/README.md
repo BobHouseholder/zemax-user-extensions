@@ -64,6 +64,12 @@ python element_leave_one_out.py -file C:\path\to\sample.zmx -out C:\temp\loo_out
 | `-report [path]` | Write text report |
 | `-quiet` | Accepted (no auto-open) |
 | `-nodialog` | Accepted no-op |
+| `-allowbadmf` | Override baseline MF health gate (warns hard; default is refuse) |
+
+**Fail-closed:** if every LOO trial is rejected/failed, the script does **not** write
+`*_minus1.zmx` and exits with code **2**. Broken trials (non-finite MF/delta,
+MF ≥ 1e8, or MF ≥ 1e6×MF0) are excluded from the winner. After seed + baseline MF0,
+a non-finite / ≤0 / ≥1e8 baseline also refuses (exit 2) unless `-allowbadmf`.
 
 ## Outputs
 
@@ -89,7 +95,8 @@ Faithful port of the C# extension:
    previous thickness) → EFFL anchor → thickness constraints →
    EnsureRefocusVariable → local DLS → ClampNegativeThicknesses → score
    ΔMF = MF_after − MF0.
-7. Winner = min ΔMF; save `*_minus1.zmx`; write report/CSV.
+7. Winner = min ΔMF among valid trials only; save `*_minus1.zmx` only if ≥1 ok
+   trial (else fail-closed, exit 2); write report/CSV (CSV always).
 
 ## C# sibling
 

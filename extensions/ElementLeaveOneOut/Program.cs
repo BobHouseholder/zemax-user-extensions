@@ -18,6 +18,7 @@
 // Flags you can pass in:
 //   -file <zmx>  -save <path>  -out <dir>  -cycles K  -top N
 //   -rank power|loo  -report [path]  -nodialog  -quiet
+//   -allowbadmf   (let a weird baseline MF keep going — normally we stop)
 // ============================================================
 
 using System;
@@ -40,6 +41,15 @@ namespace ElementLeaveOneOut
         public int TopN = 0;
         public bool RankPowerOnly = false;
         public bool Quiet = false;
+        // Let a bad baseline merit-function score continue (normally we refuse).
+        public bool AllowBadMf = false;
+    }
+
+    // Stop the tool with a known exit code (2 = refused / fail-closed).
+    class ToolExitException : Exception
+    {
+        public int Code;
+        public ToolExitException(int code, string message) : base(message) { Code = code; }
     }
 
     // One removable lens or mirror: which surfaces it owns, and a rough "how strong" number.
@@ -67,6 +77,9 @@ namespace ElementLeaveOneOut
     {
         static Options Opts = new Options();
         static readonly List<string> Report = new List<string>();
+        // Once Quick Focus / focus-gap DLS cannot open, stop retrying every trial.
+        static bool SkipStandaloneRefocus = false;
+        static bool LoggedStandaloneRefocusSkip = false;
 
         static void Main(string[] args)
         {
@@ -89,6 +102,11 @@ namespace ElementLeaveOneOut
             Console.WriteLine("Found OpticStudio at: " + (ZemaxLocator.ResolvedDirectory ?? "(unknown)"));
 
             try { Run(); }
+            catch (ToolExitException tex)
+            {
+                Console.WriteLine("FATAL: " + tex.Message);
+                Environment.ExitCode = tex.Code;
+            }
             catch (Exception ex)
             {
                 Console.WriteLine("FATAL: " + ex.Message + Environment.NewLine + ex.StackTrace);
@@ -133,6 +151,7 @@ namespace ElementLeaveOneOut
                             }
                         case "nodialog": break;
                         case "quiet": Opts.Quiet = true; break;
+                        case "allowbadmf": Opts.AllowBadMf = true; break;
                         default: throw new Exception("unknown flag " + raw);
                     }
                 }
@@ -230,6 +249,8 @@ namespace ElementLeaveOneOut
             double effl0 = SafeEffl(sys);
             Say(F("Baseline MF: {0:G8}", mf0));
             Say(F("Baseline EFFL: {0:G8}", effl0));
+            // Health gate: refuse a nonsense baseline unless -allowbadmf.
+            GateBaselineMf(mf0);
 
             var elements = EnumerateElements(sys);
             if (elements.Count < 1)
@@ -299,8 +320,26 @@ namespace ElementLeaveOneOut
                         t.Delta <= 0 ? "improved/equal" : ""));
             }
 
+            // Always write the per-trial CSV (even when we fail-closed).
+            string csv = Path.Combine(workDir, "ElementLeaveOneOut_trials.csv");
+            WriteTrialsCsv(csv, trials, mf0);
+            Say("CSV: " + csv);
+
             if (okTrials.Count == 0)
-                throw new Exception("all LOO trials failed");
+            {
+                // Fail closed: do NOT write *_minus1.zmx when every trial was bad.
+                Say("");
+                Say("FAIL-CLOSED: no valid LOO trials remain; not saving *_minus1.zmx.");
+                if (Opts.ReportPath != null)
+                {
+                    string reportPath = Opts.ReportPath.Length == 0
+                        ? Path.Combine(workDir, "ElementLeaveOneOut_report.txt")
+                        : Opts.ReportPath;
+                    File.WriteAllLines(reportPath, Report, Encoding.UTF8);
+                    Say("Report: " + reportPath);
+                }
+                throw new ToolExitException(2, "no valid LOO trials remain (fail-closed)");
+            }
 
             var best = okTrials[0];
             Say("");
@@ -333,7 +372,13 @@ namespace ElementLeaveOneOut
                 Say("Report: " + reportPath);
             }
 
-            string csv = Path.Combine(workDir, "ElementLeaveOneOut_trials.csv");
+            Say(F("RETURN mf0={0:G8} mf_after={1:G8} delta={2:G8} save={3}",
+                mf0, mfFinal, mfFinal - mf0, savePath));
+        }
+
+        // Write the spreadsheet of every trial (good and bad).
+        static void WriteTrialsCsv(string csv, List<TrialResult> trials, double mf0)
+        {
             var sb = new StringBuilder();
             sb.AppendLine("element,front,rear,label,abs_power,mf0,mf_after,delta,ok,error");
             foreach (var t in trials)
@@ -346,9 +391,6 @@ namespace ElementLeaveOneOut
                     t.Ok ? "1" : "0", Csv(t.Error ?? "")));
             }
             File.WriteAllText(csv, sb.ToString(), Encoding.UTF8);
-            Say("CSV: " + csv);
-            Say(F("RETURN mf0={0:G8} mf_after={1:G8} delta={2:G8} save={3}",
-                mf0, mfFinal, mfFinal - mf0, savePath));
         }
 
         static string Csv(string s)
@@ -375,8 +417,19 @@ namespace ElementLeaveOneOut
                 double mf = LocalReopt(sys, app);
                 tr.MfAfter = mf;
                 tr.Delta = mf - mf0;
-                tr.Ok = true;
-                Say(F("  MF after reopt: {0:G8}  (delta {1:G8})", mf, tr.Delta));
+                // Reject broken / absurd scores so they cannot win.
+                string why;
+                if (TrialMfIsBroken(mf, mf0, out why))
+                {
+                    tr.Ok = false;
+                    tr.Error = why;
+                    Say(F("  REJECT: {0}  (MF={1:G8}, delta={2:G8})", why, mf, tr.Delta));
+                }
+                else
+                {
+                    tr.Ok = true;
+                    Say(F("  MF after reopt: {0:G8}  (delta {1:G8})", mf, tr.Delta));
+                }
             }
             catch (Exception ex)
             {
@@ -385,6 +438,58 @@ namespace ElementLeaveOneOut
                 Say("  FAIL: " + ex.Message);
             }
             return tr;
+        }
+
+        // True if x is a normal number (not NaN and not Inf).
+        static bool IsFinite(double x) => !(double.IsNaN(x) || double.IsInfinity(x));
+
+        // After reopt: is this trial's MF too broken to trust as a winner?
+        // Rules: non-finite MF, non-finite delta, MF >= 1e8, or MF >= 1e6 * MF0
+        // (when MF0 is a real positive baseline).
+        static bool TrialMfIsBroken(double mfAfter, double mf0, out string why)
+        {
+            if (!IsFinite(mfAfter))
+            {
+                why = "MF after reopt is non-finite";
+                return true;
+            }
+            if (mfAfter >= 1e8)
+            {
+                why = "MF after reopt absurd (>= 1e8)";
+                return true;
+            }
+            if (IsFinite(mf0) && mf0 > 0 && mfAfter >= 1e6 * mf0)
+            {
+                why = "MF after reopt >= 1e6 * MF0 (broken trial)";
+                return true;
+            }
+            double delta = mfAfter - mf0;
+            if (!IsFinite(delta))
+            {
+                why = "delta is non-finite";
+                return true;
+            }
+            why = null;
+            return false;
+        }
+
+        // After seed + baseline MF0: stop if the starting score is nonsense,
+        // unless the user passed -allowbadmf (then warn hard and continue).
+        static void GateBaselineMf(double mf0)
+        {
+            bool bad = !IsFinite(mf0) || mf0 <= 0.0 || mf0 >= 1e8;
+            if (!bad) return;
+            string detail = !IsFinite(mf0) ? "non-finite"
+                : (mf0 <= 0.0 ? "<= 0" : ">= 1e8 (absurd)");
+            if (!Opts.AllowBadMf)
+            {
+                Say(F("REFUSED: baseline MF is unhealthy ({0}, MF0={1:G8}). Pass -allowbadmf to override.",
+                    detail, mf0));
+                throw new ToolExitException(2,
+                    "unhealthy baseline MF (" + detail + ")");
+            }
+            Say(F("WARNING: -allowbadmf: proceeding with unhealthy baseline MF ({0}, MF0={1:G8}).",
+                detail, mf0));
         }
 
         // Load the saved "before we touched anything" copy so each try starts clean.
@@ -908,12 +1013,27 @@ namespace ElementLeaveOneOut
         // Slide the image distance until the spot is sharp again.
         // Prefer OpticStudio Quick Focus; if that tool is missing (common in standalone),
         // fall back to a tiny DLS that only moves the focus-gap thickness.
+        // If neither can open, log ONE clear line and skip further retries —
+        // main DLS already frees the image-gap via EnsureRefocusVariable.
         static void RunQuickFocus(ZOSAPI.IOpticalSystem sys)
         {
+            if (SkipStandaloneRefocus)
+                return;
+
             EnsureRefocusVariable(sys);
             if (TryNativeQuickFocus(sys))
                 return;
-            RefocusByFocusGapOnly(sys);
+            if (TryRefocusByFocusGapOnly(sys))
+                return;
+
+            // Neither tool opened — say so once, then stay quiet for later trials.
+            if (!LoggedStandaloneRefocusSkip)
+            {
+                Say("  Refocus tools unavailable in this session (Quick Focus / focus-gap DLS); "
+                    + "skipping further refocus retries. Main DLS already frees the image-gap variable.");
+                LoggedStandaloneRefocusSkip = true;
+            }
+            SkipStandaloneRefocus = true;
         }
 
         static bool TryNativeQuickFocus(ZOSAPI.IOpticalSystem sys)
@@ -930,9 +1050,9 @@ namespace ElementLeaveOneOut
                 Say("  Quick Focus done (native tool).");
                 return true;
             }
-            catch (Exception ex)
+            catch
             {
-                Say("  Native Quick Focus failed (" + ex.Message + ") — using focus-gap DLS.");
+                // Stay quiet on failure — RunQuickFocus may fall back or log once.
                 return false;
             }
             finally
@@ -942,12 +1062,12 @@ namespace ElementLeaveOneOut
         }
 
         // Lock every other knob, free only the gap-to-image thickness, then DLS.
-        // That is "refocus" when Quick Focus will not open.
-        static void RefocusByFocusGapOnly(ZOSAPI.IOpticalSystem sys)
+        // Returns true if the focus-gap DLS actually ran; false if it could not open.
+        static bool TryRefocusByFocusGapOnly(ZOSAPI.IOpticalSystem sys)
         {
             var lde = sys.LDE;
             int n = lde.NumberOfSurfaces;
-            if (n < 3) return;
+            if (n < 3) return false;
             int focusSurf = n - 2;
 
             // Freeze radii/thicknesses on all in-between surfaces...
@@ -968,37 +1088,33 @@ namespace ElementLeaveOneOut
                 if (!fs.ThicknessCell.MakeSolveVariable())
                     try { fs.GetSurfaceCell(ZOSAPI.Editors.LDE.SurfaceColumn.Thickness).MakeSolveVariable(); } catch { }
             }
-            catch (Exception ex)
+            catch
             {
-                Say("  WARNING: could not free focus gap for refocus DLS: " + ex.Message);
                 EnsureOptimizationVariables(sys);
-                return;
+                return false;
             }
 
             var opt = sys.Tools.OpenLocalOptimization();
             if (opt == null)
             {
-                Say("  Refocus DLS skipped: local optimizer would not open.");
                 EnsureOptimizationVariables(sys);
-                return;
+                return false;
             }
             try
             {
                 if (opt.Variables < 1)
-                {
-                    Say("  Refocus DLS skipped: focus gap still not variable.");
-                    return;
-                }
+                    return false;
                 opt.Algorithm = ZOSAPI.Tools.Optimization.OptimizationAlgorithm.DampedLeastSquares;
                 opt.Cycles = ZOSAPI.Tools.Optimization.OptimizationCycles.Automatic;
                 double before = opt.InitialMeritFunction;
                 opt.RunAndWaitForCompletion();
                 double after = opt.CurrentMeritFunction;
                 Say(F("  Refocus DLS (focus gap S{0} only): {1:G8} -> {2:G8}", focusSurf, before, after));
+                return true;
             }
-            catch (Exception ex)
+            catch
             {
-                Say("  WARNING: refocus DLS failed: " + ex.Message);
+                return false;
             }
             finally
             {

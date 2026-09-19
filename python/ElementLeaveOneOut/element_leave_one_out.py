@@ -22,6 +22,7 @@
 # Flags (same names as the C# tool):
 #   -file <zmx>  -save <path>  -out <dir>  -cycles K  -top N
 #   -rank power|loo  -report [path]  -nodialog  -quiet
+#   -allowbadmf   (let a weird baseline MF keep going — normally we stop)
 # ============================================================
 
 from __future__ import annotations
@@ -44,8 +45,13 @@ CYCLES: int = 30
 TOP_N: int = 0
 RANK_POWER_ONLY: bool = False
 QUIET: bool = False
+# Let a bad baseline merit-function score continue (normally we refuse).
+ALLOW_BAD_MF: bool = False
 
 REPORT_LINES: List[str] = []
+# Once Quick Focus / focus-gap DLS cannot open, stop retrying every trial.
+_SKIP_STANDALONE_REFOCUS: bool = False
+_LOGGED_STANDALONE_REFOCUS_SKIP: bool = False
 
 # Thickness fences (same numbers as the C# extension).
 GLASS_MIN_CT = 1.0
@@ -74,6 +80,13 @@ class TrialResult:
     delta: float = float("nan")
     error: str = ""
     ok: bool = False
+
+
+class ToolExit(Exception):
+    # Stop the tool with a known exit code (2 = refused / fail-closed).
+    def __init__(self, code: int, message: str) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 def say(line: str) -> None:
@@ -180,7 +193,7 @@ def bootstrap_zosapi(zos_root: str):
 def parse_args(argv: List[str]) -> None:
     """Read -file / -out / ... and fill the global switches."""
     global FILE_PATH, SAVE_PATH, OUT_DIR, REPORT_PATH, CYCLES, TOP_N
-    global RANK_POWER_ONLY, QUIET
+    global RANK_POWER_ONLY, QUIET, ALLOW_BAD_MF
 
     i = 0
     while i < len(argv):
@@ -224,6 +237,8 @@ def parse_args(argv: List[str]) -> None:
                 pass
             elif a == "quiet":
                 QUIET = True
+            elif a == "allowbadmf":
+                ALLOW_BAD_MF = True
             else:
                 raise RuntimeError("unknown flag " + raw)
         else:
@@ -270,6 +285,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         ZOSAPI = bootstrap_zosapi(zos_root)
         run(ZOSAPI)
         return 0
+    except ToolExit as tex:
+        print("FATAL: " + str(tex))
+        return int(tex.code)
     except Exception as ex:
         print("FATAL: " + str(ex))
         traceback.print_exc()
@@ -360,6 +378,8 @@ def run_on_system(ZOSAPI, app, TheSystem) -> None:
     effl0 = safe_effl(ZOSAPI, TheSystem)
     say(fmt("Baseline MF: {:.8g}", mf0))
     say(fmt("Baseline EFFL: {:.8g}", effl0))
+    # Health gate: refuse a nonsense baseline unless -allowbadmf.
+    gate_baseline_mf(mf0)
 
     elements = enumerate_elements(TheSystem)
     if len(elements) < 1:
@@ -438,8 +458,24 @@ def run_on_system(ZOSAPI, app, TheSystem) -> None:
                 )
             )
 
+    # Always write the per-trial CSV (even when we fail-closed).
+    csv_path = str(Path(work_dir) / "ElementLeaveOneOut_trials.csv")
+    write_trials_csv(csv_path, trials, mf0)
+    say("CSV: " + csv_path)
+
     if not ok_trials:
-        raise RuntimeError("all LOO trials failed")
+        # Fail closed: do NOT write *_minus1.zmx when every trial was bad.
+        say("")
+        say("FAIL-CLOSED: no valid LOO trials remain; not saving *_minus1.zmx.")
+        if REPORT_PATH is not None:
+            report_path = (
+                str(Path(work_dir) / "ElementLeaveOneOut_report.txt")
+                if REPORT_PATH == ""
+                else REPORT_PATH
+            )
+            Path(report_path).write_text("\n".join(REPORT_LINES) + "\n", encoding="utf-8")
+            say("Report: " + report_path)
+        raise ToolExit(2, "no valid LOO trials remain (fail-closed)")
 
     best = ok_trials[0]
     say("")
@@ -478,7 +514,19 @@ def run_on_system(ZOSAPI, app, TheSystem) -> None:
         Path(report_path).write_text("\n".join(REPORT_LINES) + "\n", encoding="utf-8")
         say("Report: " + report_path)
 
-    csv_path = str(Path(work_dir) / "ElementLeaveOneOut_trials.csv")
+    say(
+        fmt(
+            "RETURN mf0={:.8g} mf_after={:.8g} delta={:.8g} save={}",
+            mf0,
+            mf_final,
+            mf_final - mf0,
+            save_path,
+        )
+    )
+
+
+def write_trials_csv(csv_path: str, trials: List[TrialResult], mf0: float) -> None:
+    # Write the spreadsheet of every trial (good and bad).
     with open(csv_path, "w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh)
         w.writerow(
@@ -510,16 +558,6 @@ def run_on_system(ZOSAPI, app, TheSystem) -> None:
                     csv_escape(t.error or ""),
                 ]
             )
-    say("CSV: " + csv_path)
-    say(
-        fmt(
-            "RETURN mf0={:.8g} mf_after={:.8g} delta={:.8g} save={}",
-            mf0,
-            mf_final,
-            mf_final - mf0,
-            save_path,
-        )
-    )
 
 
 def run_trial(ZOSAPI, app, TheSystem, base_copy, el, mf0, effl0) -> TrialResult:
@@ -532,13 +570,72 @@ def run_trial(ZOSAPI, app, TheSystem, base_copy, el, mf0, effl0) -> TrialResult:
         mf = local_reopt(ZOSAPI, TheSystem, app)
         tr.mf_after = mf
         tr.delta = mf - mf0
-        tr.ok = True
-        say(fmt("  MF after reopt: {:.8g}  (delta {:.8g})", mf, tr.delta))
+        # Reject broken / absurd scores so they cannot win.
+        broken, why = trial_mf_is_broken(mf, mf0)
+        if broken:
+            tr.ok = False
+            tr.error = why
+            say(fmt("  REJECT: {}  (MF={:.8g}, delta={:.8g})", why, mf, tr.delta))
+        else:
+            tr.ok = True
+            say(fmt("  MF after reopt: {:.8g}  (delta {:.8g})", mf, tr.delta))
     except Exception as ex:
         tr.ok = False
         tr.error = str(ex)
         say("  FAIL: " + str(ex))
     return tr
+
+
+def _is_finite(x: float) -> bool:
+    # True if x is a normal number (not NaN and not Inf).
+    return not (math.isnan(x) or math.isinf(x))
+
+
+def trial_mf_is_broken(mf_after: float, mf0: float):
+    # After reopt: is this trial MF too broken to trust as a winner?
+    # Rules: non-finite MF, non-finite delta, MF >= 1e8, or MF >= 1e6 * MF0
+    # (when MF0 is a real positive baseline).
+    # Returns (is_broken, reason_string).
+    if not _is_finite(mf_after):
+        return True, "MF after reopt is non-finite"
+    if mf_after >= 1e8:
+        return True, "MF after reopt absurd (>= 1e8)"
+    if _is_finite(mf0) and mf0 > 0 and mf_after >= 1e6 * mf0:
+        return True, "MF after reopt >= 1e6 * MF0 (broken trial)"
+    delta = mf_after - mf0
+    if not _is_finite(delta):
+        return True, "delta is non-finite"
+    return False, ""
+
+
+def gate_baseline_mf(mf0: float) -> None:
+    # After seed + baseline MF0: stop if the starting score is nonsense,
+    # unless the user passed -allowbadmf (then warn hard and continue).
+    bad = (not _is_finite(mf0)) or mf0 <= 0.0 or mf0 >= 1e8
+    if not bad:
+        return
+    if not _is_finite(mf0):
+        detail = "non-finite"
+    elif mf0 <= 0.0:
+        detail = "<= 0"
+    else:
+        detail = ">= 1e8 (absurd)"
+    if not ALLOW_BAD_MF:
+        say(
+            fmt(
+                "REFUSED: baseline MF is unhealthy ({}, MF0={:.8g}). Pass -allowbadmf to override.",
+                detail,
+                mf0,
+            )
+        )
+        raise ToolExit(2, "unhealthy baseline MF (" + detail + ")")
+    say(
+        fmt(
+            "WARNING: -allowbadmf: proceeding with unhealthy baseline MF ({}, MF0={:.8g}).",
+            detail,
+            mf0,
+        )
+    )
 
 
 def reload_system(TheSystem, path: str) -> None:
@@ -991,11 +1088,27 @@ def ensure_refocus_variable(ZOSAPI, TheSystem) -> None:
 
 
 def run_quick_focus(ZOSAPI, TheSystem) -> None:
-    """Prefer native Quick Focus; else DLS on focus-gap thickness only."""
+    # Prefer native Quick Focus; else DLS on focus-gap thickness only.
+    # If neither can open, log ONE clear line and skip further retries —
+    # main DLS already frees the image-gap via ensure_refocus_variable.
+    global _SKIP_STANDALONE_REFOCUS, _LOGGED_STANDALONE_REFOCUS_SKIP
+    if _SKIP_STANDALONE_REFOCUS:
+        return
+
     ensure_refocus_variable(ZOSAPI, TheSystem)
     if try_native_quick_focus(ZOSAPI, TheSystem):
         return
-    refocus_by_focus_gap_only(ZOSAPI, TheSystem)
+    if try_refocus_by_focus_gap_only(ZOSAPI, TheSystem):
+        return
+
+    # Neither tool opened — say so once, then stay quiet for later trials.
+    if not _LOGGED_STANDALONE_REFOCUS_SKIP:
+        say(
+            "  Refocus tools unavailable in this session (Quick Focus / focus-gap DLS); "
+            "skipping further refocus retries. Main DLS already frees the image-gap variable."
+        )
+        _LOGGED_STANDALONE_REFOCUS_SKIP = True
+    _SKIP_STANDALONE_REFOCUS = True
 
 
 def try_native_quick_focus(ZOSAPI, TheSystem) -> bool:
@@ -1015,8 +1128,8 @@ def try_native_quick_focus(ZOSAPI, TheSystem) -> bool:
         qf.RunAndWaitForCompletion()
         say("  Quick Focus done (native tool).")
         return True
-    except Exception as ex:
-        say("  Native Quick Focus failed (" + str(ex) + ") — using focus-gap DLS.")
+    except Exception:
+        # Stay quiet on failure — run_quick_focus may fall back or log once.
         return False
     finally:
         try:
@@ -1026,12 +1139,13 @@ def try_native_quick_focus(ZOSAPI, TheSystem) -> bool:
             pass
 
 
-def refocus_by_focus_gap_only(ZOSAPI, TheSystem) -> None:
-    """Lock other knobs; free only gap-to-image; DLS; restore variables."""
+def try_refocus_by_focus_gap_only(ZOSAPI, TheSystem) -> bool:
+    # Lock other knobs; free only gap-to-image; DLS; restore variables.
+    # Returns True if the focus-gap DLS actually ran; False if it could not open.
     lde = TheSystem.LDE
     n = int(lde.NumberOfSurfaces)
     if n < 3:
-        return
+        return False
     focus_surf = n - 2
 
     for i in range(1, n - 1):
@@ -1062,20 +1176,17 @@ def refocus_by_focus_gap_only(ZOSAPI, TheSystem) -> None:
                 ).MakeSolveVariable()
             except Exception:
                 pass
-    except Exception as ex:
-        say("  WARNING: could not free focus gap for refocus DLS: " + str(ex))
+    except Exception:
         ensure_optimization_variables(ZOSAPI, TheSystem)
-        return
+        return False
 
     opt = TheSystem.Tools.OpenLocalOptimization()
     if opt is None:
-        say("  Refocus DLS skipped: local optimizer would not open.")
         ensure_optimization_variables(ZOSAPI, TheSystem)
-        return
+        return False
     try:
         if int(opt.Variables) < 1:
-            say("  Refocus DLS skipped: focus gap still not variable.")
-            return
+            return False
         opt.Algorithm = ZOSAPI.Tools.Optimization.OptimizationAlgorithm.DampedLeastSquares
         opt.Cycles = ZOSAPI.Tools.Optimization.OptimizationCycles.Automatic
         before = float(opt.InitialMeritFunction)
@@ -1089,14 +1200,16 @@ def refocus_by_focus_gap_only(ZOSAPI, TheSystem) -> None:
                 after,
             )
         )
-    except Exception as ex:
-        say("  WARNING: refocus DLS failed: " + str(ex))
+        return True
+    except Exception:
+        return False
     finally:
         try:
             opt.Close()
         except Exception:
             pass
         ensure_optimization_variables(ZOSAPI, TheSystem)
+
 
 
 if __name__ == "__main__":
