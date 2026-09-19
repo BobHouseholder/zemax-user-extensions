@@ -47,3 +47,14 @@ Deploy to `{Zemax Data}\ZOS-API\Extensions\`.
 
 
 
+
+## Python (ZOS-API)
+
+A standalone **Python** port (pythonnet + ZOS-API, same algorithm and CLI flags)
+lives outside this Extensions folder so `tools/pack.ps1` never ships it:
+
+- Script + run notes: [`python/ElementLeaveOneOut/`](../../python/ElementLeaveOneOut/)
+- Entry point: `python/ElementLeaveOneOut/element_leave_one_out.py`
+
+Prefer that tree for scripting / headless smoke. This folder remains the C#
+User Extension (ribbon deploy).

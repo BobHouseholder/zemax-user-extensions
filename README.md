@@ -121,6 +121,9 @@ edited; the open baseline is restored between trials.
 Options: `-file <zmx>`, `-save <path>`, `-out <dir>`, `-cycles K` (0 = Automatic;
 default 30), `-top N`, `-rank power`, `-report [path]`, `-quiet`, `-nodialog`.
 
+Python (ZOS-API) twin for scripting/headless use: [`python/ElementLeaveOneOut/`](python/ElementLeaveOneOut/) (not packed into the Extensions zip).
+
+
 ### EquivalentGlassFinder
 
 Community request
