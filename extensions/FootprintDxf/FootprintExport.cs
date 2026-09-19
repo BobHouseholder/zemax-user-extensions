@@ -6,8 +6,16 @@ using System.Linq;
 
 namespace FootprintDxf
 {
+    // ============================================================
+    // FootprintExport - the real export loop (plain words)
+    // ============================================================
+    // For each surface: shoot rays, keep the hits, wrap a rubber-band
+    // (convex hull), write DXF layers and a PNG preview. Partial class
+    // so Program.cs stays thin. Lens file is never changed.
+    // ============================================================
     partial class Program
     {
+        // Main job: for each surface, collect ray hits, wrap a hull, write layers. Lens unchanged.
         static void Export(ZOSAPI.IZOSAPI_Application app)
         {
             var sys = app.PrimarySystem;

@@ -9,8 +9,15 @@ using System.Linq;
 
 namespace AthermalScan
 {
+    // ============================================================
+    // Thermal helpers - make the lens "feel" a temperature
+    // ============================================================
+    // Air index conventions, CTE growth of thicknesses, applying and
+    // restoring temperature, and chart helpers for the scan.
+    // ============================================================
     partial class Program
     {
+        // Absolute vs relative index convention label for the report.
         static string Convention(double pAtm) =>
             pAtm <= 1e-12
                 ? "ABSOLUTE (vacuum) - at P = 0 the air reference is unity"
@@ -22,6 +29,7 @@ namespace AthermalScan
         // system-level temperature this scan writes would then not describe what is
         // actually traced: a group given its own PRES keeps its own pressure, hence its
         // own relative/absolute index reference, while the report claims a uniform soak.
+        // Stop if the merit function already has ENV operands that would fight us.
         static void CheckNoEnvironmentOperands(ZOSAPI.IOpticalSystem sys)
         {
             var found = new List<string>();
@@ -53,6 +61,7 @@ namespace AthermalScan
         // silently wrong - most visibly a marginal ray height solve on the last
         // thickness, which auto-refocuses and reports a focus shift of zero. Variables
         // are harmless: they mark a cell for optimisation, they do not compute it.
+        // LDE columns we are allowed to write when applying thermal changes.
         static List<ZOSAPI.Editors.LDE.SurfaceColumn> WritableColumns()
         {
             var cols = new List<ZOSAPI.Editors.LDE.SurfaceColumn>
@@ -87,6 +96,7 @@ namespace AthermalScan
             return found;
         }
 
+        // Warn/stop if pickup solves would fight our thermal thickness edits.
         static void CheckSolves(ZOSAPI.Editors.LDE.ILensDataEditor lde, int imgIdx)
         {
             if (!Opts.FreezeSolves)
@@ -130,6 +140,7 @@ namespace AthermalScan
         // Undo everything the scan touched. Called from a finally, so it must not throw:
         // a failed step is reported and the remaining steps are still attempted. Returns
         // the design-environment EFFL for the restoration check, or NaN.
+        // Put temperature/pressure and thicknesses back after a sample.
         static double RestoreSystem(ZOSAPI.IOpticalSystem sys, ZOSAPI.SystemData.ISDEnvironmentData env,
             RowSnap[] snaps, int imgIdx, double t0, double p0, double tRaw, double pRaw,
             bool adjust0, int primaryWave)
@@ -186,6 +197,7 @@ namespace AthermalScan
         // Sag is evaluated on the snapshot, analytically, for the surface forms this
         // tool already expands (standard/conic, even and odd asphere). Anything else
         // bounding the gap falls back to centre scaling and is named in the report.
+        // Edge thickness after CTE growth for temperature change dT.
         static double EdgeExpandedThickness(RowSnap[] snaps, int i, int imgIdx, double dT, out bool ok)
         {
             ok = false;
@@ -219,6 +231,7 @@ namespace AthermalScan
         // Sag of a snapshotted surface at radial height h, with its radius and
         // polynomial terms expanded by eR (eR = 1 gives the as-built surface). The
         // conic is dimensionless and does not scale.
+        // Surface sag at height h (for edge thickness math).
         static double Sag(RowSnap s, double h, double eR, out bool ok)
         {
             ok = false;
@@ -246,6 +259,7 @@ namespace AthermalScan
         }
 
         // apply the thermal model relative to the snapshot (dT = 0 restores)
+        // Stretch thicknesses / update env for this temperature step.
         static void ApplyTemperature(ZOSAPI.IOpticalSystem sys, RowSnap[] snaps, int imgIdx, double dT)
         {
             var lde = sys.LDE;
@@ -292,6 +306,7 @@ namespace AthermalScan
         }
 
         // image-space marginal focus position measured from the last optical surface
+        // Find focus position using a marginal ray (report card for focus shift).
         static double MarginalFocus(ZOSAPI.IOpticalSystem sys, int imgIdx, int wave, double lastGap)
         {
             double y = Op(sys, ZOSAPI.Editors.MFE.MeritOperandType.REAY, imgIdx, wave, 0, 0, 0, 1);
@@ -302,6 +317,7 @@ namespace AthermalScan
             return lastGap - y / u;
         }
 
+        // Fit a straight line (slope of focus vs temperature).
         static double LinFit(double[] x, double[] y)
         {
             int n = x.Length;
@@ -310,6 +326,7 @@ namespace AthermalScan
             return (n * sxy - sx * sy) / (n * sxx - sx * sx);
         }
 
+        // Draw the temperature-scan summary chart PNG.
         static void Chart(double[] t, double[] dz, double[] rmsF, double[] rmsR,
             double dof, string path, string title)
         {
@@ -335,6 +352,7 @@ namespace AthermalScan
             }
         }
 
+        // Draw one panel inside the chart.
         static void Panel(Graphics g, Font font, int x, int y, int w, int h, double[] t,
             (double[] data, Color color, string label)[] series, string yLabel, double dofBand)
         {

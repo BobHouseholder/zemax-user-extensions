@@ -5,26 +5,20 @@ using System.IO;
 
 namespace DetectorPowerSum
 {
-    // Detector Power Sum - a ZOS-API User Extension.
-    //
-    // Sums the total power accumulated on every Detector Rectangle in a
-    // non-sequential system and reports the per-detector values and the grand
-    // total. The value is GetDetectorData(obj, 0, 0) - the same "sum of all
-    // pixels" flux the NSDD operand and the Detector Viewer's Total Power
-    // readout use - so it is radiometric (watts) or photometric (lumens)
-    // according to the system's source-units setting, which the report states.
-    //
-    // Usage:
-    //   (no args)      extension mode: sum the detectors of the open system
-    //   -file <zmx>    standalone mode: load the file first
-    //   -trace         run the NSC ray trace first (clears detectors; ray
-    //                  splitting/scattering/polarization ON unless -nosplit /
-    //                  -noscatter / -nopol given)
-    //   -all           include every detector object (color/polar/volume/
-    //                  surface...), not just Detector Rectangles; non-rectangle
-    //                  detectors are listed and sub-totalled separately
-    //   -out <path>    also write the report to this text file
-    //   -quiet         do not auto-open the report after a ribbon (GUI) run
+    // ============================================================
+    // DetectorPowerSum - what this program does (plain words)
+    // ============================================================
+    // Adds up how much light power landed on every Detector Rectangle
+    // in a non-sequential system, then prints each detector and the
+                // Pixel (0,0) here means "sum of all pixels" total power (API quirk).
+    // grand total. Uses GetDetectorData(..., 0, 0) — the same "sum of
+    // all pixels" number you see as Total Power in the Detector Viewer
+    // (and the NSDD operand). Optionally runs a ray trace first.
+    // Does not change the lens design. Run from User Extensions or
+    // -file from a shell.
+    // ============================================================
+
+    // Switches from the command line.
     class Options
     {
         public string FilePath = null;
@@ -39,6 +33,7 @@ namespace DetectorPowerSum
     {
         static Options Opts = new Options();
 
+        // Start here: find OpticStudio, then sum detector power.
         static void Main(string[] args)
         {
             ParseArgs(args);
@@ -58,6 +53,7 @@ namespace DetectorPowerSum
             }
         }
 
+        // Read the flags you typed (-file, -trace, ...).
         static void ParseArgs(string[] args)
         {
             for (int i = 0; i < args.Length; i++)
@@ -78,6 +74,7 @@ namespace DetectorPowerSum
 
         static string F(string fmt, params object[] a) => string.Format(CultureInfo.InvariantCulture, fmt, a);
 
+        // Connect and print per-detector power plus the grand total.
         static void Run()
         {
             ZOSAPI.IZOSAPI_Application app = null;
@@ -109,6 +106,7 @@ namespace DetectorPowerSum
             }
         }
 
+        // Read total power from each Detector Rectangle and print the grand total.
         static void SumDetectors(ZOSAPI.IZOSAPI_Application app)
         {
             var sys = app.PrimarySystem;
@@ -181,6 +179,7 @@ namespace DetectorPowerSum
                 if (!isRect && !(Opts.All && isDetector)) continue;
 
                 double power = 0, hits = 0;
+                // Pixel (0,0) here means "sum of all pixels" total power (API quirk).
                 bool ok = nce.GetDetectorData(i, 0, 0, out power);   // pixel 0, data 0: total flux
                 nce.GetDetectorData(i, -3, 0, out hits);             // pixel -3: total hits
 

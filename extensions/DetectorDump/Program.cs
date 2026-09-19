@@ -8,29 +8,19 @@ using System.Text;
 
 namespace DetectorDump
 {
-    // Detector Dump — a ZOS-API User Extension.
-    //
-    // Exports the data of EVERY detector in a non-sequential system in one go:
-    // native detector files (.DDR/.DDC/.DDP/.DDV), CSV pixel grids, false-colour
-    // PNG heatmaps, and a summary table. Solves two recurring community asks:
-    // saving data from many detectors is "tedious to manually save one by one",
-    // and the detector viewer graphic cannot be saved to an image via the API
-    // (threads "How to save detector viewer graphical plot into image file by
-    // ZOS-API?" and the batch-detector-export discussions).
-    //
-    // Usage:
-    //   (no args)      extension mode: export all detectors of the open system
-    //   -file <zmx>    standalone mode: load the file first
-    //   -dir <folder>  output folder (default: <lens>_detectors next to the file)
-    //   -trace         run the NSC ray trace first (clears detectors; ray
-    //                  splitting/scattering/polarization ON unless -nosplit /
-    //                  -noscatter / -nopol given)
-    //   -data N        pixel data code for CSV/PNG: 0 flux (default),
-    //                  1 irradiance, 2 intensity
-    //   -log           logarithmic heatmap scale (4 decades below peak) - useful
-    //                  for high dynamic range data such as ghost/split paths
-    //   -nocsv / -nopng / -nonative   switch off individual outputs
-    //   -quiet         do not auto-open the summary after a ribbon (GUI) run
+    // ============================================================
+    // DetectorDump - what this program does (plain words)
+    // ============================================================
+    // Non-sequential systems can have many detectors (light meters).
+    // Saving each one by hand is tedious, and the pretty heatmap
+    // cannot be saved through the normal API. This tool dumps EVERY
+    // detector in one go: native detector files, CSV pixel grids,
+    // false-color PNG heatmaps, and a summary table. The lens is
+    // not redesigned — we only read detectors (optional ray-trace
+    // first). Run from User Extensions or -file / -dir from a shell.
+    // ============================================================
+
+    // Switches from the command line.
     class Options
     {
         public string FilePath = null;
@@ -47,6 +37,7 @@ namespace DetectorDump
     {
         static Options Opts = new Options();
 
+        // Start here: find OpticStudio, then dump detectors.
         static void Main(string[] args)
         {
             ParseArgs(args);
@@ -66,6 +57,7 @@ namespace DetectorDump
             }
         }
 
+        // Read the flags you typed (-file, -dir, -trace, ...).
         static void ParseArgs(string[] args)
         {
             for (int i = 0; i < args.Length; i++)
@@ -90,6 +82,7 @@ namespace DetectorDump
 
         // TryParse zeroes its out parameter on failure, which would silently
         // replace the documented defaults; keep the default instead and warn.
+        // Parse an integer, or keep the old value if the text is bad.
         static int ParseInt(string s, int keep)
         {
             int v;
@@ -100,6 +93,7 @@ namespace DetectorDump
 
         static string F(string fmt, params object[] a) => string.Format(CultureInfo.InvariantCulture, fmt, a);
 
+        // Connect to OpticStudio and export every detector.
         static void Run()
         {
             ZOSAPI.IZOSAPI_Application app = null;
@@ -140,6 +134,7 @@ namespace DetectorDump
         // Plugin-mode (ribbon) runs lose their console the moment the process
         // exits, so the written files are the only surviving report - open
         // them with their default apps unless -quiet.
+        // After a ribbon run, open the output folder / files.
         static void OpenOutputs(ZOSAPI.IZOSAPI_Application app, params string[] paths)
         {
             if (Opts.Quiet) return;
@@ -152,6 +147,7 @@ namespace DetectorDump
             }
         }
 
+        // Walk every detector and write native + CSV + PNG + summary.
         static void Dump(ZOSAPI.IZOSAPI_Application app)
         {
             var sys = app.PrimarySystem;
@@ -294,6 +290,7 @@ namespace DetectorDump
             OpenOutputs(app, summaryPath);
         }
 
+        // Make a safe file-name fragment from a detector label.
         static string Sanitize(string s)
         {
             var sb = new StringBuilder();
@@ -303,6 +300,7 @@ namespace DetectorDump
             return r.Length > 40 ? r.Substring(0, 40) : (r.Length == 0 ? "detector" : r);
         }
 
+        // Write the pixel values as a CSV spreadsheet.
         static void WriteCsv(double[,] grid, string path)
         {
             int nr = grid.GetLength(0), nc = grid.GetLength(1);
@@ -320,6 +318,7 @@ namespace DetectorDump
         }
 
         // classic false-colour lookup: black -> blue -> cyan -> green -> yellow -> red -> white
+        // Map 0..1 to a heat color (blue cold → red hot).
         static Color Lut(double t)
         {
             t = Math.Max(0, Math.Min(1, t));
@@ -339,6 +338,7 @@ namespace DetectorDump
             return Color.White;
         }
 
+        // Paint a false-color PNG heatmap of the pixel grid.
         static void WriteHeatmap(double[,] grid, string path, string caption)
         {
             int nr = grid.GetLength(0), nc = grid.GetLength(1);

@@ -6,30 +6,19 @@ using System.Linq;
 
 namespace EquivalentGlassFinder
 {
-    // Equivalent Glass Finder — a ZOS-API User Extension.
-    //
-    // Solves the problem raised in the Zemax community thread
-    // "Equivalent Glass Feature Proposal"
-    // (https://community.zemax.com/got-a-question-7/equivalent-glass-feature-proposal-881):
-    // designers need a one-click way to swap the glasses in a design for the
-    // equivalent or closest available materials from a chosen catalog, to cut
-    // cost and avoid long lead times (e.g. obsolete glasses).
-    //
-    // For every glass surface in the loaded system the extension finds the
-    // closest available catalog glass by weighted distance in (nd, vd, dPgF),
-    // reports the top candidates, applies the best match, and prints
-    // before/after performance (EFFL, merit function, RMS spot per field).
-    //
-    // Usage (no arguments needed when launched from the Programming ribbon):
-    //   -catalog NAME     draw replacements from this catalog and consider ALL
-    //                     glasses (default: catalogs in use, obsolete-only)
-    //   -includeObsolete  allow obsolete glasses as candidates
-    //   -report           report only, do not modify the system
-    //   -reopt            re-optimize existing variables after the swap
-    //   -save             save the modified system as <file>_EquivGlass.zmx
-    //   -top N            number of candidates to list per glass (default 3)
-    //   -wnd/-wvd/-wpgf W distance weights (defaults 100 / 1 / 500)
-    //   -quiet            do not auto-open the report after a ribbon (GUI) run
+    // ============================================================
+    // EquivalentGlassFinder - what this program does (plain words)
+    // ============================================================
+    // You designed a lens with fancy glasses. Now you want cheaper /
+    // stock glasses that behave almost the same. This tool looks up
+    // each glass's index (n) and dispersion (Abbe / Vd), finds the
+    // closest matches in a chosen catalog, optionally swaps them in,
+    // and writes a report. The merit function (report card) can be
+    // checked before/after. Community ask: "Equivalent Glass Feature
+    // Proposal". Run from User Extensions or -file / -catalog.
+    // ============================================================
+
+    // Switches from the command line.
     class Options
     {
         public string TargetCatalog = null;
@@ -44,6 +33,7 @@ namespace EquivalentGlassFinder
         public bool Quiet = false;
     }
 
+    // One glass: name, catalog, index n, Abbe Vd (dispersion).
     class GlassInfo
     {
         public string Name;
@@ -62,6 +52,7 @@ namespace EquivalentGlassFinder
 
         // Main deliberately contains no ZOSAPI types: the assemblies are only
         // resolvable after ZOSAPI_NetHelper.Initialize() has located OpticStudio.
+        // Start here: find OpticStudio, then find glass swaps.
         static void Main(string[] args)
         {
             ParseArgs(args);
@@ -91,6 +82,7 @@ namespace EquivalentGlassFinder
             }
         }
 
+        // Read the flags you typed (-file, -catalog, -apply, ...).
         static void ParseArgs(string[] args)
         {
             for (int i = 0; i < args.Length; i++)
@@ -114,6 +106,7 @@ namespace EquivalentGlassFinder
 
         // TryParse zeroes its out parameter on failure, which would silently
         // replace the documented defaults; keep the default instead and warn.
+        // Parse an integer, or keep the old value if bad.
         static int ParseInt(string s, int keep)
         {
             int v;
@@ -122,6 +115,7 @@ namespace EquivalentGlassFinder
             return keep;
         }
 
+        // Parse a number, or keep the old value if bad.
         static double ParseDouble(string s, double keep)
         {
             double v;
@@ -131,6 +125,7 @@ namespace EquivalentGlassFinder
             return keep;
         }
 
+        // Print a status line.
         static void Say(string line)
         {
             Console.WriteLine(line);
@@ -139,6 +134,7 @@ namespace EquivalentGlassFinder
 
         static string F(string fmt, params object[] a) => string.Format(CultureInfo.InvariantCulture, fmt, a);
 
+        // Connect to OpticStudio and run the finder on the system.
         static void Run()
         {
             ZOSAPI.IZOSAPI_Application app = null;
@@ -167,6 +163,7 @@ namespace EquivalentGlassFinder
             }
         }
 
+        // For each unique glass in the lens, find the closest catalog match.
         static void RunOnSystem(ZOSAPI.IZOSAPI_Application app)
         {
             var sys = app.PrimarySystem;
@@ -439,6 +436,7 @@ namespace EquivalentGlassFinder
         // Plugin-mode (ribbon) runs lose their console the moment the process
         // exits, so the written report is the only surviving output - open it
         // with its default app unless -quiet.
+        // Open the report file after a ribbon run.
         static void OpenOutputs(ZOSAPI.IZOSAPI_Application app, params string[] paths)
         {
             if (Opts.Quiet) return;
@@ -451,6 +449,7 @@ namespace EquivalentGlassFinder
             }
         }
 
+        // How far apart two glasses are in (n, Vd) space — smaller is a closer twin.
         static double Distance(GlassInfo a, GlassInfo b)
         {
             double dn = Opts.WeightNd * (a.Nd - b.Nd);
@@ -461,6 +460,7 @@ namespace EquivalentGlassFinder
 
         // EFFL, merit function value and polychromatic RMS spot radius (about the
         // centroid) for every field point, via single-shot operand evaluation.
+        // Remember which surfaces use which glass, so we can swap/report later.
         static Dictionary<string, double[]> Snapshot(ZOSAPI.IOpticalSystem sys)
         {
             var m = new Dictionary<string, double[]>();
@@ -531,6 +531,7 @@ namespace EquivalentGlassFinder
             }
         }
 
+        // Pick a report path next to the lens file.
         static string DerivePath(ZOSAPI.IZOSAPI_Application app, ZOSAPI.IOpticalSystem sys, string suffix)
         {
             if (!string.IsNullOrEmpty(sys.SystemFile))
@@ -542,6 +543,7 @@ namespace EquivalentGlassFinder
             return Path.Combine(app.ZemaxDataDir, "Untitled" + suffix);
         }
 
+        // Write the before/after glass table to a text report.
         static string WriteReportFile(ZOSAPI.IZOSAPI_Application app, ZOSAPI.IOpticalSystem sys)
         {
             try

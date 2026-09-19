@@ -6,10 +6,17 @@ using System.Linq;
 
 namespace FootprintDxf
 {
+    // ============================================================
+    // TraceHelpers - shoot rays and build pupil samples
+    // ============================================================
+    // Pupil grids/rims, batch ray traces, layer names, and lens-unit
+    // mapping for DXF $INSUNITS.
+    // ============================================================
     partial class Program
     {
         // Map OpticStudio lens units -> AutoCAD $INSUNITS. Returns false if unknown
         // (caller should omit or set 0 and stamp the unit name in title/TEXT).
+        // Map OpticStudio lens units to DXF $INSUNITS codes (mm/cm/in/m).
         static bool TryMapInsUnits(ZOSAPI.SystemData.ZemaxSystemUnits lensUnits,
             out int insUnits, out string label)
         {
@@ -29,6 +36,7 @@ namespace FootprintDxf
         }
 
         // Pure helper for -selftest (no ZOS). Mirrors TryMapInsUnits mapping.
+        // Same unit map, but from a unit name string.
         static bool TryMapInsUnitsByName(string unitName, out int insUnits, out string label)
         {
             switch ((unitName ?? "").Trim().ToLowerInvariant())
@@ -46,6 +54,7 @@ namespace FootprintDxf
             }
         }
 
+        // Trace many pupil samples × fields × waves onto one surface; return hit (x,y)s.
         static List<ConvexHull.Pt> TraceHits(
             ZOSAPI.IOpticalSystem sys,
             int surf,
@@ -64,6 +73,7 @@ namespace FootprintDxf
 
         // Same batching as TraceHits, but groups successful hits by field index so
         // rim layers can be written per-field without a second TraceHits.
+        // Same as TraceHits, but keep hits in a bucket per field number.
         static Dictionary<int, List<ConvexHull.Pt>> TraceHitsByField(
             ZOSAPI.IOpticalSystem sys,
             int surf,
@@ -128,6 +138,7 @@ namespace FootprintDxf
             return byField;
         }
 
+        // Build an n×n grid of pupil points inside the unit circle.
         static List<(double px, double py)> BuildPupilGrid(int n)
         {
             var list = new List<(double, double)>(n * n);
@@ -145,6 +156,7 @@ namespace FootprintDxf
         }
 
         // Angular samples on a circle of the given normalised pupil radius.
+        // Build n points evenly around a circle of given pupil radius (1 = full rim).
         static List<(double px, double py)> BuildPupilRim(int n, double radius = 1.0)
         {
             var list = new List<(double, double)>(n);
@@ -159,6 +171,7 @@ namespace FootprintDxf
         // Sort hits by atan2 around the centroid into a closed ring. Used for
         // optional -rim RIM_... layers only (main SURF layers stay convex hull).
         // Drops exact consecutive duplicates after sorting.
+        // Sort rim hits by angle around their center so the polyline does not zigzag.
         static List<ConvexHull.Pt> OrderAsClosedRing(List<ConvexHull.Pt> hits)
         {
             if (hits == null || hits.Count == 0) return new List<ConvexHull.Pt>();
@@ -203,6 +216,7 @@ namespace FootprintDxf
 
         // Scrambled unit-circle samples must sort by atan2 around the input
         // centroid; exact consecutive duplicates must be dropped.
+        // Tiny test that ring ordering walks steadily around a circle.
         static bool OrderAsClosedRingSelfCheck(out string detail)
         {
             double s = Math.Sqrt(0.5);
@@ -243,6 +257,7 @@ namespace FootprintDxf
         }
 
         // Always include surface index. Prefer SURF_{n} or SURF_{n}_{sanitizedComment}.
+        // Build SURF_n or SURF_n_comment layer name.
         static string LayerName(int surf, string comment)
         {
             string name = "SURF_" + surf.ToString(CI);
@@ -256,6 +271,7 @@ namespace FootprintDxf
             return DxfWriter.SanitizeLayer(name);
         }
 
+        // Tiny test for layer naming / uniqueness helpers.
         static bool LayerNameSelfCheck(out string detail)
         {
             string a = LayerName(3, null);
@@ -276,6 +292,7 @@ namespace FootprintDxf
             return true;
         }
 
+        // Tiny test that mm/cm/in/m map to the right $INSUNITS codes.
         static bool UnitsMapSelfCheck(out string detail)
         {
             int iu; string lab;

@@ -6,35 +6,18 @@ using ZOSAPI.Editors.NCE;
 
 namespace DistortionTarget
 {
-    // Distortion Target — a ZOS-API User Extension.
-    //
-    // Builds a chrome-on-glass dot distortion target in non-sequential mode: a
-    // glass plate carrying a square grid of chrome dots, replicated by an Array
-    // object rather than placed as individual objects. Defaults reproduce Edmund
-    // Optics 15963 (100 x 100 x 1.5 mm soda-lime, 0.250 mm dots on a 0.500 mm
-    // pitch, reflective first-surface chromium), which is a model that was built
-    // and traced against pre-registered acceptance criteria before this extension
-    // existed; every default here is a measured configuration, not a guess.
-    //
-    // Usage:
-    //   (no args)         ribbon mode: settings dialog, then build into the open system
-    //   -nodialog         skip the dialog and use defaults / the flags given
-    //   -n <int>          dots per side            (default 199)
-    //   -pitch <mm>       dot centre-to-centre     (default 0.500)
-    //   -dot <mm>         dot diameter             (default 0.250)
-    //   -plate <mm>       substrate outer size     (default 100.0)
-    //   -thick <mm>       substrate thickness      (default 1.50)
-    //   -material <name>  substrate glass          (default B270)
-    //   -coating <name>   chrome coating           (default CHROME_OD3)
-    //   -film <mm>        chrome film thickness    (default 0.0001)
-    //   -drawlimit <int>  array elements DRAWN     (default 2000)
-    //   -rig              also add a collimated source and a detector
-    //   -save <path>      save the built system here
-    //   -file <path>      standalone mode: start our own OpticStudio first
-    //
-    // Three things in here are not obvious and each cost a real debugging session
-    // on 2026 R1.03. They are commented where they bite: the dot cannot be a flat
-    // object, parameter cells are typed, and RaysIgnoreObject is an enum.
+    // ============================================================
+    // DistortionTarget - what this program does (plain words)
+    // ============================================================
+    // Builds a chrome-on-glass dot target in non-sequential mode:
+    // a glass plate with a square grid of chrome dots (like Edmund
+    // Optics 15963 defaults). Uses an Array object so we do not
+    // place thousands of dots one-by-one. Useful for calibrating
+    // distortion / measuring how a lens warps a grid. Writes into
+    // the NSC editor; run from User Extensions or -file.
+    // ============================================================
+
+    // Switches from the command line or settings window.
     class Options
     {
         public int N = 199;
@@ -68,6 +51,7 @@ namespace DistortionTarget
     {
         static Options Opts = new Options();
 
+        // Start here: find OpticStudio, then build the target.
         static void Main(string[] args)
         {
             ParseArgs(args);
@@ -87,6 +71,7 @@ namespace DistortionTarget
             }
         }
 
+        // Read flags (-file, sizes, pitch, ...).
         static void ParseArgs(string[] args)
         {
             var ci = CultureInfo.InvariantCulture;
@@ -118,6 +103,7 @@ namespace DistortionTarget
         // vendor's "pattern size 100 x 100" as the grid span gives 201 dots, whose
         // outermost edge lands at 50.125 mm on a 100 mm plate — 0.125 mm off the
         // part. A target whose corner dots hang over the edge is not a target.
+        // Make sure sizes and counts are sensible before building.
         static void Validate(Options o)
         {
             if (o.N < 2) throw new Exception("dots per side must be at least 2");
@@ -137,6 +123,7 @@ namespace DistortionTarget
 
         static CultureInfo ci() { return CultureInfo.InvariantCulture; }
 
+        // Connect, maybe show settings, then Build.
         static void Run()
         {
             ZOSAPI.IZOSAPI_Application app = null;
@@ -190,6 +177,7 @@ namespace DistortionTarget
         // DoubleValue throws ArgumentException on them — from the getter as well as
         // the setter, so the type cannot be discovered by reading the cell first.
         // cell.DataType is the only safe probe.
+        // Set NSC object parameter number n to a value.
         static void Par(INCERow row, int n, double value)
         {
             var col = (ObjectColumn)Enum.Parse(typeof(ObjectColumn), "Par" + n.ToString(ci()));
@@ -203,6 +191,7 @@ namespace DistortionTarget
             else cell.DoubleValue = value;
         }
 
+        // Insert a new NSC object of the given type at an index.
         static INCERow NewObject(INonSeqEditor nce, int index, ObjectType type)
         {
             if (index > nce.NumberOfObjects + 1)
@@ -213,6 +202,7 @@ namespace DistortionTarget
             return row;
         }
 
+        // Create the glass plate + chrome dots Array in the NSC editor.
         static void Build(ZOSAPI.IZOSAPI_Application app)
         {
             var sysm = app.PrimarySystem;
@@ -297,6 +287,7 @@ namespace DistortionTarget
             Console.WriteLine(Summary(o));
         }
 
+        // Add source / camera / helpers around the target if requested.
         static void AddRig(INonSeqEditor nce, Options o)
         {
             var src = NewObject(nce, nce.NumberOfObjects + 1, ObjectType.SourceRectangle);
@@ -315,6 +306,7 @@ namespace DistortionTarget
             det.ZPosition = o.PlateT + 10.0;
         }
 
+        // One-line description of what we built.
         static string Summary(Options o)
         {
             var sb = new StringBuilder();

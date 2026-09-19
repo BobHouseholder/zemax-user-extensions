@@ -9,28 +9,17 @@ using System.Linq;
 
 namespace LayoutRender
 {
-    // Layout Render — a ZOS-API User Extension.
-    //
-    // Exports a 2D (Y-Z) layout of the loaded sequential system to a PNG image,
-    // entirely headlessly. The ZOS-API provides no way to save layout windows
-    // as images (see community threads "Feature Request: Layout Window Exports"
-    // and "How do I output the image of an analysis in ZOS-API?" — the only
-    // workaround, ZPL EXPORTJPG, does not work in standalone applications).
-    // This extension rebuilds the drawing from first principles instead:
-    // surface cross-sections are sampled from the sag equations in local
-    // coordinates and mapped to global coordinates via GetGlobalMatrix, lens
-    // edges are closed over glass gaps, and ray fans are traced with the batch
-    // ray tracer (one field per colour, terminated where a ray fails).
-    //
-    // Usage:
-    //   (no args)         render the system open in OpticStudio (extension mode)
-    //                     to <lensfile>_layout.png
-    //   -out <path.png>   explicit output path
-    //   -rays N           rays per fan (default 7)
-    //   -width W -height H  image size in pixels (default 1400 x 900)
-    //   -file <path>      standalone mode: load <path> and render it
-    //   -noorient         never auto-rotate the layout to level the beam axis
-    //   -quiet            do not auto-open the image after a ribbon (GUI) run
+    // ============================================================
+    // LayoutRender - what this program does (plain words)
+    // ============================================================
+    // Draws a side-view (Y-Z) picture of your sequential lens and
+    // saves it as a PNG — with no layout window open. OpticStudio's
+    // API cannot save layout windows as images, so we rebuild the
+    // drawing ourselves (glass outlines, rays, stop). The lens file
+    // is never changed. Run from User Extensions or -file / -out.
+    // ============================================================
+
+    // Switches from the command line.
     class Options
     {
         public string FilePath = null;
@@ -46,6 +35,7 @@ namespace LayoutRender
     {
         static Options Opts = new Options();
 
+        // Start here: find OpticStudio, then draw the layout PNG.
         static void Main(string[] args)
         {
             ParseArgs(args);
@@ -65,6 +55,7 @@ namespace LayoutRender
             }
         }
 
+        // Read flags (-file, -out, size, ...).
         static void ParseArgs(string[] args)
         {
             for (int i = 0; i < args.Length; i++)
@@ -87,6 +78,7 @@ namespace LayoutRender
 
         // TryParse zeroes its out parameter on failure, which would silently
         // replace the documented defaults; keep the default instead and warn.
+        // Parse an integer, or keep the old value if bad.
         static int ParseInt(string s, int keep)
         {
             int v;
@@ -97,6 +89,7 @@ namespace LayoutRender
 
         static string F(string fmt, params object[] a) => string.Format(CultureInfo.InvariantCulture, fmt, a);
 
+        // Connect and call RenderSystem.
         static void Run()
         {
             ZOSAPI.IZOSAPI_Application app = null;
@@ -140,6 +133,7 @@ namespace LayoutRender
         // Plugin-mode (ribbon) runs lose their console the moment the process
         // exits, so the written files are the only surviving report - open
         // them with their default apps unless -quiet.
+        // Open the PNG after a ribbon run.
         static void OpenOutputs(ZOSAPI.IZOSAPI_Application app, params string[] paths)
         {
             if (Opts.Quiet) return;
@@ -153,7 +147,8 @@ namespace LayoutRender
         }
 
         // rigid transform of one surface's local frame into global coordinates
-        class Frame
+        // Where a surface sits in global space.
+    class Frame
         {
             public double[,] R = new double[3, 3];
             public double X, Y, Z;
@@ -164,7 +159,8 @@ namespace LayoutRender
                  R[2, 0] * x + R[2, 1] * y + R[2, 2] * z + Z);
         }
 
-        class SurfInfo
+        // One surface's shape/glass info for drawing.
+    class SurfInfo
         {
             public int Index;
             public ZOSAPI.Editors.LDE.SurfaceType Type;
@@ -175,6 +171,7 @@ namespace LayoutRender
             public List<PointF> Section;    // projected (z,y) polyline, model units
         }
 
+        // Build glass/ray polylines and paint them into a PNG.
         static void RenderSystem(ZOSAPI.IZOSAPI_Application app)
         {
             var sys = app.PrimarySystem;
@@ -412,6 +409,7 @@ namespace LayoutRender
         // a system is axial when nothing bends or shifts the optical axis:
         // no coordinate breaks or tilted surfaces, every global vertex on the
         // z axis, and every local z axis parallel to global z
+        // True if the system is basically on-axis (simple YZ draw).
         static bool IsAxialSystem(List<SurfInfo> surfs)
         {
             double posTol = 1e-6, dirTol = 1e-9;
@@ -428,6 +426,7 @@ namespace LayoutRender
             return true;
         }
 
+        // Ask OpticStudio for this surface's global matrix.
         static Frame GetFrame(ZOSAPI.Editors.LDE.ILensDataEditor lde, int surf)
         {
             var fr = new Frame();
@@ -445,6 +444,7 @@ namespace LayoutRender
             return fr;
         }
 
+        // How far the surface bulges at height y (sag).
         static double Sag(SurfInfo s, double y)
         {
             double z = 0;

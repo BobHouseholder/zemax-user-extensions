@@ -8,11 +8,14 @@ using System.Text;
 
 namespace RayExtentEnvelope
 {
-    // STEP writer for solids of revolution (MEMA L1/L2/... + KEEP_OUT).
-    // Caller decides whether to pass lens profiles; default is KEEP_OUT + MEMA lenses.
-    // Preferred: mesh -> temp STL -> tools/stl_to_rhino_step.py (OCC sew +
-    // UnifySameDomain + AP214IS/MM/surfacecurve.mode=0) for Rhino-visible solids.
-    // Fallback: pure-C# FACETED_BREP (opens empty in Rhino).
+    // ============================================================
+    // StepWriter - write STEP solids of revolution
+    // ============================================================
+    // Builds a STEP file with a KEEP_OUT tube (the ray envelope) and
+    // optional MEMA L1/L2/... lens solids spun from RZ profiles.
+    // Mech CAD can import this for packaging keep-outs.
+    // ============================================================
+
     static class StepWriter
     {
         static readonly CultureInfo CI = CultureInfo.InvariantCulture;
@@ -23,7 +26,8 @@ namespace RayExtentEnvelope
             public Vec3(double x, double y, double z) { X = x; Y = y; Z = z; }
         }
 
-        class Mesh
+        // Triangle mesh we can revolve and export.
+    class Mesh
         {
             public string Name;
             public List<Vec3> Verts = new List<Vec3>();
@@ -35,6 +39,8 @@ namespace RayExtentEnvelope
             }
         }
 
+        // Write the STEP file with KEEP_OUT and any lens solids passed in.
+        // Write KEEP_OUT (+ optional lens meshes) as STEP, with STL fallback helpers.
         public static void Write(
             string path,
             IList<(string Name, List<(double z, double r)> ProfileRz, double[,] R, double tx, double ty, double tz, bool frameValid)> lenses,
@@ -89,6 +95,7 @@ namespace RayExtentEnvelope
         /// <summary>How the last Write produced STEP: OCC Rhino path or faceted fallback.</summary>
         public static string LastWriteMode = "";
 
+        // Spin an RZ profile around Z into a triangle mesh.
         static Mesh RevolveProfile(List<(double z, double r)> profile, int nSeg, string name)
         {
             // profile is a closed polyline in RZ (r>=0). We revolve about Z.
@@ -165,6 +172,7 @@ namespace RayExtentEnvelope
             return mesh;
         }
 
+        // Move a mesh into a surface's global frame.
         static void TransformMesh(Mesh m, double[,] R, double tx, double ty, double tz)
         {
             for (int i = 0; i < m.Verts.Count; i++)
@@ -178,6 +186,7 @@ namespace RayExtentEnvelope
             }
         }
 
+        // Turn meshes into STEP text (or ask OpenCascade/Rhino if available).
         static string EmitStep(List<Mesh> meshes)
         {
             var sb = new StringBuilder();
@@ -274,6 +283,7 @@ namespace RayExtentEnvelope
         }
 
 
+        // Fallback: write an ASCII STL if STEP tooling is missing.
         static void WriteAsciiStl(string path, List<Mesh> meshes)
         {
             var sb = new StringBuilder();
@@ -305,6 +315,7 @@ namespace RayExtentEnvelope
             File.WriteAllText(path, sb.ToString(), new UTF8Encoding(false));
         }
 
+        // Try OpenCascade or Rhino scripting to emit a real STEP solid.
         static bool TryOccRhinoStep(string stlPath, string stepPath)
         {
             string script = FindOccScript();
@@ -345,6 +356,7 @@ namespace RayExtentEnvelope
             }
         }
 
+        // Locate the helper script that talks to OpenCascade.
         static string FindOccScript()
         {
             string env = Environment.GetEnvironmentVariable("RAYEXTENT_STL_TO_STEP");
@@ -373,6 +385,7 @@ namespace RayExtentEnvelope
             return null;
         }
 
+        // Find a Python executable for the OpenCascade helper.
         static string FindPython()
         {
             string env = Environment.GetEnvironmentVariable("RAYEXTENT_PYTHON");
@@ -405,6 +418,7 @@ namespace RayExtentEnvelope
             return null;
         }
 
+        // Make a safe name fragment for STEP entities / files.
         static string Sanitize(string s)
         {
             if (string.IsNullOrEmpty(s)) return "SOLID";

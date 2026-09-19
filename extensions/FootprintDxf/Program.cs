@@ -7,60 +7,23 @@ using System.Text;
 
 namespace FootprintDxf
 {
-    // FootprintDxf - ZOS-API User Extension.
-    //
-    // Exports the envelope of beam footprints on sequential surfaces to a CAD
-    // DXF (R12 / AC1009 ASCII). Harvey.Spencer's forum ask:
-    // https://community.zemax.com/got-a-question-7/how-can-i-export-beam-footprints-to-a-cad-or-dxf-file-5991
-    //
-    // LayoutRender only writes a 2D layout PNG. DetectorDump only dumps NSC
-    // detectors. Neither is a per-surface footprint envelope for mech CAD.
-    // There is no ZOS-API DXF export; this writes the DXF as text, plus an
-    // optional PNG preview beside it (same polylines; skip with -nopng).
-    //
-    // For each selected surface: batch-trace a pupil grid plus a dense pupil-rim
-    // sample set of real rays for the chosen fields/wavelengths, collect local
-    // (x,y) intercepts that hit (ignore vignetted/missed), compute the 2D
-    // convex hull (Andrew's monotone chain), and write one closed
-    // POLYLINE+VERTEX+SEQEND per surface layer. With a dense rim, circular /
-    // elliptical footprints keep many hull verts instead of a chunky polygon
-    // from the grid alone. Coordinates default to local surface XY in OpticStudio
-    // lens units; optional -global maps hits through LDE.GetGlobalMatrix so all
-    // layers share one assembly frame (2D DXF uses global X/Y; Z ignored).
-    // $INSUNITS is mapped from SystemData.Units.LensUnits (mm/cm/in/m). Layers
-    // are always SURF_{n} or SURF_{n}_{comment}. Optional -perfield adds
-    // SURF_{n}_F{f} hulls (union SURF layer still written). Optional -aperture
-    // adds APER_SURF_{n} clear-aperture overlays. The optical system is never
-    // modified.
-    //
-    // Dense rim@1 is traced once and merged with grid+r=0.99 for the hull.
-    // Optional -rim reuses those rim@1 hits for per-field RIM_SURF_{n}_F{f}
-    // layers (no second TraceHits; fields are never atan2-merged into one ring).
-    //
-    // Usage:
-    //   (no args)              ribbon / plugin: settings dialog, then export
-    //   -out <path.dxf>        output path (default: <lens>_footprints.dxf)
-    //   -file <zmx>            standalone: load file, no dialog
-    //   -rays N                pupil grid density (odd, default 21)
-    //   -rimrays N             dense rim sample count (default max(128, Rays*8);
-    //                          clamp 16..1024). Always merged into the main hull.
-    //   -surfaces all|1,3,5|1-6   surfaces (default all = 1..image-1)
-    //   -includeimage          also include the image surface when -surfaces all
-    //   -fields all|1,2        fields (default all)
-    //   -wave primary|all      wavelengths (default all)
-    //   -rim                   also write per-field pupil-rim polylines
-    //                          (RIM_SURF_N_Ff); reuses rim@1 (no second trace)
-    //   -perfield              also write per-field convex-hull layers
-    //                          SURF_N_Ff (union SURF_N still written)
-    //   -global                transform local (x,y) hits via GetGlobalMatrix
-    //                          into a common frame (2D global X/Y; Z ignored)
-    //   -aperture              also write clear-aperture overlays APER_SURF_N
-    //   -nopng                 skip writing the PNG preview beside the DXF
-    //   -quiet                 do not auto-open DXF/PNG after a ribbon run
-    //   -nodialog              skip settings dialog in plugin mode
-    //   -selftest              run convex-hull + ring-order + layer/units +
-    //                          transform/ellipse self-check and exit (no OpticStudio)
+    // ============================================================
+    // FootprintDxf - what this program does (plain words)
+    // ============================================================
+    // Imagine light blobs (footprints) landing on each lens surface.
+    // Mech CAD folks want those outlines as a DXF drawing. OpticStudio
+    // has no built-in DXF export, so we shoot a grid of rays (plus a
+    // dense ring around the pupil edge), keep the hits that land, wrap
+    // a rubber-band (convex hull) around them, and write one closed
+    // polyline per surface. We also write a PNG preview of the same
+    // shapes. The lens file is never changed.
+    // Optional extras: per-field hulls, clear-aperture overlays, or
+    // map everything into one global X/Y frame for assembly CAD.
+    // Run from User Extensions, or -file / -out from a shell.
+    // Forum ask: community.zemax.com ... export-beam-footprints ... 5991
+    // ============================================================
 
+    // Switches from the command line or the settings window.
     class Options
     {
         public string FilePath;
@@ -83,6 +46,7 @@ namespace FootprintDxf
         public readonly HashSet<string> Explicit =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        // How many points around the pupil rim: use your number, or auto max(128, Rays*8).
         public int EffectiveRimRays()
         {
             int n = RimRays > 0 ? RimRays : Math.Max(128, Rays * 8);
@@ -98,6 +62,7 @@ namespace FootprintDxf
         static ZOSAPI.IZOSAPI_Application App;
         static readonly CultureInfo CI = CultureInfo.InvariantCulture;
 
+        // Start here: find OpticStudio (or run -selftest with no OpticStudio), then export.
         static void Main(string[] args)
         {
             try { ParseArgs(args); }
@@ -172,6 +137,7 @@ namespace FootprintDxf
             }
         }
 
+        // Read the flags you typed (-out, -rays, -surfaces, ...).
         static void ParseArgs(string[] args)
         {
             for (int i = 0; i < args.Length; i++)
@@ -213,6 +179,7 @@ namespace FootprintDxf
             }
         }
 
+        // Parse an integer, or keep the old value if the text is empty/bad.
         static int ParseInt(string s, int keep)
         {
             int v;
@@ -221,6 +188,7 @@ namespace FootprintDxf
             return keep;
         }
 
+        // Connect to OpticStudio, maybe show the settings window, then call Export.
         static void Run()
         {
             var connection = new ZOSAPI.ZOSAPI_Connection();

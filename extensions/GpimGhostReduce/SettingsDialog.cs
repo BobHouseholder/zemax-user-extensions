@@ -6,9 +6,15 @@ using System.Windows.Forms;
 
 namespace GpimGhostReduce
 {
-    // A ribbon run gets no command line. OpticStudio launches the extension from
-    // Programming > User Extensions with no arguments, so without a window the
-    // only way to pick Mode / Max pairs / Balance would be a shell.
+    // ============================================================
+    // Settings window for GpimGhostReduce (plain words)
+    // ============================================================
+    // When you click this extension from OpticStudio's ribbon, there
+    // is no command line. This little window lets you pick ghost
+    // type, how many pairs to keep, how hard ghosts should pull on
+    // the report card (balance), and whether to run a short optimize
+    // afterward. Choices are remembered in lastrun.txt for next time.
+    // ============================================================
     class SettingsDialog : Form
     {
         readonly ComboBox _kind;
@@ -21,6 +27,7 @@ namespace GpimGhostReduce
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                 "GpimGhostReduce", "lastrun.txt");
 
+        // Pop the window, copy choices into Options, and remember them for next time.
         public static bool Show(Options o)
         {
             Application.EnableVisualStyles();
@@ -35,6 +42,7 @@ namespace GpimGhostReduce
 
         static CultureInfo CI => CultureInfo.InvariantCulture;
 
+        // Build the form controls and fill them from Options (and last-run file).
         SettingsDialog(Options o)
         {
             Text = "GPIM ghost reduce";
@@ -98,6 +106,7 @@ namespace GpimGhostReduce
             Recompute();
         }
 
+        // One labeled text box inside a group box.
         TextBox Field(GroupBox g, int row, string label, string value)
         {
             int top = 22 + row * 28;
@@ -113,6 +122,7 @@ namespace GpimGhostReduce
         static bool TryI(TextBox tb, out int v) =>
             int.TryParse(tb.Text.Trim(), NumberStyles.Integer, CI, out v);
 
+        // Check the numbers and refresh the gray hint text under the controls.
         void Recompute()
         {
             int top, cycles; double b;
@@ -139,6 +149,7 @@ namespace GpimGhostReduce
                 kind, cap, b);
         }
 
+        // Copy the window's values back into the Options box.
         void Apply(Options o)
         {
             int top, cycles; double b;
@@ -149,6 +160,7 @@ namespace GpimGhostReduce
             o.Kind = _kind.SelectedIndex == 1 ? GhostKind.Pupil : _kind.SelectedIndex == 2 ? GhostKind.Both : GhostKind.Image;
         }
 
+        // Write choices to AppData so the next ribbon run starts where you left off.
         void SaveLastRun(Options o)
         {
             try
@@ -166,6 +178,7 @@ namespace GpimGhostReduce
             catch { }
         }
 
+        // Read lastrun.txt, but skip any key the user already set on the command line.
         static void LoadLastRun(Options o)
         {
             try
@@ -189,7 +202,7 @@ namespace GpimGhostReduce
                         case "top": if (int.TryParse(val, NumberStyles.Integer, CI, out i)) o.TopN = i; break;
                         case "balance": if (double.TryParse(val, NumberStyles.Float, CI, out d)) o.Balance = d; break;
                         case "weight":
-                            // old lastrun.txt: treat as unused; balance is the new knob
+                            // Old lastrun files had weight; we ignore it — balance is the knob now.
                             break;
                         case "optimize": o.Optimize = val == "1"; break;
                         case "cycles": if (int.TryParse(val, NumberStyles.Integer, CI, out i)) o.Cycles = i; break;

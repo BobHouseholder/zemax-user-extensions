@@ -5,13 +5,15 @@ using System.Globalization;
 
 namespace MoldStress
 {
-    /// <summary>
-    /// Connecting, and reading the moulded elements out of the Lens Data Editor.
-    /// Same two paths as the other extensions in this repo: standalone when a
-    /// -file is given, otherwise attach to the running OpticStudio so a ribbon
-    /// run works on whatever is open.
-    /// </summary>
-    internal static class Session
+    // ============================================================
+    // Session - connect to OpticStudio and find molded elements
+    // ============================================================
+    // Opens OpticStudio (standalone with -file, or attach for ribbon)
+    // and reads which plastic elements in the Lens Data Editor we will
+    // treat as molded parts.
+    // ============================================================
+
+internal static class Session
     {
         /// <summary>
         /// Must run before any method whose BODY mentions a ZOSAPI type, because
@@ -23,6 +25,7 @@ namespace MoldStress
         /// </summary>
         [System.Runtime.CompilerServices.MethodImpl(
             System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        // Find the OpticStudio install (shared locator).
         public static void Locate()
         {
             string error;
@@ -34,6 +37,7 @@ namespace MoldStress
 
         [System.Runtime.CompilerServices.MethodImpl(
             System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        // Attach to running OpticStudio or start standalone from -file.
         public static ZOSAPI.IZOSAPI_Application Connect(string filePath)
         {
             var connection = new ZOSAPI.ZOSAPI_Connection();
@@ -66,6 +70,7 @@ namespace MoldStress
         /// every glass in the design, and silently moulding a glass singlet is a
         /// worse failure than skipping a plastic one.
         /// </summary>
+        // Find plastic molded elements in the Lens Data Editor.
         public static List<MouldedElement> FindElements(ZOSAPI.IOpticalSystem sys,
                                                         IEnumerable<string> extraMaterials)
         {
@@ -189,6 +194,7 @@ namespace MoldStress
         /// function returns is a description to print, not a reason to stop.
         /// `UnreadableShape` is the reason to stop.
         /// </summary>
+        // Describe how a surface shape differs from a simple sphere.
         public static string ShapeDeparture(string typeName, double conic, double[] pars)
         {
             var why = new List<string>();
@@ -228,6 +234,7 @@ namespace MoldStress
         /// point: the descriptive function tells the user what shape the run used,
         /// this one decides whether there is a run to be had.
         /// </summary>
+        // Explain why we could not read a surface shape.
         public static string UnreadableShape(string typeName)
         {
             if (IsEvenAsphere(typeName) || IsOddAsphere(typeName) ||
@@ -291,6 +298,7 @@ namespace MoldStress
         /// <summary>Every distinct non-empty material in the LDE, guarded row by
         /// row like every other reader here. Exists so the no-mouldable-element
         /// report can say what the lens HAS instead of only what it lacks.</summary>
+        // List plastic materials currently used on molded elements.
         public static List<string> MaterialsInUse(ZOSAPI.IOpticalSystem sys)
         {
             var found = new List<string>();
@@ -309,6 +317,7 @@ namespace MoldStress
             return found;
         }
 
+        // Print a short description of the session / elements found.
         public static void Describe(MouldedElement e)
         {
             Console.WriteLine(string.Format(

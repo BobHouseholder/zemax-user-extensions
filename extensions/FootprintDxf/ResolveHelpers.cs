@@ -6,8 +6,15 @@ using System.Linq;
 
 namespace FootprintDxf
 {
+    // ============================================================
+    // ResolveHelpers - turn text like "all" into real lists
+    // ============================================================
+    // Parses surface/field/wave selectors and small UI helpers
+    // (open outputs, cancel, say).
+    // ============================================================
     partial class Program
     {
+        // Turn "all" / "1-6" / "1,3,5" into a list of surface numbers.
         static List<int> ResolveSurfaces(string spec, int imgIdx, bool includeImage,
             ZOSAPI.Editors.LDE.ILensDataEditor lde)
         {
@@ -81,6 +88,7 @@ namespace FootprintDxf
             return set.ToList();
         }
 
+        // Turn "all" / "1,2" into field numbers that exist in the system.
         static List<int> ResolveFields(ZOSAPI.IOpticalSystem sys, string spec)
         {
             var fields = sys.SystemData.Fields;
@@ -103,6 +111,7 @@ namespace FootprintDxf
             return set.ToList();
         }
 
+        // Turn "all" / "primary" into wavelength numbers.
         static List<int> ResolveWaves(ZOSAPI.IOpticalSystem sys, string spec)
         {
             var wls = sys.SystemData.Wavelengths;
@@ -139,6 +148,7 @@ namespace FootprintDxf
             return set.ToList();
         }
 
+        // After a ribbon run, open the DXF/PNG in the default apps (unless quiet).
         static void OpenOutputs(ZOSAPI.IZOSAPI_Application app, params string[] paths)
         {
             if (Opts.Quiet) return;
@@ -151,6 +161,7 @@ namespace FootprintDxf
             }
         }
 
+        // User hit Cancel in OpticStudio — stop cleanly.
         static bool Cancelled()
         {
             try
@@ -166,6 +177,7 @@ namespace FootprintDxf
             return false;
         }
 
+        // Print a status line (and try to show it on the progress bar).
         static void Say(string s)
         {
             Console.WriteLine(s);

@@ -3,9 +3,16 @@ using System.Globalization;
 
 namespace CryoGlass
 {
-    // The temperature-dependent Sellmeier evaluator and its self-test.
+    // ============================================================
+    // Tsm - evaluate CHARMS n(wavelength, temperature)
+    // ============================================================
+    // Plugs temperature into the Sellmeier formulas and returns the
+    // absolute refractive index. Includes a tiny self-check.
+    // ============================================================
+
     static class Tsm
     {
+        // Evaluate a polynomial a0 + a1*t + a2*t^2 + ...
         static double Poly(double[] c, double t)
         {
             double v = 0;
@@ -18,6 +25,7 @@ namespace CryoGlass
         public static double LAt(CharmsMaterial m, int i, double tK) => Poly(m.L[i], tK);
 
         // Absolute (vacuum) refractive index at lambda (um), T (Kelvin).
+        // Absolute refractive index at wavelength (um) and T (Kelvin).
         public static double Index(CharmsMaterial m, double lambdaUm, double tK)
         {
             double l2 = lambdaUm * lambdaUm;
@@ -37,6 +45,7 @@ namespace CryoGlass
         // Verify the evaluator against the paper's own measured-index tables.
         // The TSM fits are published with ~1e-4 average absolute residual, so
         // agreement worse than 5e-4 at any anchor means transcription damage.
+        // Tiny check that known CHARMS points match published values.
         public static bool SelfTest(CharmsMaterial m, bool print)
         {
             double worst = 0;

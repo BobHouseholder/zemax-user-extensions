@@ -9,12 +9,16 @@ using System.Linq;
 
 namespace RayExtentEnvelope
 {
-    // Headless Y-Z PNG: glass outlines, stop, max-ray radial envelope (+/- R vs Z).
+    // ============================================================
+    // PngLayout - draw the Y-Z side-view PNG
+    // ============================================================
+    // Draws glass outlines, the stop, and the ray keep-out envelope
+    // as a picture. Includes a simple mm scale bar.
+    // ============================================================
     static class PngLayout
     {
         static readonly CultureInfo CI = CultureInfo.InvariantCulture;
-
-        /// <summary>Nice 1-2-5 mm step nearest to <paramref name="rough"/>.</summary>
+        // Pick a round mm grid step near the rough size.
         static double NiceMmStep(double rough)
         {
             if (rough <= 0 || double.IsNaN(rough) || double.IsInfinity(rough)) return 1;
@@ -27,11 +31,7 @@ namespace RayExtentEnvelope
             else nice = 10;
             return nice * exp;
         }
-
-        /// <summary>
-        /// One nice 1-2-5 notch finer than an existing nice scale-bar length
-        /// (bar=2->1, bar=5->2, bar=10->5, bar=1->0.5).
-        /// </summary>
+        // Half-step helper for the scale bar / grid.
         static double HalfNiceMm(double bar)
         {
             if (bar <= 0 || double.IsNaN(bar) || double.IsInfinity(bar)) return 1;
@@ -42,6 +42,7 @@ namespace RayExtentEnvelope
             return 2.0 * exp;
         }
 
+        // Render lens lines, stop, and envelope into a PNG file.
         public static void Write(
             string path,
             List<(List<PointF> pts, string kind)> lensLines,

@@ -6,23 +6,24 @@ using System.Linq;
 
 namespace MoldStress
 {
-    /// <summary>
-    /// MoldStress - estimates the refractive-index change and stress
-    /// birefringence that injection moulding leaves in a plastic element, and
-    /// applies them through OpticStudio's STAR module so the change in optical
-    /// performance can be read directly.
-    ///
-    /// ESTIMATE. NOT A MOULD-FLOW SIMULATION. NOT VALIDATED AGAINST A MOULDED
-    /// PART. That label is on every artifact this tool writes, deliberately.
-    /// Commercial mould-flow packages (Moldex3D Optics, Autodesk Moldflow
-    /// Insight) solve this properly; this tool exists for the designer who has
-    /// OpticStudio and STAR and no mould-flow seat.
-    /// </summary>
-    internal static class Program
+    // ============================================================
+    // MoldStress - what this program does (plain words)
+    // ============================================================
+    // Plastic lenses from injection molding can end up with leftover
+    // stress that changes the refractive index (how much the plastic
+    // bends light) and can make polarization split (birefringence).
+    // This tool ESTIMATES those effects and feeds them into OpticStudio
+    // STAR so you can see how the image quality changes. It is NOT a
+    // full mold-flow simulation and is not a certified validation.
+    // Run from User Extensions or -file; see Runner for the pipeline.
+    // ============================================================
+
+internal static class Program
     {
         public const string ScopeLabel =
             "ESTIMATE - not a mould-flow simulation, not validated against a moulded part";
 
+        // Start here: parse flags, connect, hand off to Runner.
         private static int Main(string[] args)
         {
             // FIRST STATEMENT, BEFORE ANYTHING CAN FAIL. Two ribbon clicks in a

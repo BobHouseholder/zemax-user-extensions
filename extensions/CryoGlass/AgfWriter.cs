@@ -6,31 +6,20 @@ using System.Text;
 
 namespace CryoGlass
 {
-    // Emits an OpticStudio .AGF glass catalog frozen at a working temperature
-    // T0. OpticStudio interprets catalog dispersion data as RELATIVE to air
-    // at the glass reference temperature at 1 atm (verified empirically via
-    // the INDX operand: absolute coefficients read ~n_air(T0) high, ~8e-4 at
-    // 100 K). So the absolute CHARMS indices are pre-divided by OpticStudio's
-    // air model at (T0, 1 atm) and the Sellmeier1 K_i are least-squares
-    // refitted with the CHARMS resonances L_i held fixed; the worst refit
-    // error over the material's lambda range is reported per glass:
-    //   Sellmeier1: n^2 - 1 = SUM K_i lambda^2 / (lambda^2 - L_i)
-    //
-    // A LOCAL Schott thermal model (D0,D1,D2,E0,E1; lambda_tk = 0) is least-
-    // squares fitted to the TSM surface over T0 +- dT so OpticStudio's own
-    // thermal machinery remains usable NEAR T0; its worst fit error over the
-    // fit box is reported per glass - beyond the box, regenerate the catalog.
-    //
-    // Honesty notes written into the catalog and printed:
-    // - CHARMS indices are ABSOLUTE (vacuum). Use the catalog with the system
-    //   environment at the working temperature and 0 atm, or expect the
-    //   air-index correction to be applied on top.
-    // - CHARMS carries no thermal-expansion data: TCE is written as 0 and
-    //   must be sourced separately before AthermalScan-style analyses.
+    // ============================================================
+    // AgfWriter - write a frozen glass catalog at temperature T0
+    // ============================================================
+    // OpticStudio wants catalog indices relative to air at the glass
+    // reference temperature. We evaluate CHARMS absolute n(λ,T0),
+    // convert to relative, and write a normal .AGF file you can load.
+    // ============================================================
+
     static class AgfWriter
     {
+        // Format a number/string with invariant culture for AGF text.
         public static string F(string fmt, params object[] a) => string.Format(CultureInfo.InvariantCulture, fmt, a);
 
+        // Write the frozen .AGF file at temperature T0 for these materials.
         public static string Write(string path, IEnumerable<CharmsMaterial> mats, double t0K, int fitHalfWidthK, out List<string> report)
         {
             report = new List<string>();
@@ -69,10 +58,12 @@ namespace CryoGlass
             return path;
         }
 
+        // Square a number.
         static double Sq(double v) => v * v;
 
         // OpticStudio's air-index model (Kohlrausch/Edlen form from the manual):
         // lambda in um, T in Celsius, P in atm.
+        // Refractive index of air at wavelength, C, and pressure (for relative n).
         public static double NAir(double lamUm, double tC, double pAtm)
         {
             double s2 = 1.0 / (lamUm * lamUm);
@@ -88,6 +79,8 @@ namespace CryoGlass
         // vanishing resonance (L4 = -1e-9 => term = K4 to ~1e-12). The
         // reported residual is the true remaining error, dominated by the
         // lambda-dependence of n_air itself.
+        // Turn CHARMS absolute n into OpticStudio relative-to-air coefficients at T0.
+        // OpticStudio catalogs store n relative to air; CHARMS gives absolute — divide by n_air(T0).
         static double[] ConvertRelative(CharmsMaterial m, double t0K, out double worst)
         {
             double tC = t0K - 273.15;
@@ -120,6 +113,7 @@ namespace CryoGlass
         //   dn_abs(lambda, dT) = (n0^2-1)/(2 n0) * [D0 dT + D1 dT^2 + D2 dT^3
         //                        + (E0 dT + E1 dT^2)/lambda^2]      (lam_tk=0)
         // Linear in (D0,D1,D2,E0,E1) -> normal equations, 5x5.
+        // Fit a local Schott dispersion polynomial over a wavelength window.
         static double[] FitSchottLocal(CharmsMaterial m, double t0, double tLo, double tHi, out double worst)
         {
             var lams = new List<double>();
@@ -167,6 +161,7 @@ namespace CryoGlass
             return x;
         }
 
+        // Solve a 5×5 linear system for the Schott fit coefficients.
         static double[] Solve5(double[,] a, double[] b)
         {
             int n = 5;

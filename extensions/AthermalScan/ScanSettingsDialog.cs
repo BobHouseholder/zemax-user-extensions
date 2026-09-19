@@ -7,19 +7,13 @@ using System.Windows.Forms;
 
 namespace AthermalScan
 {
-    // A ribbon run gets no command line. OpticStudio launches the extension from
-    // Programming > User Extensions with no arguments and offers nowhere to supply
-    // any, so every option this tool has was reachable only from a shell - the
-    // sweep range, and more importantly whether the system is analysed in air or in
-    // vacuum, which moves dz/dT by more than half on a plain triplet. Worse, once
-    // the environment guards went in, a file with Adjust Index Data To Environment
-    // switched off failed on the ribbon with "re-run with -temp0 <C>", advice a
-    // ribbon user has no way to follow.
-    //
-    // Ansys's own CODE V converter extension answers this by putting up its own
-    // window (manual 1.5.3.7.2); this does the same. Shown when the process was
-    // started with no arguments and OpticStudio is driving it; -nodialog restores
-    // the silent defaults-only behaviour for scripted runs.
+    // ============================================================
+    // Settings window for AthermalScan (plain words)
+    // ============================================================
+    // Ribbon runs have no command line, so this window sets the
+    // temperature range, steps, and output options. Cancel = no scan.
+    // ============================================================
+
     class ScanSettingsDialog : Form
     {
         readonly TextBox _tmin, _tmax, _steps, _t0, _p0, _pfixed, _pramp, _track, _outDir;
@@ -33,6 +27,7 @@ namespace AthermalScan
 
         // Returns false if the user cancelled - the caller must then do nothing at
         // all, since the scan mutates the live prescription.
+        // Pop the window; return false if Cancel.
         public static bool Show(double sysTemp, double sysPress, bool adjustOn, Options o)
             => Show(sysTemp, sysPress, adjustOn, o, null);
 

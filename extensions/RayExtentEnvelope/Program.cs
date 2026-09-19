@@ -6,29 +6,19 @@ using System.Linq;
 
 namespace RayExtentEnvelope
 {
-    // RayExtentEnvelope - ZOS-API User Extension (Phase 1).
-    //
-    // Shows the max radial extent of rays (extreme fields x pupil rim) through a
-    // sequential system: a 2D Y-Z PNG outline (glass + stop + envelope) and a
-    // STEP defaults to KEEP_OUT + MEMA L1/L2/... solids (object-at-0 frame).
-    // -envelopeOnly emits KEEP_OUT alone. No CLAP LENS_* stubs. System never saved.
-    //
-    // Usage:
-    //   -file <zmx>           standalone load
-    //   -out <base|dir>       output base path or directory
-    //   -png / -step          emit PNG and/or STEP (default: both)
-    //   -rimrays N            pupil rim samples (default 48, clamp 16..256)
-    //   -surfaces auto|all|0,2|0-9 stations (default auto: object..phone/image; see README)
-    //   -width W -height H    PNG size (default 1400x900)
-    //   -nodialog             accepted (Phase 1 has no dialog)
-    //   -quiet                do not auto-open outputs in plugin mode
-    //   -clap                 restore old CA floor: Rmax = max(rayR, CLAP, fieldH)
-    //                         (default is no CLAP/Semi floor: max(rayR, fieldH))
-    //   -noclap / -rayExtent  aliases for the default no-CLAP mode (kept for scripts)
-    //   -vertexZ              station Z = Frame.Z (vertex) instead of rim Z
-    //   -envelopeOnly         STEP = KEEP_OUT only (omit MEMA L1/L2/... solids)
-    //   -nolenses             alias of -envelopeOnly
-    //   -lenses               include MEMA L1/L2/... solids (default; explicit)
+    // ============================================================
+    // RayExtentEnvelope - what this program does (plain words)
+    // ============================================================
+    // How wide do the rays get as they travel through the lens?
+    // We shoot rim rays at the extreme fields, measure the farthest
+    // radius at each station, and draw a keep-out envelope. You get
+    // a Y-Z PNG outline and a STEP solid (KEEP_OUT tube, plus optional
+    // MEMA lens solids). The lens file is never saved or changed.
+    // Handy for mech CAD keep-out volumes around the beam.
+    // Run with -file / -out, or from User Extensions.
+    // ============================================================
+
+    // Switches from the command line (Phase 1 has no settings window).
     class Options
     {
         public string FilePath;
@@ -42,14 +32,11 @@ namespace RayExtentEnvelope
         public int Height = 900;
         public bool Quiet;
         public bool NoDialog;
-        /// <summary>When true (default), Rmax = max(rayR, fieldH) with no CLAP/Semi floor.</summary>
+        // Default: Rmax = max(ray hit radius, field height) — do not floor with clear aperture.
         public bool NoClap = true;
-        /// <summary>When true, station Z = Frame.Z (vertex). Default uses rim Z.</summary>
+        // When true, station Z is the surface vertex; default uses the rim hit Z.
         public bool UseVertexZ;
-        /// <summary>
-        /// When true, STEP is KEEP_OUT only (no MEMA L1/L2/... solids).
-        /// Default false = KEEP_OUT + full MEMA lens solids (object-at-0).
-        /// </summary>
+        // When true, STEP is only the KEEP_OUT tube (no MEMA L1/L2/... lens solids).
         public bool EnvelopeOnly;
     }
 
@@ -59,6 +46,7 @@ namespace RayExtentEnvelope
         static ZOSAPI.IZOSAPI_Application App;
         static readonly CultureInfo CI = CultureInfo.InvariantCulture;
 
+        // Start here: find OpticStudio, then build the envelope.
         static void Main(string[] args)
         {
             try { ParseArgs(args); }
@@ -85,6 +73,7 @@ namespace RayExtentEnvelope
             }
         }
 
+        // Read the flags you typed (-out, -rimrays, -envelopeOnly, ...).
         static void ParseArgs(string[] args)
         {
             bool sawPng = false, sawStep = false;
@@ -131,6 +120,7 @@ namespace RayExtentEnvelope
             if (Opts.Height < 200) Opts.Height = 200;
         }
 
+        // Parse an integer, or keep the old value if the text is bad.
         static int ParseInt(string s, int keep)
         {
             int v;
@@ -139,6 +129,7 @@ namespace RayExtentEnvelope
             return keep;
         }
 
+        // Connect to OpticStudio and call Export.
         static void Run()
         {
             var connection = new ZOSAPI.ZOSAPI_Connection();
@@ -178,14 +169,17 @@ namespace RayExtentEnvelope
             }
         }
 
+        // User hit Cancel — stop cleanly.
         static bool Cancelled()
         {
             try { return App != null && App.TerminateRequested; }
             catch { return false; }
         }
 
+        // Print a status line.
         static void Say(string s) => Console.WriteLine(s);
 
+        // Open the PNG/STEP in the default apps after a ribbon run (unless -quiet).
         static void OpenOutputs(params string[] paths)
         {
             if (Opts.Quiet) return;

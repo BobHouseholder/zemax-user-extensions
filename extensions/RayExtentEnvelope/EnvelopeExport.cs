@@ -7,8 +7,16 @@ using System.Linq;
 
 namespace RayExtentEnvelope
 {
+    // ============================================================
+    // EnvelopeExport - measure ray extents and write PNG/STEP
+    // ============================================================
+    // Traces extreme-field rim rays, records max radius at each
+    // station, then builds the keep-out envelope picture and solid.
+    // The lens file is never saved or changed.
+    // ============================================================
     partial class Program
     {
+        // Where a surface sits in global space (rotation + origin).
         class Frame
         {
             public double[,] R = new double[3, 3];
@@ -20,6 +28,7 @@ namespace RayExtentEnvelope
                  R[2, 0] * x + R[2, 1] * y + R[2, 2] * z + Z);
         }
 
+        // One lens surface: shape, glass, stop flag, and YZ drawing section.
         class SurfInfo
         {
             public int Index;
@@ -35,6 +44,7 @@ namespace RayExtentEnvelope
             public List<PointF> Section; // YZ drawing plane: X=global Z, Y=global Y
         }
 
+        // One keep-out sample: surface index, Z along axis, max ray radius.
         class Station
         {
             public int Surf;
@@ -43,6 +53,7 @@ namespace RayExtentEnvelope
             public int Hits;
         }
 
+        // One MEMA lens solid: closed RZ profile spun in the front-surface frame.
         class LensSolid
         {
             public string Name;
@@ -50,6 +61,7 @@ namespace RayExtentEnvelope
             public Frame Frame; // front-surface global frame
         }
 
+        // Main job: measure rim extents, build envelope, write PNG and/or STEP.
         static void Export(ZOSAPI.IZOSAPI_Application app)
         {
             var sys = app.PrimarySystem;
@@ -149,6 +161,7 @@ namespace RayExtentEnvelope
                 clap = SanitizeRadius(clap);
                 fieldH = SanitizeRadius(fieldH);
                 rayR = SanitizeRadius(rayR);
+                // Default: do not floor with clear aperture — only ray radius and field height.
                 double floored = Opts.NoClap
                     ? Math.Max(rayR, fieldH)
                     : Math.Max(rayR, Math.Max(clap, fieldH));
@@ -299,6 +312,7 @@ namespace RayExtentEnvelope
             OpenOutputs(open.ToArray());
         }
 
+        // Read every surface's shape, glass, and global frame from the LDE.
         static List<SurfInfo> GatherSurfaces(ZOSAPI.Editors.LDE.ILensDataEditor lde, int imgIdx, int stopIdx)
         {
             var surfs = new List<SurfInfo>();
@@ -368,6 +382,7 @@ namespace RayExtentEnvelope
             return surfs;
         }
 
+        // True if this surface is just a marker (no real glass to draw).
         static bool IsDummySurface(SurfInfo s)
         {
             if (s.Type == ZOSAPI.Editors.LDE.SurfaceType.CoordinateBreak) return true;
@@ -383,6 +398,7 @@ namespace RayExtentEnvelope
             return false;
         }
 
+        // Build YZ cross-section polylines for drawing each surface.
         static void BuildSections(ZOSAPI.Editors.LDE.ILensDataEditor lde, List<SurfInfo> surfs)
         {
             foreach (var s in surfs)
@@ -424,6 +440,7 @@ namespace RayExtentEnvelope
             }
         }
 
+        // Turn "auto" / "all" / "0,2,5" into the station surface list.
         static List<int> ResolveStations(string spec, List<SurfInfo> surfs, int imgIdx)
         {
             if (string.IsNullOrWhiteSpace(spec) || spec.Equals("auto", StringComparison.OrdinalIgnoreCase))
@@ -479,6 +496,7 @@ namespace RayExtentEnvelope
             return result.Distinct().OrderBy(x => x).ToList();
         }
 
+        // True if the object is at a finite distance (not infinity).
         static bool IsFiniteObjectStation(SurfInfo obj)
         {
             if (obj == null || obj.Index != 0) return false;
@@ -490,6 +508,7 @@ namespace RayExtentEnvelope
             return semi > 0 || (Math.Abs(obj.Thickness) > 1e-12 && Math.Abs(obj.Thickness) < 1e8);
         }
 
+        // Clamp weird / negative radii to something we can draw.
         static double SanitizeRadius(double r)
         {
             if (double.IsNaN(r) || double.IsInfinity(r)) return 0;
@@ -503,6 +522,7 @@ namespace RayExtentEnvelope
         /// surfaces follow it (post-image flare / dummy air), stop there (phone plane).
         /// Otherwise use the formal image surface (Cooke and typical objectives).
         /// </summary>
+        // Pick the last useful station (phone/image) for auto mode.
         static int AutoLastStation(List<SurfInfo> surfs, int imgIdx)
         {
             SurfInfo parax = null;
@@ -528,6 +548,7 @@ namespace RayExtentEnvelope
         /// For Paraxial/phone stations with floating tiny DIAM, walk back to the
         /// previous drawn glass surface so vignette cannot pinch below mechanical CA.
         /// </summary>
+        // Clear-aperture radius used only when -clap floors the envelope.
         static double ClearRadiusForStation(SurfInfo si, List<SurfInfo> surfs,
             ZOSAPI.Editors.LDE.ILensDataEditor lde)
         {
@@ -560,6 +581,7 @@ namespace RayExtentEnvelope
             return clap;
         }
 
+        // Read CLAP / semi-diameter style clear radius from the surface.
         static double ReadClearRadius(ZOSAPI.Editors.LDE.ILensDataEditor lde, SurfInfo si)
         {
             double yHalf = 0;
@@ -592,6 +614,7 @@ namespace RayExtentEnvelope
         /// <summary>
         /// Extreme-field chief-ray radial height at the station (field height at that plane).
         /// </summary>
+        // How high the extreme field chief ray sits at this station.
         static double FieldHeightAtStation(
             ZOSAPI.IOpticalSystem sys, int surf, List<int> fieldList, int wave,
             double maxR, ZOSAPI.SystemData.IFields fields, Frame frame)
@@ -626,6 +649,7 @@ namespace RayExtentEnvelope
             return rmax;
         }
 
+        // n points around the pupil rim (radius 1 = full aperture).
         static List<(double px, double py)> BuildPupilRim(int n, double radius)
         {
             var list = new List<(double, double)>(n);
@@ -643,6 +667,7 @@ namespace RayExtentEnvelope
         /// <paramref name="rimHitZ"/> to the global Z of that same max-R hit
         /// (surface rim Z, not vertex Z). Returns whether a finite rim hit exists.
         /// </summary>
+        // Trace rim rays and return the farthest radial hit (and its Z).
         static bool TraceRimMaxRadius(
             ZOSAPI.IOpticalSystem sys, int surf, List<int> fieldList, int wave,
             List<(double px, double py)> samples, double maxR,
@@ -693,6 +718,7 @@ namespace RayExtentEnvelope
         /// Frame.ToGlobal(0, R, Sag(surface, R)).gz. Untilited/centered this is
         /// Frame.Z + sag; with tilt the rim point is transformed properly.
         /// </summary>
+        // Estimate rim Z from the surface sag formula when a ray hit Z is missing.
         static double RimZFromSag(SurfInfo si, double r)
         {
             double sag = Sag(si, r);
@@ -702,6 +728,7 @@ namespace RayExtentEnvelope
             return g.gz;
         }
 
+        // Glass outlines for the PNG (kind tags glass vs air markers).
         static List<(List<PointF> pts, string kind)> BuildLensPolylines(List<SurfInfo> surfs)
         {
             var lines = new List<(List<PointF>, string)>();
@@ -730,6 +757,7 @@ namespace RayExtentEnvelope
             return lines;
         }
 
+        // Stop aperture marks for the PNG.
         static List<List<PointF>> BuildStopPolylines(List<SurfInfo> surfs)
         {
             var lines = new List<List<PointF>>();
@@ -749,6 +777,7 @@ namespace RayExtentEnvelope
             return lines;
         }
 
+        // Closed RZ profiles for MEMA L1/L2/... STEP solids.
         static List<LensSolid> BuildLensSolids(List<SurfInfo> surfs)
         {
             // Full MEMA blanks (MechanicalSemiDiameter), named L1/L2/L3...
@@ -838,6 +867,7 @@ namespace RayExtentEnvelope
             return solids;
         }
 
+        // Make a safe STEP / file name fragment.
         static string Sanitize(string s)
         {
             if (string.IsNullOrEmpty(s)) return "GLASS";
@@ -845,6 +875,7 @@ namespace RayExtentEnvelope
             return new string(chars);
         }
 
+        // Decide PNG and STEP output paths from -out / lens name.
         static void ResolveOutPaths(ZOSAPI.IZOSAPI_Application app, ZOSAPI.IOpticalSystem sys,
             out string pngPath, out string stepPath)
         {
@@ -891,6 +922,7 @@ namespace RayExtentEnvelope
             stepPath = basePath + ".step";
         }
 
+        // Ask OpticStudio for this surface's global matrix.
         static Frame GetFrame(ZOSAPI.Editors.LDE.ILensDataEditor lde, int surf)
         {
             var fr = new Frame();
@@ -908,6 +940,7 @@ namespace RayExtentEnvelope
             return fr;
         }
 
+        // Surface sag z(y) for spheres / conics / even aspheres we understand.
         static double Sag(SurfInfo s, double y)
         {
             double z = 0;
