@@ -21,150 +21,6 @@ it.
 
 ## Extensions
 
-### GpimGhostReduce
-
-Sequential half of
-[Stray Light Analysis with Ghost Focus Generator](https://optics.ansys.com/hc/en-us/articles/43071067483795-Stray-Light-Analysis-with-Ghost-Focus-Generator):
-rank double-bounce image ghosts (optional pupil ghosts) with `GPIM`, then append
-`GPIM` rows (target 0) to the **existing** MFE so a later DLS push the ghost
-focus off the image. Does not replace Ghost Focus Generator + Geometric Image
-Analysis, apply coatings, or run NSC stray light.
-
-`TopN=0` is auto: keep pairs covering ~80% of total GPIM, drop anything under
-10% of the worst hit, cap 8 (`-top N` overrides). Default `-balance 1` scales
-new weights so ghost pull matches existing MF performance. Empty/unweighted MF
-skips DLS. Ribbon settings are remembered in `%APPDATA%\GpimGhostReduce\lastrun.txt`.
-
-Options: `-mode image|pupil|both`, `-top N`, `-balance B`, `-weight W`,
-`-optimize`, `-cycles K` (0 = automatic DLS), `-nodialog`, `-file <zmx>`,
-`-save <zmx>`.
-
-### EquivalentGlassFinder
-
-Community request
-["Equivalent Glass" Feature Proposal](https://community.zemax.com/got-a-question-7/equivalent-glass-feature-proposal-881):
-closest catalog glass by weighted (nd, vd, dPgF), ranked candidates, optional
-swap, before/after EFFL / MF / RMS. Default is obsolete glasses in catalogs in
-use; `-catalog NAME` converts the whole design to that vendor.
-
-Options: `-catalog NAME`, `-includeObsolete`, `-report`, `-reopt`, `-save`,
-`-top N`, `-wnd/-wvd/-wpgf`, `-quiet`.
-
-### ReverseSystem
-
-Reverses a sequential system in place — refractive or reflective, including
-coordinate breaks, negative-thickness virtual gaps, folds and double-pass Mangin
-elements, which built-in Reverse Elements does not
-([flip the whole system](https://community.zemax.com/got-a-question-7/how-to-flip-the-whole-optical-system-1367),
-[Reverse elements erases materials](https://community.zemax.com/got-a-question-7/reverse-elements-erases-materials-3682)).
-
-Radii and polynomial sag negate; gaps reverse order keeping signs; materials ride
-with gaps; coordinate breaks negate decenter X/Y and tilt-Z. Solves/pickups
-freeze first. System aperture becomes Float By Stop Size. Conjugates swap from
-real marginal-ray fans. Odd mirror counts conjugate by the y-flip so reversed
-light still enters along +z. Unsupported surface types and surface-referencing
-MCE operands are **refused**, not silently corrupted.
-
-Validated by exact double-reversal identity (LDE + RMS) on 8 refractive
-coordinate-break systems and 10 reflective ones.
-
-Options: `-save`, `-keepconj`, `-refocus`, `-rayaim`, `-keepaperture`,
-`-georeport`, `-file <path>`, `-out <path>`, `-quiet`.
-
-### LayoutRender
-
-Headless 2D Y-Z layout PNG — the ZOS-API cannot save layout windows
-([layout exports](https://community.zemax.com/got-a-question-7/feature-request-layout-window-exports-2244)).
-Sag sampled and mapped via `GetGlobalMatrix`; glass gaps closed; per-field ray
-fans from the batch tracer. A PCA of traced points orients folded/tilted systems;
-purely axial systems are never rotated (`-noorient` forces that off). Decentered
-apertures are drawn at their true offsets.
-
-Options: `-out <path.png>`, `-rays N` (default 7), `-width W -height H`,
-`-noorient`, `-file <path>`, `-quiet`.
-
-
-### FootprintDxf
-
-Exports the envelope of beam footprints on sequential surfaces to a CAD DXF
-(R12 ASCII). Forum:
-[export beam footprints to CAD/DXF](https://community.zemax.com/got-a-question-7/how-can-i-export-beam-footprints-to-a-cad-or-dxf-file-5991).
-Pupil-grid batch trace â†’ local (x,y) hits â†’ convex hull â†’ one closed
-POLYLINE per surface layer. LayoutRender (layout PNG) and DetectorDump (NSC
-detectors) do not replace this. System is not modified.
-
-Options: `-out <path.dxf>`, `-rays N` (default 21), `-surfaces all|1,3|1-6`,
-`-includeimage`, `-fields all|1,2`, `-wave primary|all`, `-rim`, `-file`,
-`-quiet`, `-nodialog`.
-
-
-### RayExtentEnvelope
-
-Max radial ray-extent envelope for a sequential system: extreme fields x pupil
-rim only. Writes a Y-Z **PNG** (glass + stop + envelope) and a **STEP** of lens
-solids of revolution plus a solid envelope cone. System is not modified.
-Skips CoordinateBreaks and dummy air surfaces.
-
-Default keep-out: rim-Z stations and `R = max(rayR, fieldH)` (no CLAP floor).
-Options: `-file`, `-out`, `-png`, `-step`, `-rimrays`, `-surfaces`,
-`-clap` (restore CLAP floor), `-vertexZ` (vertex Z), `-noclap`/`-rayExtent`
-(aliases for default), `-nodialog`, `-quiet`.
-
-### ElementLeaveOneOut
-
-Leave-one-out ranking of removable sequential **lenses and mirrors**: delete one
-element, adapt the existing merit function, run a local DLS, and score by
-`ΔMF = MF_after − MF0`. Winner is the smallest ΔMF; writes `<stem>_minus1.zmx`.
-Empty/unweighted MFE is seeded with OpticStudio's default RMS Spot wizard; missing
-thickness bounds get MNCT/MXCT; an image-gap thickness variable provides refocus.
-Optional `-top N` prefilters to the N weakest-|power| elements. System copies are
-edited; the open baseline is restored between trials.
-
-Options: `-file <zmx>`, `-save <path>`, `-out <dir>`, `-cycles K` (0 = Automatic;
-default 30), `-top N`, `-rank power`, `-report [path]`, `-quiet`, `-nodialog`.
-
-### DistortionTarget
-
-Chrome-on-glass dot target in NSC: a plate plus an **Array** of chrome dots
-(~40k affordable). Defaults match
-[Edmund Optics 15963](https://www.edmundoptics.com/p/100-x-100mm-05mm-spacing-glass-distortion-target/15963/).
-Ribbon dialog (explicit flag > last run > default) refuses builds whose corner
-dots overhang the plate.
-
-Three silent ZOS-API traps: a coating on a single-face flat is ignored (dots are
-thin Cylinder Volumes; Face 1 is the front; the coating is read back); Array
-count cells are Integer (`DoubleValue` throws); `Draw Limit` caps *drawn*
-replicas only (default here 2000 of 39601). Radiometry needs **ray splitting on**.
-
-Options: `-n`, `-pitch`, `-dot`, `-plate`, `-thick`, `-material`, `-coating`,
-`-film`, `-drawlimit`, `-rig`, `-save`, `-file`, `-nodialog`.
-
-### DetectorDump
-
-Exports every NSC detector in one pass: native `.DDR/.DDC/.DDP/.DDV`, CSV pixel
-grid, false-colour PNG, plus a flux/peak/hit table. Optional NSC trace first.
-
-Options: `-dir <folder>`, `-trace` (`-nosplit`/`-noscatter`/`-nopol`),
-`-data N` (0 flux / 1 irradiance / 2 intensity), `-log`, `-nocsv`/`-nopng`/`-nonative`,
-`-file <path>`, `-quiet`.
-
-### DetectorPowerSum
-
-Sums the total power over every **Detector Rectangle** in the NCE - the same
-sum-of-all-pixels flux `NSDD` pixel 0 and the Detector Viewer's Total Power
-report - and prints a per-detector table (pixels, hits, power) plus the grand
-total, labelled radiometric (W), photometric (lm) or radiant energy (J) from
-the system source-units setting. `-all` adds every other detector type as a
-separate sub-total; a type that cannot report total flux through
-`GetDetectorData` prints `n/a` and is excluded rather than counted as zero.
-Optional NSC trace first. System is not modified.
-
-Validated on five NSC systems (153 detectors on the largest); on a
-deterministic split trace the totals match `NSDD` readouts exactly.
-
-Options: `-trace` (`-nosplit`/`-noscatter`/`-nopol`), `-all`, `-out <path>`,
-`-file <path>`, `-quiet`.
-
 ### AthermalScan
 
 Passive athermalization for a uniform-environment system, replacing a manual
@@ -192,6 +48,133 @@ Options: `-tmin/-tmax/-steps`, `-track L`, `-pressure P`, `-vacuum`,
 `-psweep P1:P2`, `-temp0 T`, `-press0 P`, `-freezesolves`, `-out <prefix>`,
 `-outdir <dir>`, `-file <path>`, `-quiet`, `-nodialog`, `-dialog`.
 
+### CryoGlass
+
+NASA GSFC **CHARMS** cryogenic n(Î»,T) (Leviton & Frey Sellmeier, ~20–300 K,
+Si 1.1–5.6 Âµm and Ge 1.9–5.5 Âµm) frozen at working temperature T0 into an `.AGF`
+with exact Sellmeier1 coefficients plus a local Schott thermal fit. OpticStudio
+cannot override index computation; the catalog is the workaround. Indices are
+**absolute (vacuum)** — set pressure 0. TCE is written 0 (CHARMS has none).
+
+Self-test vs the papers' measured tables runs before every generation and
+refuses on disagreement. Out-of-range Î»/T is refused; nothing is extrapolated.
+CHARMS options, validation and Building/Releases/Licence:
+[docs/catalog.md](docs/catalog.md),
+[VALIDATION.md](extensions/CryoGlass/VALIDATION.md).
+
+Options: `-temp T` (K; no OpticStudio needed), `-range T1:T2:N`,
+`-materials "SI,GE"`, `-fitbox K`, `-out <agf>`, `-file <zmx>`, `-selftest`,
+`-quiet`.
+
+### DetectorDump
+
+Exports every NSC detector in one pass: native `.DDR/.DDC/.DDP/.DDV`, CSV pixel
+grid, false-colour PNG, plus a flux/peak/hit table. Optional NSC trace first.
+
+Options: `-dir <folder>`, `-trace` (`-nosplit`/`-noscatter`/`-nopol`),
+`-data N` (0 flux / 1 irradiance / 2 intensity), `-log`, `-nocsv`/`-nopng`/`-nonative`,
+`-file <path>`, `-quiet`.
+
+### DetectorPowerSum
+
+Sums the total power over every **Detector Rectangle** in the NCE - the same
+sum-of-all-pixels flux `NSDD` pixel 0 and the Detector Viewer's Total Power
+report - and prints a per-detector table (pixels, hits, power) plus the grand
+total, labelled radiometric (W), photometric (lm) or radiant energy (J) from
+the system source-units setting. `-all` adds every other detector type as a
+separate sub-total; a type that cannot report total flux through
+`GetDetectorData` prints `n/a` and is excluded rather than counted as zero.
+Optional NSC trace first. System is not modified.
+
+Validated on five NSC systems (153 detectors on the largest); on a
+deterministic split trace the totals match `NSDD` readouts exactly.
+
+Options: `-trace` (`-nosplit`/`-noscatter`/`-nopol`), `-all`, `-out <path>`,
+`-file <path>`, `-quiet`.
+
+### DistortionTarget
+
+Chrome-on-glass dot target in NSC: a plate plus an **Array** of chrome dots
+(~40k affordable). Defaults match
+[Edmund Optics 15963](https://www.edmundoptics.com/p/100-x-100mm-05mm-spacing-glass-distortion-target/15963/).
+Ribbon dialog (explicit flag > last run > default) refuses builds whose corner
+dots overhang the plate.
+
+Three silent ZOS-API traps: a coating on a single-face flat is ignored (dots are
+thin Cylinder Volumes; Face 1 is the front; the coating is read back); Array
+count cells are Integer (`DoubleValue` throws); `Draw Limit` caps *drawn*
+replicas only (default here 2000 of 39601). Radiometry needs **ray splitting on**.
+
+Options: `-n`, `-pitch`, `-dot`, `-plate`, `-thick`, `-material`, `-coating`,
+`-film`, `-drawlimit`, `-rig`, `-save`, `-file`, `-nodialog`.
+
+### ElementLeaveOneOut
+
+Leave-one-out ranking of removable sequential **lenses and mirrors**: delete one
+element, adapt the existing merit function, run a local DLS, and score by
+`ΔMF = MF_after − MF0`. Winner is the smallest ΔMF; writes `<stem>_minus1.zmx`.
+Empty/unweighted MFE is seeded with OpticStudio's default RMS Spot wizard; missing
+thickness bounds get MNCT/MXCT; an image-gap thickness variable provides refocus.
+Optional `-top N` prefilters to the N weakest-|power| elements. System copies are
+edited; the open baseline is restored between trials.
+
+Options: `-file <zmx>`, `-save <path>`, `-out <dir>`, `-cycles K` (0 = Automatic;
+default 30), `-top N`, `-rank power`, `-report [path]`, `-quiet`, `-nodialog`.
+
+### EquivalentGlassFinder
+
+Community request
+["Equivalent Glass" Feature Proposal](https://community.zemax.com/got-a-question-7/equivalent-glass-feature-proposal-881):
+closest catalog glass by weighted (nd, vd, dPgF), ranked candidates, optional
+swap, before/after EFFL / MF / RMS. Default is obsolete glasses in catalogs in
+use; `-catalog NAME` converts the whole design to that vendor.
+
+Options: `-catalog NAME`, `-includeObsolete`, `-report`, `-reopt`, `-save`,
+`-top N`, `-wnd/-wvd/-wpgf`, `-quiet`.
+
+### FootprintDxf
+
+Exports the envelope of beam footprints on sequential surfaces to a CAD DXF
+(R12 ASCII). Forum:
+[export beam footprints to CAD/DXF](https://community.zemax.com/got-a-question-7/how-can-i-export-beam-footprints-to-a-cad-or-dxf-file-5991).
+Pupil-grid batch trace â†’ local (x,y) hits â†’ convex hull â†’ one closed
+POLYLINE per surface layer. LayoutRender (layout PNG) and DetectorDump (NSC
+detectors) do not replace this. System is not modified.
+
+Options: `-out <path.dxf>`, `-rays N` (default 21), `-surfaces all|1,3|1-6`,
+`-includeimage`, `-fields all|1,2`, `-wave primary|all`, `-rim`, `-file`,
+`-quiet`, `-nodialog`.
+
+### GpimGhostReduce
+
+Sequential half of
+[Stray Light Analysis with Ghost Focus Generator](https://optics.ansys.com/hc/en-us/articles/43071067483795-Stray-Light-Analysis-with-Ghost-Focus-Generator):
+rank double-bounce image ghosts (optional pupil ghosts) with `GPIM`, then append
+`GPIM` rows (target 0) to the **existing** MFE so a later DLS push the ghost
+focus off the image. Does not replace Ghost Focus Generator + Geometric Image
+Analysis, apply coatings, or run NSC stray light.
+
+`TopN=0` is auto: keep pairs covering ~80% of total GPIM, drop anything under
+10% of the worst hit, cap 8 (`-top N` overrides). Default `-balance 1` scales
+new weights so ghost pull matches existing MF performance. Empty/unweighted MF
+skips DLS. Ribbon settings are remembered in `%APPDATA%\GpimGhostReduce\lastrun.txt`.
+
+Options: `-mode image|pupil|both`, `-top N`, `-balance B`, `-weight W`,
+`-optimize`, `-cycles K` (0 = automatic DLS), `-nodialog`, `-file <zmx>`,
+`-save <zmx>`.
+
+### LayoutRender
+
+Headless 2D Y-Z layout PNG — the ZOS-API cannot save layout windows
+([layout exports](https://community.zemax.com/got-a-question-7/feature-request-layout-window-exports-2244)).
+Sag sampled and mapped via `GetGlobalMatrix`; glass gaps closed; per-field ray
+fans from the batch tracer. A PCA of traced points orients folded/tilted systems;
+purely axial systems are never rotated (`-noorient` forces that off). Decentered
+apertures are drawn at their true offsets.
+
+Options: `-out <path.png>`, `-rays N` (default 7), `-width W -height H`,
+`-noorient`, `-file <path>`, `-quiet`.
+
 ### MoldStress
 
 Estimates moulded Î”n and stress birefringence in sequential plastic elements and
@@ -218,23 +201,38 @@ Zernike surfaces, non-circular outlines, warpage or sink.
 Options: see [extensions/MoldStress](extensions/MoldStress) (`-run`, `-full`,
 `-selftest`, `-writecatalog`, `-refcase` / `-refcase2` / `-refquench` / `-refplate`).
 
-### CryoGlass
+### RayExtentEnvelope
 
-NASA GSFC **CHARMS** cryogenic n(Î»,T) (Leviton & Frey Sellmeier, ~20–300 K,
-Si 1.1–5.6 Âµm and Ge 1.9–5.5 Âµm) frozen at working temperature T0 into an `.AGF`
-with exact Sellmeier1 coefficients plus a local Schott thermal fit. OpticStudio
-cannot override index computation; the catalog is the workaround. Indices are
-**absolute (vacuum)** — set pressure 0. TCE is written 0 (CHARMS has none).
+Max radial ray-extent envelope for a sequential system: extreme fields x pupil
+rim only. Writes a Y-Z **PNG** (glass + stop + envelope) and a **STEP** of lens
+solids of revolution plus a solid envelope cone. System is not modified.
+Skips CoordinateBreaks and dummy air surfaces.
 
-Self-test vs the papers' measured tables runs before every generation and
-refuses on disagreement. Out-of-range Î»/T is refused; nothing is extrapolated.
-CHARMS options, validation and Building/Releases/Licence:
-[docs/catalog.md](docs/catalog.md),
-[VALIDATION.md](extensions/CryoGlass/VALIDATION.md).
+Default keep-out: rim-Z stations and `R = max(rayR, fieldH)` (no CLAP floor).
+Options: `-file`, `-out`, `-png`, `-step`, `-rimrays`, `-surfaces`,
+`-clap` (restore CLAP floor), `-vertexZ` (vertex Z), `-noclap`/`-rayExtent`
+(aliases for default), `-nodialog`, `-quiet`.
 
-Options: `-temp T` (K; no OpticStudio needed), `-range T1:T2:N`,
-`-materials "SI,GE"`, `-fitbox K`, `-out <agf>`, `-file <zmx>`, `-selftest`,
-`-quiet`.
+### ReverseSystem
+
+Reverses a sequential system in place — refractive or reflective, including
+coordinate breaks, negative-thickness virtual gaps, folds and double-pass Mangin
+elements, which built-in Reverse Elements does not
+([flip the whole system](https://community.zemax.com/got-a-question-7/how-to-flip-the-whole-optical-system-1367),
+[Reverse elements erases materials](https://community.zemax.com/got-a-question-7/reverse-elements-erases-materials-3682)).
+
+Radii and polynomial sag negate; gaps reverse order keeping signs; materials ride
+with gaps; coordinate breaks negate decenter X/Y and tilt-Z. Solves/pickups
+freeze first. System aperture becomes Float By Stop Size. Conjugates swap from
+real marginal-ray fans. Odd mirror counts conjugate by the y-flip so reversed
+light still enters along +z. Unsupported surface types and surface-referencing
+MCE operands are **refused**, not silently corrupted.
+
+Validated by exact double-reversal identity (LDE + RMS) on 8 refractive
+coordinate-break systems and 10 reflective ones.
+
+Options: `-save`, `-keepconj`, `-refocus`, `-rayaim`, `-keepaperture`,
+`-georeport`, `-file <path>`, `-out <path>`, `-quiet`.
 
 ## Building
 
