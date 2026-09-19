@@ -11,11 +11,11 @@ Ribbon runs report through OpticStudio's progress display and auto-open
 report/image outputs (`-quiet` disables that). Tools that edit the system show
 the edits live.
 
-**Terminate is honoured by eight of the thirteen.** AthermalScan, DetectorDump,
-DetectorPowerSum, EquivalentGlassFinder, LayoutRender, GpimGhostReduce, FootprintDxf and RayExtentEnvelope poll
-`TerminateRequested` inside their loops. CryoGlass, DistortionTarget, MoldStress,
-ReverseSystem and the AthermalAnalysis window do not â€” Cancel does nothing there. That gap matters
-most on DistortionTarget and MoldStress. OpticStudio's template checks the flag
+**Terminate is honoured by nine of the fourteen.** AthermalScan, DetectorDump,
+DetectorPowerSum, EquivalentGlassFinder, LayoutRender, GpimGhostReduce, FootprintDxf,
+RayExtentEnvelope and ElementLeaveOneOut poll `TerminateRequested` inside their loops.
+CryoGlass, DistortionTarget, MoldStress, ReverseSystem and the AthermalAnalysis window do
+not — Cancel does nothing there. That gap matters most on DistortionTarget and MoldStress. OpticStudio's template checks the flag
 once before your code runs, which is why checking it is not the same as honouring
 it.
 
@@ -52,7 +52,7 @@ Options: `-catalog NAME`, `-includeObsolete`, `-report`, `-reopt`, `-save`,
 
 ### ReverseSystem
 
-Reverses a sequential system in place â€” refractive or reflective, including
+Reverses a sequential system in place — refractive or reflective, including
 coordinate breaks, negative-thickness virtual gaps, folds and double-pass Mangin
 elements, which built-in Reverse Elements does not
 ([flip the whole system](https://community.zemax.com/got-a-question-7/how-to-flip-the-whole-optical-system-1367),
@@ -73,7 +73,7 @@ Options: `-save`, `-keepconj`, `-refocus`, `-rayaim`, `-keepaperture`,
 
 ### LayoutRender
 
-Headless 2D Y-Z layout PNG â€” the ZOS-API cannot save layout windows
+Headless 2D Y-Z layout PNG — the ZOS-API cannot save layout windows
 ([layout exports](https://community.zemax.com/got-a-question-7/feature-request-layout-window-exports-2244)).
 Sag sampled and mapped via `GetGlobalMatrix`; glass gaps closed; per-field ray
 fans from the batch tracer. A PCA of traced points orients folded/tilted systems;
@@ -109,6 +109,20 @@ Default keep-out: rim-Z stations and `R = max(rayR, fieldH)` (no CLAP floor).
 Options: `-file`, `-out`, `-png`, `-step`, `-rimrays`, `-surfaces`,
 `-clap` (restore CLAP floor), `-vertexZ` (vertex Z), `-noclap`/`-rayExtent`
 (aliases for default), `-nodialog`, `-quiet`.
+
+### ElementLeaveOneOut
+
+Leave-one-out ranking of removable sequential **lenses and mirrors**: delete one
+element, adapt the existing merit function, run a local DLS, and score by
+`ΔMF = MF_after − MF0`. Winner is the smallest ΔMF; writes `<stem>_minus1.zmx`.
+Empty/unweighted MFE is seeded with OpticStudio's default RMS Spot wizard; missing
+thickness bounds get MNCT/MXCT; an image-gap thickness variable provides refocus.
+Optional `-top N` prefilters to the N weakest-|power| elements. System copies are
+edited; the open baseline is restored between trials.
+
+Options: `-file <zmx>`, `-save <path>`, `-out <dir>`, `-cycles K` (0 = Automatic;
+default 30), `-top N`, `-rank power`, `-report [path]`, `-quiet`, `-nodialog`.
+
 ### DistortionTarget
 
 Chrome-on-glass dot target in NSC: a plate plus an **Array** of chrome dots
@@ -165,7 +179,7 @@ Refuses rather than guessing when TEMP/PRES already live in the MCE, when
 value-computing solves sit on radii/thicknesses it must write (`-freezesolves`
 freezes them), or when *Adjust Index Data To Environment* is off without
 `-temp0`/`-pressure`. Absolute-index catalogs (CryoGlass) need `-vacuum`.
-Non-glass gaps expand along the **clear** semi-diameter edge â€” Make Thermal's
+Non-glass gaps expand along the **clear** semi-diameter edge — Make Thermal's
 pickup model, including TCE 0 moving a gap when adjacent radii change. Air gaps
 on a Cooke triplet agree with OpticStudio to 14 significant figures at Î”T = 50 K.
 Semi-diameters and non-asphere length parameters are still not scaled.
@@ -181,7 +195,7 @@ Options: `-tmin/-tmax/-steps`, `-track L`, `-pressure P`, `-vacuum`,
 ### MoldStress
 
 Estimates moulded Î”n and stress birefringence in sequential plastic elements and
-applies both through STAR. **Requires OpticStudio Enterprise** â€” without STAR it
+applies both through STAR. **Requires OpticStudio Enterprise** — without STAR it
 computes but cannot apply. It is an **estimate**, not a mould-flow run and not
 validated against a moulded part. Moldex3D / Moldflow solve this properly; this
 exists for an Enterprise seat at concept stage with no mould-flow licence.
@@ -192,7 +206,7 @@ surface types are refused. A polymer catalog with `BD` records is required
 +Y (ring above 12 mm), parting at the rim.
 
 Four published ref cases; `-refcase2` does not meet its criterion. The 585Ã— and
-176Ã— retardance/wavefront ratios previously quoted here are **withdrawn** â€”
+176Ã— retardance/wavefront ratios previously quoted here are **withdrawn** —
 `GetRetardanceMap` is not retardance. Diary and both retractions:
 [`VALIDATION-LOG.md`](extensions/MoldStress/VALIDATION-LOG.md).
 
@@ -206,11 +220,11 @@ Options: see [extensions/MoldStress](extensions/MoldStress) (`-run`, `-full`,
 
 ### CryoGlass
 
-NASA GSFC **CHARMS** cryogenic n(Î»,T) (Leviton & Frey Sellmeier, ~20â€“300 K,
-Si 1.1â€“5.6 Âµm and Ge 1.9â€“5.5 Âµm) frozen at working temperature T0 into an `.AGF`
+NASA GSFC **CHARMS** cryogenic n(Î»,T) (Leviton & Frey Sellmeier, ~20–300 K,
+Si 1.1–5.6 Âµm and Ge 1.9–5.5 Âµm) frozen at working temperature T0 into an `.AGF`
 with exact Sellmeier1 coefficients plus a local Schott thermal fit. OpticStudio
 cannot override index computation; the catalog is the workaround. Indices are
-**absolute (vacuum)** â€” set pressure 0. TCE is written 0 (CHARMS has none).
+**absolute (vacuum)** — set pressure 0. TCE is written 0 (CHARMS has none).
 
 Self-test vs the papers' measured tables runs before every generation and
 refuses on disagreement. Out-of-range Î»/T is refused; nothing is extrapolated.
@@ -232,7 +246,7 @@ Get-ChildItem extensions -Filter *.csproj -Recurse -Depth 1 |
     ForEach-Object { dotnet build $_.FullName --configuration Release }
 ```
 
-That is twelve User Extensions plus the AthermalAnalysis User Analysis. csproj
+That is thirteen User Extensions plus the AthermalAnalysis User Analysis. csproj
 defaults stay **x64**. An x86 ribbon listing (needed on OpticStudio 2026 R1.01
 here) is an override, not a project edit:
 
@@ -243,7 +257,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\pack.ps1 -x86
 
 `DeployToZemax` copies `.exe` + `.exe.config` to the Zemax data folder after
 each build (`HKCU\Software\Zemax@ZemaxRoot`). A new extension may need
-**Programming > Refresh List and an OpticStudio restart** â€” Refresh List alone
+**Programming > Refresh List and an OpticStudio restart** — Refresh List alone
 did not list an x64 `GpimGhostReduce` until an x86 rebuild plus restart. User
 analyses always need a restart. Replacing an already-listed add-in takes effect
 on the next run.
@@ -254,7 +268,7 @@ on the next run.
 [Releases](https://github.com/BobHouseholder/zemax-user-extensions/releases)
 (also mirrored under [`dist/`](dist/) on `main`). Extract, read `INSTALL.txt`,
 drag the `ZOS-API` folder onto the Zemax **data** folder (not into `Extensions`
-- one of the thirteen is a User Analysis). Binaries are **x64** .NET Framework 4.8,
+- one of the fourteen is a User Analysis). Binaries are **x64** .NET Framework 4.8,
 unsigned; `INSTALL.txt` has `Unblock-File`. Built against the OpticStudio release
 named in the zip / `manifest.txt` (ZOS-API resolves at run time against yours).
 
@@ -264,6 +278,6 @@ Re-pack and cut a Release whenever binaries change. Redistribution of compiled
 
 ## Licence
 
-MIT â€” [LICENSE](LICENSE). Copyright (c) 2026 Bob Householder. Covers this
+MIT — [LICENSE](LICENSE). Copyright (c) 2026 Bob Householder. Covers this
 repository's source only. The extensions link against Ansys ZOS-API assemblies,
 which are not included and are not under this licence.
