@@ -378,6 +378,28 @@ def run_on_system(ZOSAPI, app, TheSystem) -> None:
     effl0 = safe_effl(ZOSAPI, TheSystem)
     say(fmt("Baseline MF: {:.8g}", mf0))
     say(fmt("Baseline EFFL: {:.8g}", effl0))
+
+    # If the starting report card is already absurd (file had weights but rays
+    # are failing → ~1e9), try ONE Optimization Wizard rebuild, then measure
+    # again. Still refuse afterward unless -allowbadmf.
+    if is_bad_baseline_mf(mf0):
+        say(
+            fmt(
+                "Baseline MF unhealthy ({:.8g}) — trying one Optimization Wizard reseed...",
+                mf0,
+            )
+        )
+        try:
+            seed_baseline_mf(ZOSAPI, TheSystem)
+            ensure_thickness_constraints(ZOSAPI, TheSystem)
+            mfe = TheSystem.MFE
+            mf0 = float(mfe.CalculateMeritFunction())
+            effl0 = safe_effl(ZOSAPI, TheSystem)
+            say(fmt("After wizard reseed MF: {:.8g}", mf0))
+            say(fmt("After wizard reseed EFFL: {:.8g}", effl0))
+        except Exception as ex:
+            say("  Wizard reseed failed: " + str(ex))
+
     # Health gate: refuse a nonsense baseline unless -allowbadmf.
     gate_baseline_mf(mf0)
 
@@ -608,10 +630,15 @@ def trial_mf_is_broken(mf_after: float, mf0: float):
     return False, ""
 
 
+def is_bad_baseline_mf(mf0: float) -> bool:
+    """True when the starting report card is not usable for leave-one-out."""
+    return (not _is_finite(mf0)) or mf0 <= 0.0 or mf0 >= 1e8
+
+
 def gate_baseline_mf(mf0: float) -> None:
-    # After seed + baseline MF0: stop if the starting score is nonsense,
-    # unless the user passed -allowbadmf (then warn hard and continue).
-    bad = (not _is_finite(mf0)) or mf0 <= 0.0 or mf0 >= 1e8
+    # After seed + optional wizard reseed + baseline MF0: stop if the starting
+    # score is still nonsense, unless -allowbadmf (warn and continue).
+    bad = is_bad_baseline_mf(mf0)
     if not bad:
         return
     if not _is_finite(mf0):

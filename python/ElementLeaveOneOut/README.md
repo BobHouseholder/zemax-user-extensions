@@ -66,6 +66,8 @@ python element_leave_one_out.py -file C:\path\to\sample.zmx -out C:\temp\loo_out
 | `-nodialog` | Accepted no-op |
 | `-allowbadmf` | Override baseline MF health gate (warns hard; default is refuse) |
 
+If the baseline merit function is already absurd (≥1e8) — common when a file has weights but rays are failing — the tool tries **one** Optimization Wizard reseed, then re-checks the health gate. It still refuses afterward unless you pass `-allowbadmf`.
+
 **Fail-closed:** if every LOO trial is rejected/failed, the script does **not** write
 `*_minus1.zmx` and exits with code **2**. Broken trials (non-finite MF/delta,
 MF ≥ 1e8, or MF ≥ 1e6×MF0) are excluded from the winner. After seed + baseline MF0,

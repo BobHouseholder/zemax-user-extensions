@@ -249,6 +249,32 @@ namespace ElementLeaveOneOut
             double effl0 = SafeEffl(sys);
             Say(F("Baseline MF: {0:G8}", mf0));
             Say(F("Baseline EFFL: {0:G8}", effl0));
+
+            // If the starting report card is already absurd (often a file that
+            // already had weights but rays are failing → ~1e9), try ONE rebuild
+            // with the Optimization Wizard, then measure again. Still refuse
+            // afterward unless -allowbadmf.
+            if (IsBadBaselineMf(mf0))
+            {
+                Say(F(
+                    "Baseline MF unhealthy ({0:G8}) — trying one Optimization Wizard reseed...",
+                    mf0));
+                try
+                {
+                    SeedBaselineMf(sys);
+                    EnsureThicknessConstraints(sys);
+                    mfe = sys.MFE;
+                    mf0 = mfe.CalculateMeritFunction();
+                    effl0 = SafeEffl(sys);
+                    Say(F("After wizard reseed MF: {0:G8}", mf0));
+                    Say(F("After wizard reseed EFFL: {0:G8}", effl0));
+                }
+                catch (Exception ex)
+                {
+                    Say("  Wizard reseed failed: " + ex.Message);
+                }
+            }
+
             // Health gate: refuse a nonsense baseline unless -allowbadmf.
             GateBaselineMf(mf0);
 
@@ -473,11 +499,17 @@ namespace ElementLeaveOneOut
             return false;
         }
 
-        // After seed + baseline MF0: stop if the starting score is nonsense,
-        // unless the user passed -allowbadmf (then warn hard and continue).
+        // True when the starting report card is not usable for leave-one-out.
+        static bool IsBadBaselineMf(double mf0)
+        {
+            return !IsFinite(mf0) || mf0 <= 0.0 || mf0 >= 1e8;
+        }
+
+        // After seed + optional wizard reseed + baseline MF0: stop if the
+        // starting score is still nonsense, unless -allowbadmf (warn and go).
         static void GateBaselineMf(double mf0)
         {
-            bool bad = !IsFinite(mf0) || mf0 <= 0.0 || mf0 >= 1e8;
+            bool bad = IsBadBaselineMf(mf0);
             if (!bad) return;
             string detail = !IsFinite(mf0) ? "non-finite"
                 : (mf0 <= 0.0 ? "<= 0" : ">= 1e8 (absurd)");
