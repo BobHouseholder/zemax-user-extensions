@@ -2,17 +2,16 @@ using System;
 
 namespace CryoGlass
 {
-    // NASA GSFC CHARMS temperature-dependent Sellmeier (TSM) coefficients,
-    // transcribed from the published papers (free NTRS/arXiv full texts).
-    //
-    //   n^2(lambda,T) - 1 = SUM_i  S_i(T) * lambda^2 / (lambda^2 - lambda_i(T)^2)
-    //
-    // with S_i(T) and lambda_i(T) each a 4th-order polynomial in T (Kelvin),
-    // lambda in microns. Coefficient rows below are ordered constant, T, T^2,
-    // T^3, T^4; columns S1 S2 S3 L1 L2 L3. Every material carries published
-    // MEASURED index values as self-test anchors - the tool refuses to run if
-    // its evaluator disagrees with the paper's own tables, so a transcription
-    // error can never silently produce catalogs.
+
+    // ============================================================
+    // CharmsData - NASA cold-glass Sellmeier numbers
+    // ============================================================
+    // Published CHARMS coefficients: how each glass's index depends
+    // on wavelength and temperature. Copied from open papers — we
+    // do not invent numbers. Self-test anchors must match the papers.
+    // ============================================================
+
+    // One CHARMS glass: name, valid ranges, Sellmeier polys, self-test points.
     class CharmsMaterial
     {
         public string Name;             // catalog-safe short name

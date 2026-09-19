@@ -6,24 +6,14 @@ using System.Windows.Forms;
 
 namespace DistortionTarget
 {
-    // A ribbon run gets no command line. OpticStudio launches the extension from
-    // Programming > User Extensions with no arguments and offers nowhere to supply
-    // any, so without a window every parameter this tool has would be reachable
-    // only from a shell. Ansys's own CODE V converter extension answers this the
-    // same way (manual 1.5.3.7.2).
-    //
-    // The derived read-out is the point of the dialog, not decoration. The geometry
-    // this builds has one failure mode that is invisible in the inputs and obvious
-    // in the outputs: a dot count that puts the corner dots over the edge of the
-    // plate. Reading "201 dots, 0.5 mm pitch, 100 mm plate" tells you nothing;
-    // reading "outermost dot edge 50.125 mm, clearance -0.125 mm" tells you at once.
-    // So it recomputes on every keystroke and refuses OK while the geometry is
-    // impossible, rather than accepting the form and failing afterwards.
-    //
-    // Controls are CHILDREN of their group boxes, positioned in group-local
-    // coordinates — the sibling-at-absolute-coordinates arrangement paints the
-    // group over its own fields, because WinForms z-order puts index 0 in front and
-    // Controls.Add appends.
+    // ============================================================
+    // Settings window for DistortionTarget (plain words)
+    // ============================================================
+    // Ribbon runs have no command line, so this window lets you pick
+    // plate size, glass, dot diameter/pitch, and related options.
+    // Cancel means build nothing.
+    // ============================================================
+
     class TargetSettingsDialog : Form
     {
         readonly TextBox _n, _pitch, _dot, _plate, _thick, _material, _coating, _film, _draw;
@@ -37,6 +27,7 @@ namespace DistortionTarget
 
         // Returns false if the user cancelled — the caller must then build nothing,
         // since Build() replaces the open system outright.
+        // Pop the window; return false if Cancel.
         public static bool Show(Options o)
         {
             Application.EnableVisualStyles();
@@ -51,6 +42,7 @@ namespace DistortionTarget
 
         static CultureInfo CI => CultureInfo.InvariantCulture;
 
+        // Build the form and fill it from Options.
         TargetSettingsDialog(Options o)
         {
             Text = "Distortion target";
@@ -216,6 +208,7 @@ namespace DistortionTarget
             Recompute();
         }
 
+        // Copy window values back into Options.
         void Apply(Options o)
         {
             int n, draw; double v;

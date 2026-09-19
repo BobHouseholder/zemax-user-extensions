@@ -9,8 +9,16 @@ using System.Linq;
 
 namespace AthermalScan
 {
+    // ============================================================
+    // Analyze - step through temperatures (plain words)
+    // ============================================================
+    // For each temperature: apply thermal growth, measure focus and
+    // merit (report card), then write CSV/plots via Reports. This is
+    // the heart of AthermalScan.
+    // ============================================================
     partial class Program
     {
+        // Run the temperature sweep and collect results for reports.
         internal static void Analyze(ZOSAPI.IZOSAPI_Application app, ZOSAPI.IOpticalSystem sys)
         {
             // sys is passed in: the extension analyses the live system, the User Analysis

@@ -9,84 +9,18 @@ using System.Linq;
 
 namespace AthermalScan
 {
-    // Athermal Scan — a ZOS-API User Extension.
-    //
-    // One-command passive athermalization analysis for sequential systems,
-    // replacing the manual TEMP/PRES multi-configuration workflow (community
-    // threads "athermal design", "how to model a system with groups under
-    // different temperatures and pressures").
-    //
-    // For each temperature in the sweep the extension applies OpticStudio's own
-    // thermal model transiently: refractive indices adjust through the system
-    // environment (Adjust Index To Environment), and radii, thicknesses and
-    // polynomial asphere terms expand as (1 + a.dT) using the glass catalog TCE
-    // for glass rows and the LDE TCE column (mount material) for air gaps. The
-    // original prescription and environment are snapshot and fully restored,
-    // including on error.
-    //
-    // Non-glass gaps follow the Make Thermal rule (manual 2.1.1.4.4.2): they
-    // expand along the EDGE, from the rim of one surface to the rim of the next,
-    // with the mount contact point walking radially as spacer and lens rim expand
-    // at different rates and clamped to the lens mechanical semi-diameter; the
-    // result is transferred back onto the centre thickness. So a TCE of 0 still
-    // moves a gap when the adjacent radii move, as it should.
-    //
-    // Still short of Make Thermal: semi-diameters are not expanded, and length
-    // parameters outside the even/odd asphere terms (toroidal and biconic radii,
-    // Zernike normalisation radii) are not scaled. Gaps bounded by a surface
-    // whose sag this tool cannot evaluate fall back to centre scaling and are
-    // named in the report.
-    //
-    // Index convention: OpticStudio always traces RELATIVE index - air at the
-    // system temperature and pressure is exactly 1.0, and glass indices are
-    // normalised to it (manual 2.1.1.4.2). So the system pressure alone decides
-    // whether the reported n, dn/dT and x_f are relative-to-air (P > 0) or
-    // absolute/vacuum (P = 0); the difference in dn/dT is n*|dn_air/dT|,
-    // ~1.4e-6/K at n=1.5 and 1 atm, which is the whole value for a low-dn/dT
-    // crown. The convention in force is stated in the report, and -pressure /
-    // -vacuum / -psweep select it explicitly.
-    //
-    // Reported:
-    //  * focus shift, EFFL, RMS spot (fixed plane and refocused) vs temperature
-    //  * diffraction depth of focus (+/- 2 lambda N^2) and the passive athermal
-    //    temperature range at a fixed image plane
-    //  * required housing CTE (dz/dT over the mount track), nearest housing
-    //    materials with their residual defocus rates and usable temperature
-    //    ranges, and an exact two-metal (bimetallic) length solution
-    //  * per-glass opto-thermal table: n, dn/dT (measured numerically from the
-    //    live model), catalog TCE, thermal glass constant
-    //    x_f = dn/dT/(n-1) - alpha, and an approximate thin-element share of
-    //    the total thermal defocus
-    //  * a two-panel PNG chart (focus shift with DOF band; RMS vs T)
-    //
-    // Usage:
-    //   (no args)      analyze the system open in OpticStudio (extension mode)
-    //   -tmin C        sweep start in Celsius (default -20)
-    //   -tmax C        sweep end (default +60)
-    //   -steps N       sweep points (default 9)
-    //   -track L       housing/mount length in lens units (default: total track)
-    //   -pressure P    run the SCAN at P atm instead of the design pressure
-    //   -vacuum        shorthand for -pressure 0 (absolute/vacuum indices)
-    //   -psweep P1:P2  paired temperature/pressure soak: P ramps with T
-    //   -temp0 T       declare the DESIGN temperature (required when the file
-    //                  has Adjust Index Data To Environment switched off)
-    //   -press0 P      declare the DESIGN pressure, separately from the scan
-    //                  pressure - "built in air, flown in vacuum" is
-    //                  -press0 1 -vacuum
-    //   -freezesolves  freeze value-computing solves on radius/thickness/params
-    //                  instead of refusing to run; NOT undone on restore
-    //   -nodialog      never put up the settings window (scripted no-argument runs)
-    //   -dialog        put the settings window up even outside a ribbon run
-    //
-    // A ribbon run has no command line and OpticStudio provides no way to give it
-    // one, so with no arguments in Plugin mode the settings window collects the
-    // sweep, the design environment and the analysis pressure, remembering the last
-    // run in %APPDATA%\AthermalScan\lastrun.txt.
-    //   -out <prefix>  output prefix for report/chart (default <lens>_athermal)
-    //   -outdir <dir>  write the report into this folder instead of beside the lens
-    //                  (the settings window sets the same thing)
-    //   -file <path>   standalone mode: load the file first
-    //   -quiet         do not auto-open report/chart after a ribbon (GUI) run
+    // ============================================================
+    // AthermalScan - what this program does (plain words)
+    // ============================================================
+    // Lenses change when they get hot or cold (glass index and metal
+    // spacers grow/shrink). "Athermal" means the focus stays good
+    // across temperature. This tool scans temperatures, measures how
+    // focus / merit (report card) drift, and writes reports and plots
+    // so you can see if the design stays sharp when the weather
+    // changes. The lens is analyzed, not redesigned (unless you ask).
+    // ============================================================
+
+    // Switches from the command line or settings window.
     class Options
     {
         public double TMin = -20, TMax = 60;
@@ -135,6 +69,7 @@ namespace AthermalScan
 
         // STA because a ribbon run puts up the settings window (ScanSettingsDialog).
         [STAThread]
+        // Start here: find OpticStudio, then run the temperature scan.
         static void Main(string[] args)
         {
             ParseArgs(args);
@@ -175,6 +110,7 @@ namespace AthermalScan
             "freezesolves", "dump", "nodialog", "dialog", "out", "outdir", "file", "quiet"
         };
 
+        // Read flags (-Tmin, -Tmax, -out, ...).
         static void ParseArgs(string[] args)
         {
             LaunchArgs = args;
@@ -232,6 +168,7 @@ namespace AthermalScan
             }
         }
 
+        // Parse a pressure-sweep string into the options list.
         static void ParsePSweep(string s)
         {
             var parts = (s ?? "").Split(':');
@@ -244,6 +181,7 @@ namespace AthermalScan
             Opts.PressureEnd = ParseDouble(parts[1], 0.0);
         }
 
+        // Parse an integer or keep the old value.
         static int ParseInt(string s, int keep)
         {
             int v;
@@ -252,6 +190,7 @@ namespace AthermalScan
             return keep;
         }
 
+        // Parse a number or keep the old value.
         static double ParseDouble(string s, double keep)
         {
             double v;
@@ -263,6 +202,7 @@ namespace AthermalScan
 
         internal static readonly Results R = new Results();
 
+        // Print a status line.
         static void Say(string s)
         {
             Console.WriteLine(s);
@@ -290,6 +230,7 @@ namespace AthermalScan
             }
         }
 
+        // Folders where we may write log/report files.
         static IEnumerable<string> LogDirs()
         {
             string asm = null;
@@ -301,6 +242,7 @@ namespace AthermalScan
             yield return tmp;
         }
 
+        // Connect, maybe show settings, then scan temperatures.
         static void Run()
         {
             ZOSAPI.IZOSAPI_Application app = null;
@@ -374,6 +316,7 @@ namespace AthermalScan
             }
         }
 
+        // Open report files after a ribbon run.
         static void OpenOutputs(ZOSAPI.IZOSAPI_Application app, params string[] paths)
         {
             if (Opts.Quiet) return;

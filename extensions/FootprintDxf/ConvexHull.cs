@@ -3,7 +3,13 @@ using System.Collections.Generic;
 
 namespace FootprintDxf
 {
-    // Andrew's monotone-chain 2D convex hull. Pure geometry — no ZOS-API.
+    // ============================================================
+    // ConvexHull - rubber-band outline around hit points
+    // ============================================================
+    // Given a cloud of (x,y) ray hits, return the outer polygon that
+    // wraps them (Andrew's monotone chain). Pure geometry — no ZOS-API.
+    // ============================================================
+
     static class ConvexHull
     {
         public struct Pt
@@ -14,6 +20,7 @@ namespace FootprintDxf
 
         // Returns the hull vertices in CCW order, without repeating the first
         // point at the end. Fewer than 3 distinct points → empty (no polygon).
+        // Build the outer hull. Fewer than 3 unique points → just return what we have.
         public static List<Pt> Compute(IList<Pt> input)
         {
             if (input == null || input.Count == 0) return new List<Pt>();
@@ -60,10 +67,12 @@ namespace FootprintDxf
             return lower.Count >= 3 ? lower : new List<Pt>();
         }
 
+        // Cross product of OA×OB — positive means a left turn (needed for hull edges).
         static double Cross(Pt o, Pt a, Pt b) =>
             (a.X - o.X) * (b.Y - o.Y) - (a.Y - o.Y) * (b.X - o.X);
 
         // Tiny self-check: square corners + interior junk → exactly the 4 corners.
+        // Tiny unit test: a square's hull must be 4 corners.
         public static bool SelfCheck(out string detail)
         {
             var pts = new List<Pt>

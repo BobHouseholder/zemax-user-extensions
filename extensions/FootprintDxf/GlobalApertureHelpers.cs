@@ -3,6 +3,12 @@ using System.Collections.Generic;
 
 namespace FootprintDxf
 {
+    // ============================================================
+    // GlobalApertureHelpers - assembly frame + clear apertures
+    // ============================================================
+    // Move local surface hits into one shared X/Y frame for CAD, and
+    // build clear-aperture overlay rings when the surface defines one.
+    // ============================================================
     partial class Program
     {
         // LayoutRender-style global frame from LDE.GetGlobalMatrix.
@@ -21,6 +27,7 @@ namespace FootprintDxf
             }
         }
 
+        // Ask OpticStudio for this surface's global rotation/position (GetGlobalMatrix).
         static GlobalFrame TryGetGlobalFrame(ZOSAPI.Editors.LDE.ILensDataEditor lde, int surf)
         {
             var fr = new GlobalFrame();
@@ -39,6 +46,7 @@ namespace FootprintDxf
         }
 
         // Pure helper: apply a 3x3 + translation to (x,y) with z=0 (selftest / docs).
+        // Turn a local (x,y) hit into global X/Y (Z is ignored in the 2D DXF).
         static ConvexHull.Pt LocalToGlobalXY(
             double r00, double r01, double r02,
             double r10, double r11, double r12,
@@ -50,6 +58,7 @@ namespace FootprintDxf
                 r10 * lx + r11 * ly + r12 * lz + ty);
         }
 
+        // Map a whole list of local hits into global X/Y.
         static List<ConvexHull.Pt> TransformHitsXY(List<ConvexHull.Pt> hits, GlobalFrame fr)
         {
             if (hits == null || hits.Count == 0 || !fr.Valid) return hits ?? new List<ConvexHull.Pt>();
@@ -62,6 +71,7 @@ namespace FootprintDxf
             return outHits;
         }
 
+        // Map per-field hit lists into global X/Y.
         static Dictionary<int, List<ConvexHull.Pt>> TransformHitsByFieldXY(
             Dictionary<int, List<ConvexHull.Pt>> byField, GlobalFrame fr)
         {
@@ -73,6 +83,7 @@ namespace FootprintDxf
         }
 
         // Closed circle/ellipse ring in local XY (N verts, no repeated first).
+        // Sample an ellipse as a closed ring of points (for aperture overlays).
         static List<ConvexHull.Pt> MakeEllipseRing(double cx, double cy, double rx, double ry, int n = 64)
         {
             if (n < 8) n = 8;
@@ -89,6 +100,7 @@ namespace FootprintDxf
 
         // Clear-aperture overlay from ZOS-API. Circular / elliptical / SemiDiameter
         // fallback. Rectangular and other types -> skip with WARNING (no fail).
+        // Read the surface clear aperture and build an overlay polyline if we understand the type.
         static bool TryBuildApertureOverlay(
             ZOSAPI.Editors.LDE.ILensDataEditor lde, int surf,
             out List<ConvexHull.Pt> verts, out string kind, out string warn)
@@ -161,6 +173,7 @@ namespace FootprintDxf
             }
         }
 
+        // Tiny test that local→global math matches a known rotation.
         static bool GlobalTransformSelfCheck(out string detail)
         {
             // Identity + translation (1,2): (3,4) -> (4,6)
@@ -176,6 +189,7 @@ namespace FootprintDxf
             return true;
         }
 
+        // Tiny test that ellipse rings close and have the right point count.
         static bool ApertureRingSelfCheck(out string detail)
         {
             var c = MakeEllipseRing(0, 0, 2, 2, 8);

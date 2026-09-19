@@ -8,9 +8,13 @@ using System.IO;
 
 namespace FootprintDxf
 {
-    // Headless PNG preview of the same footprint polylines written to DXF.
-    // Pure System.Drawing - no WinForms window. Y-up lens coords -> screen Y flip.
-    // Colours are keyed by sanitized layer name (same map as DXF LAYER ACI).
+    // ============================================================
+    // PngWriter - picture preview of the same footprints
+    // ============================================================
+    // Draws the DXF polylines as a PNG so you can peek without CAD.
+    // No window pops up — just saves the image. Y goes up like optics.
+    // ============================================================
+
     static class PngWriter
     {
         static readonly CultureInfo CI = CultureInfo.InvariantCulture;
@@ -39,11 +43,13 @@ namespace FootprintDxf
             return AciColors[aci - 1];
         }
 
+        // Save a PNG of all footprint outlines (auto size).
         public static void Write(string path, IList<DxfWriter.LayerPoly> polys, string title)
         {
             Write(path, polys, title, DefaultW, DefaultH);
         }
 
+        // Save a PNG of all footprint outlines at a given pixel size.
         public static void Write(string path, IList<DxfWriter.LayerPoly> polys, string title,
             int width, int height)
         {

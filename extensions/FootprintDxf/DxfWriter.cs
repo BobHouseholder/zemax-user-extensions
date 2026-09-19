@@ -6,9 +6,15 @@ using System.Text;
 
 namespace FootprintDxf
 {
-    // Minimal DXF R12 / AC1009 ASCII writer. POLYLINE + VERTEX + SEQEND for
-    // maximum compatibility with ancient mechanical CAD. Coordinates are local
-    // surface XY in OpticStudio lens units (mm/cm/in/m - see $INSUNITS).
+    // ============================================================
+    // DxfWriter - write a simple CAD DXF file as plain text
+    // ============================================================
+    // We hand-write old-style DXF (R12) with POLYLINE + VERTEX so
+    // ancient mechanical CAD can open it. Each footprint becomes
+    // one closed polyline on its own layer. Units come from the
+    // lens ($INSUNITS). Coordinates are surface XY (or global XY).
+    // ============================================================
+
     static class DxfWriter
     {
         static readonly CultureInfo CI = CultureInfo.InvariantCulture;
@@ -29,7 +35,8 @@ namespace FootprintDxf
             return map;
         }
 
-        public class LayerPoly
+        // One closed polyline on a named layer (the rubber-band outline).
+    public class LayerPoly
         {
             public string LayerName;
             public string Comment; // optional DXF TEXT near first vertex
@@ -37,6 +44,7 @@ namespace FootprintDxf
         }
 
         // insUnits: AutoCAD $INSUNITS code. null = omit header var; 0 = unitless/unknown.
+        // Write the whole DXF file: header, layers, polylines, EOF.
         public static void Write(string path, IList<LayerPoly> polys, string title,
             int? insUnits = 4)
         {
@@ -152,6 +160,7 @@ namespace FootprintDxf
             File.WriteAllText(path, sb.ToString(), new UTF8Encoding(false));
         }
 
+        // Make a layer name safe for DXF (no weird characters).
         public static string SanitizeLayer(string name)
         {
             if (string.IsNullOrWhiteSpace(name)) return "SURF";
@@ -168,6 +177,7 @@ namespace FootprintDxf
         }
 
         // ASCII-fold for DXF TEXT entities. Console may keep Unicode; DXF R12 TEXT is ASCII-safe.
+        // Make title/text safe for DXF TEXT entities.
         public static string SanitizeText(string text)
         {
             if (string.IsNullOrEmpty(text)) return "";
@@ -190,6 +200,7 @@ namespace FootprintDxf
         }
 
         // Ensure unique layer names across one export (suffix _2, _3, ...; keep <=31 chars).
+        // If SURF_1 is taken, return SURF_1_2, etc.
         public static string EnsureUniqueLayer(string baseName, HashSet<string> used)
         {
             string name = SanitizeLayer(baseName);

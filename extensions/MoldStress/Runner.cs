@@ -7,15 +7,15 @@ using System.Text;
 
 namespace MoldStress
 {
-    /// <summary>
-    /// The whole chain, end to end: geometry to gate to fields to STAR to a
-    /// performance delta.
-    ///
-    /// The baseline is measured BEFORE anything is imported, and the loaded
-    /// result after - so the reported change is a difference between two
-    /// measurements of the same system, not between a measurement and a memory.
-    /// </summary>
-    internal static class Runner
+    // ============================================================
+    // Runner - the end-to-end MoldStress chain (plain words)
+    // ============================================================
+    // Geometry → gate → stress/index fields → STAR import → measure
+    // how much performance moved. Baseline is measured BEFORE import
+    // so the reported change is a real before/after on the same lens.
+    // ============================================================
+
+internal static class Runner
     {
         /// <summary>
         /// Every flag -run READS. Public so the self-test can hold both arms
@@ -35,6 +35,7 @@ namespace MoldStress
 
         [System.Runtime.CompilerServices.MethodImpl(
             System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        // Run the full MoldStress pipeline; return process exit code.
         public static int Run(string[] args)
         {
             // BEFORE Session.Locate(), deliberately. Refusing after starting an

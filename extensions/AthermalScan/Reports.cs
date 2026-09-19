@@ -7,10 +7,14 @@ using System.Text;
 
 namespace AthermalScan
 {
-    // Everything the scan measured, in one place, so it can be emitted more than
-    // once. The text log is a transcript - fine to read, useless to diff - and every
-    // check in this extension's own validation history was done by hand-diffing
-    // console output. The CSV and JSON exist so that stops being necessary.
+    // ============================================================
+    // Reports - save what the temperature scan measured
+    // ============================================================
+    // Holds all scan numbers in one place so we can write a text log,
+    // CSV, and plots without re-running. CSVs are easy to compare; the
+    // text log is just a human transcript.
+    // ============================================================
+
     class Results
     {
         public string LensFile = "";

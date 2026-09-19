@@ -6,10 +6,15 @@ using System.Windows.Forms;
 
 namespace FootprintDxf
 {
-    // Ribbon runs get no command line. OpticStudio launches User Extensions with
-    // no arguments, so without a window every knob would only be reachable from
-    // a shell. Same pattern as DistortionTarget / GpimGhostReduce.
-    // Cancel returns false - the caller must then write nothing (system untouched).
+    // ============================================================
+    // Settings window for FootprintDxf (plain words)
+    // ============================================================
+    // Ribbon runs get no command line, so this window lets you pick
+    // the output path, which surfaces/fields/waves to use, grid and
+    // rim density, and extras like per-field hulls or apertures.
+    // Cancel means write nothing — the lens stays untouched.
+    // Choices are remembered in lastrun.txt for next time.
+    // ============================================================
     class SettingsDialog : Form
     {
         readonly TextBox _out, _rays, _rimRays, _surfaces, _fields;
@@ -22,6 +27,7 @@ namespace FootprintDxf
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                 "FootprintDxf", "lastrun.txt");
 
+        // Pop the window; return false if the user hits Cancel.
         public static bool Show(Options o)
         {
             Application.EnableVisualStyles();
@@ -36,6 +42,7 @@ namespace FootprintDxf
 
         static CultureInfo CI => CultureInfo.InvariantCulture;
 
+        // Build the form and fill it from Options / last-run file.
         SettingsDialog(Options o)
         {
             Text = "Footprint DXF export";
@@ -157,6 +164,7 @@ namespace FootprintDxf
             Recompute();
         }
 
+        // One labeled text box inside a group.
         TextBox Field(GroupBox g, int row, string label, string value)
         {
             int top = 22 + row * 28;
@@ -169,6 +177,7 @@ namespace FootprintDxf
         static bool TryI(TextBox tb, out int v) =>
             int.TryParse(tb.Text.Trim(), NumberStyles.Integer, CI, out v);
 
+        // Validate numbers and refresh the gray hint under the controls.
         void Recompute()
         {
             int rays, rimRays;
@@ -219,6 +228,7 @@ namespace FootprintDxf
                 wave, rimExtra, pfExtra, globNote, aperNote, pngNote, openNote);
         }
 
+        // Copy the window's values back into Options.
         void Apply(Options o)
         {
             int rays, rimRays;
@@ -253,6 +263,7 @@ namespace FootprintDxf
             o.OutPath = string.IsNullOrWhiteSpace(_out.Text) ? null : _out.Text.Trim();
         }
 
+        // Remember choices in AppData for the next ribbon run.
         void SaveLastRun(Options o)
         {
             try
@@ -278,6 +289,7 @@ namespace FootprintDxf
             catch { }
         }
 
+        // Read lastrun.txt, but do not overwrite flags already set on the command line.
         static void LoadLastRun(Options o)
         {
             try

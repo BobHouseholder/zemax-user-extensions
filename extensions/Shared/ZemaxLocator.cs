@@ -5,25 +5,15 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 
-// Locates the OpticStudio installation the ZOS-API assemblies should be loaded from.
-//
-// ZOSAPI_Initializer.Initialize() with no argument resolves through a registration
-// that is not necessarily the newest install. On a machine where an old release was
-// never uninstalled it happily hands back that one - observed resolving to
-// "c:\\program files\\zemax opticstudio 18.7" on a box running 2026 R1.00 - and every
-// connection afterwards fails in a way that reads like a licence problem rather than
-// a path problem: CreateNewApplication returns an application with
-// LicenseStatus.Unknown, and ConnectAsExtension against a modern OpticStudio returns
-// NotAuthorized. The extensions only ever saw the symptom.
-//
-// The no-argument call works from a host loaded out of the install directory itself
-// (ZOSAPI.dll sits beside the helper), which is why this never shows up in a REPL and
-// only bites the deployed .exe in {Zemax Data}\\ZOS-API\\Extensions.
-//
-// So pick the directory explicitly - newest ZOSAPI.dll wins, a ZEMAX_ROOT environment
-// variable overrides everything - and pass it to the Initialize(string) overload. The
-// bare call remains the last resort so nothing regresses on a layout this does not
-// anticipate.
+// ============================================================
+// ZemaxLocator - find which OpticStudio to talk to
+// ============================================================
+// Picks the right OpticStudio install so ZOS-API loads from a
+// real folder. The no-argument initializer can stick to an old
+// install that was never uninstalled; we prefer a usable newest
+// one. Shared by every extension in this repo.
+// ============================================================
+
 static class ZemaxLocator
 {
     public static string ResolvedDirectory { get; private set; }
@@ -46,6 +36,7 @@ static class ZemaxLocator
     // references back into this method and move the failure to ITS compilation, one
     // frame further out and unprotected again. Hence NoInlining below; it is
     // load-bearing, not decoration.
+        // Find OpticStudio and initialize the ZOS-API assemblies.
     public static bool TryInitialize(out string error)
     {
         error = null;
@@ -72,6 +63,7 @@ static class ZemaxLocator
     // returns a live-looking application with PrimarySystem == null when no
     // OpticStudio is listening, and every later call then fails in a way that
     // reads like a licence fault instead of a missing host.
+        // Connect to a running OpticStudio, or optionally start standalone.
     public static bool TryConnect(out ZOSAPI.IZOSAPI_Application app, out string error, bool standaloneFile)
     {
         app = null;
@@ -109,6 +101,7 @@ static class ZemaxLocator
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
+        // Initialize ZOS-API using the located install (throws-free wrapper).
     public static bool Initialize()
     {
         foreach (string dir in Candidates())

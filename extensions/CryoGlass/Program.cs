@@ -6,37 +6,18 @@ using System.Linq;
 
 namespace CryoGlass
 {
-    // CryoGlass — a ZOS-API User Extension.
-    //
-    // Brings the NASA GSFC CHARMS cryogenic refractive-index dataset
-    // (Leviton & Frey temperature-dependent Sellmeier fits, absolute n(λ,T)
-    // measured ~20-300 K) into OpticStudio. The ZOS-API cannot override index
-    // computation, so support means CATALOG GENERATION: at a working
-    // temperature T0 the CHARMS model IS a three-term Sellmeier, so the
-    // generated .AGF carries EXACT dispersion coefficients at T0 plus a
-    // locally-fitted Schott thermal model for the neighborhood of T0.
-    //
-    // The built-in self-test (evaluator vs the papers' published measured-
-    // index tables) runs before every generation and refuses on disagreement,
-    // so a coefficient transcription error can never silently reach a design.
-    // Wavelengths/temperatures outside a material's MEASURED range are
-    // refused by name - CHARMS stops at ~5.6 um; LWIR is out of coverage and
-    // extrapolation is out of bounds.
-    //
-    // Usage:
-    //   (no args)         extension mode: read the open system's environment
-    //                     temperature, generate a catalog there, attach it
-    //   -temp T           working temperature in KELVIN (standalone: no
-    //                     OpticStudio needed; generation is pure math)
-    //   -range T1:T2:N    N catalogs spanning T1..T2 K (for STOP sweeps)
-    //   -materials "a,b"  subset (default: all; names: SI, GE)
-    //   -fitbox K         half-width of the local dn/dT fit box (default 25)
-    //   -out <path>       output .AGF path (default CHARMS_<T>K.AGF beside the
-    //                     lens file, or in the current directory standalone)
-    //   -file <zmx>       standalone with a lens file: read its environment
-    //                     temperature, generate + report (never modifies it)
-    //   -selftest         run the published-table self-test and exit
-    //   -quiet            do not auto-open the report output
+    // ============================================================
+    // CryoGlass - what this program does (plain words)
+    // ============================================================
+    // Some glasses are used very cold (space / cryo). NASA CHARMS
+    // measured how their index changes with temperature. OpticStudio
+    // cannot plug those formulas in directly, so we bake a frozen
+    // glass catalog (.AGF) at your working temperature T0, and can
+    // write a matching thermal (.TSM) helper. Use this when you need
+    // cold-temperature indices in a sequential design.
+    // ============================================================
+
+    // Switches from the command line.
     class Options
     {
         public double TempK = double.NaN;
@@ -53,6 +34,7 @@ namespace CryoGlass
     {
         static Options Opts = new Options();
 
+        // Start here: build cold-glass catalog files.
         static void Main(string[] args)
         {
             ParseArgs(args);
@@ -84,6 +66,7 @@ namespace CryoGlass
             }
         }
 
+        // Read flags (-T0, -out, glass list, ...).
         static void ParseArgs(string[] args)
         {
             for (int i = 0; i < args.Length; i++)
@@ -103,6 +86,7 @@ namespace CryoGlass
             if (Opts.FitBox < 5) Opts.FitBox = 5;
         }
 
+        // Parse a number, or keep the old value if the text is bad.
         static double ParseDouble(string s, double keep)
         {
             double v;
@@ -113,6 +97,7 @@ namespace CryoGlass
 
         internal static string F(string fmt, params object[] a) => string.Format(CultureInfo.InvariantCulture, fmt, a);
 
+        // Run CHARMS self-checks before writing catalogs.
         static bool SelfTestAll()
         {
             Console.WriteLine("self-test: evaluator vs published measured-index tables");
@@ -122,6 +107,7 @@ namespace CryoGlass
             return ok;
         }
 
+        // Which glasses the user asked for (or all of them).
         static List<CharmsMaterial> SelectedMaterials()
         {
             if (string.IsNullOrEmpty(Opts.Materials)) return CharmsData.Materials.ToList();
@@ -136,6 +122,7 @@ namespace CryoGlass
             return outp;
         }
 
+        // Working temperature(s) T0 to freeze catalogs at.
         static List<double> Temperatures()
         {
             var temps = new List<double>();
@@ -155,6 +142,7 @@ namespace CryoGlass
             return temps;
         }
 
+        // Write .AGF (and helpers) for each material × temperature.
         static void Generate(string dir, List<CharmsMaterial> mats, List<double> temps)
         {
             foreach (var t0 in temps)
@@ -180,11 +168,13 @@ namespace CryoGlass
             }
         }
 
+        // No live OpticStudio — just write catalog files to disk.
         static void RunStandalone()
         {
             Generate(Directory.GetCurrentDirectory(), SelectedMaterials(), Temperatures());
         }
 
+        // Connected to OpticStudio — write catalogs into its glass folder if possible.
         static void RunConnected()
         {
             ZOSAPI.IZOSAPI_Application app = null;
@@ -238,6 +228,7 @@ namespace CryoGlass
             }
         }
 
+        // True when launched as a User Extension inside OpticStudio.
         static bool IsPlugin(ZOSAPI.IZOSAPI_Application app)
         {
             try { return app.Mode == ZOSAPI.ZOSAPI_Mode.Plugin; } catch { return false; }

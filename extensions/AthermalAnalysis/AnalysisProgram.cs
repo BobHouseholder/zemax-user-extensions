@@ -7,26 +7,19 @@ using ZOSAPI.Analysis;
 
 namespace AthermalScan
 {
-    // AthermalScan as a ZOS-API User Analysis: the same sweep, rendered into a native
-    // dockable OpticStudio window instead of files that have to be opened separately.
-    //
-    // It links AthermalScan's own Program.cs rather than reimplementing anything. The
-    // thermal model in there is validated to all 14 displayed figures against Make
-    // Thermal's pickup solves, and a second copy of that physics would be a second
-    // thing to keep in step - the exact defect this codebase has been bitten by.
-    // StartupObject in the .csproj selects this entry point over the extension's.
-    //
-    // THE MUTATION PROBLEM, and why this is safe: the sweep writes radii and
-    // thicknesses into the system and restores them afterwards. An analysis window
-    // re-runs whenever the system changes, so pointing that at the live prescription
-    // would be a loop - the analysis edits the system, the edit triggers a refresh,
-    // the refresh edits again. So it runs on IOpticalSystem.CopySystem(), a detached
-    // clone. The open prescription is never written to at all, the restore becomes
-    // belt-and-braces rather than load-bearing, and a mid-run failure cannot damage
-    // anything the user has open.
+    // ============================================================
+    // AthermalAnalysis - same scan, inside an OpticStudio window
+    // ============================================================
+    // User Analysis version of AthermalScan: same temperature sweep,
+    // shown in a dockable OpticStudio analysis window instead of only
+    // writing files. Reuses AthermalScan's Program logic (one physics
+    // copy). StartupObject in the .csproj picks this entry point.
+    // ============================================================
+
     static class AnalysisProgram
     {
         [STAThread]
+        // Analysis entry: register and run inside OpticStudio.
         static void Main(string[] args)
         {
             // FIRST statement, before anything that can fail. The previous version
@@ -81,6 +74,7 @@ namespace AthermalScan
         // process looks like it never started. NoInlining stops the optimiser undoing
         // the split.
         [MethodImpl(MethodImplOptions.NoInlining)]
+        // Hook the analysis into OpticStudio's analysis framework.
         static void Begin()
         {
             IZOSAPI_Application app;
@@ -135,6 +129,7 @@ namespace AthermalScan
         // user opens the analysis's settings, and expects it to put up its own window.
         // That is the same ScanSettingsDialog the ribbon extension uses - one dialog,
         // one set of defaults, one lastrun.txt.
+        // Show the analysis settings UI.
         static void ShowSettings(IZOSAPI_Application app)
         {
             var sys = app.PrimarySystem;
@@ -148,6 +143,7 @@ namespace AthermalScan
         }
 
         // ---- the analysis --------------------------------------------------------
+        // Run the temperature sweep and draw into the analysis window.
         static void RunAnalysis(IZOSAPI_Application app)
         {
             var data = app.UserAnalysisData;
@@ -265,6 +261,7 @@ namespace AthermalScan
             }
         }
 
+        // Push text/plot output into the analysis window.
         static void Emit(IUserAnalysisData data, string text)
         {
             try

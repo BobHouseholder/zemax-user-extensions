@@ -8,36 +8,45 @@ using ZOSAPI.Tools.Optimization;
 
 namespace GpimGhostReduce
 {
-    // GpimGhostReduce — ZOS-API User Extension.
-    //
-    // Sequential ghost-reduction loop from Ansys Optics
-    // "Stray Light Analysis with Ghost Focus Generator"
-    // https://optics.ansys.com/hc/en-us/articles/43071067483795-Stray-Light-Analysis-with-Ghost-Focus-Generator
-    //
-    // Never replaces the file's merit function. Full-scan every double-bounce
-    // pair, then append only the GPIM operands that matter, with weights scaled
-    // so ghost pull matches existing MF performance (balance = 1 → equal).
-    // OpticStudio GPIM = 1/|z_ghost − z_image|, so target is always 0.
-    //
-    // OpticStudio 2026 MFE rows are IMFERow / GetOperandCell(MeritColumn).
+    // ============================================================
+    // GpimGhostReduce - what this program does (plain words)
+    // ============================================================
+    // Lenses can make "ghost" images: light bounces the wrong way
+    // off two surfaces and still lands near the real image. That
+    // foggy spot hurts the picture. This tool finds the worst
+    // double-bounce pairs, then adds GPIM rows to the merit
+    // function (the report card for how good the lens is).
+    // GPIM is basically "how focused is this ghost?" — big means
+    // sharp and bad; we aim for 0 so the ghost is defocused.
+    // We never delete your old report-card rows; we only append.
+    // Weights are scaled so ghosts pull about as hard as the rest
+    // of the report card (balance = 1 means equal pull).
+    // Optionally we then run a short local optimize (DLS).
+    // Based on Ansys Optics "Stray Light Analysis with Ghost Focus
+    // Generator". Run from User Extensions or with -file / -save.
+    // ============================================================
 
+    // Which kind of ghost to hunt: near the image, near the pupil, or both.
     enum GhostKind { Image = 1, Pupil = 0, Both = -1 }
 
+    // Switches from the command line or the settings window.
     class Options
     {
         public GhostKind Kind = GhostKind.Image;
-        public int TopN = 0;            // 0 = auto from scan, else max pairs
-        public double Weight = 1.0;     // used only when -weight is explicit
-        public double Balance = 1.0;    // ghost vs existing MF
+        public int TopN = 0;            // 0 = pick automatically from the scan, else max pairs to keep
+        public double Weight = 1.0;     // used only when -weight is typed in by hand
+        public double Balance = 1.0;    // how hard ghosts pull vs the existing report card (1 = equal)
         public bool Optimize;
         public int Cycles = 10;
         public string FilePath;
         public string SavePath;
         public bool NoDialog;
+        // Flags the user typed so we do not overwrite them from lastrun.txt.
         public readonly HashSet<string> Explicit =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     }
 
+    // One double-bounce ghost pair we measured (surfaces, score, weight).
     class GhostHit
     {
         public int Mode;
@@ -56,14 +65,16 @@ namespace GpimGhostReduce
         static ZOSAPI.IZOSAPI_Application App;
         static CultureInfo CI = CultureInfo.InvariantCulture;
 
+        // Column numbers for GPIM cells — learned once from the row headers.
         static int ColSurf1 = -1, ColSurf2 = -1, ColMode = -1, ColWfb = -1, ColWsb = -1;
         static bool MapReady;
 
-        const int AutoCap = 8;
-        const double HotFrac = 0.10;
-        const double CoverFrac = 0.80;
-        const double EmptyMf = 1e-12;
+        const int AutoCap = 8;          // at most this many pairs when TopN is auto
+        const double HotFrac = 0.10;    // stop if the next pair is under 10% of the hottest
+        const double CoverFrac = 0.80;  // stop once we have covered 80% of total ghost score
+        const double EmptyMf = 1e-12;   // treat tinier report-card scores as "empty"
 
+        // Start here: find OpticStudio, then run the ghost scan.
         static void Main(string[] args)
         {
             ParseArgs(args);
@@ -83,6 +94,7 @@ namespace GpimGhostReduce
             }
         }
 
+        // Read the flags you typed (-top, -balance, -optimize, ...).
         static void ParseArgs(string[] args)
         {
             for (int i = 0; i < args.Length; i++)
@@ -114,6 +126,7 @@ namespace GpimGhostReduce
             }
         }
 
+        // Turn the word image / pupil / both into our GhostKind enum.
         static GhostKind ParseKind(string s)
         {
             if (s == null) throw new Exception("-mode needs image, pupil, or both");
@@ -126,6 +139,7 @@ namespace GpimGhostReduce
             }
         }
 
+        // Make sure numbers are not negative before we touch the lens.
         static void Validate(Options o)
         {
             if (o.TopN < 0) throw new Exception("-top must be >= 0");
@@ -134,6 +148,8 @@ namespace GpimGhostReduce
             if (o.Cycles < 0) throw new Exception("-cycles must be >= 0");
         }
 
+        // Connect to OpticStudio (open file or attach to the live app), show the
+        // settings window if needed, then do the real work in Apply.
         static void Run()
         {
             var connection = new ZOSAPI.ZOSAPI_Connection();
@@ -178,6 +194,8 @@ namespace GpimGhostReduce
             }
         }
 
+        // Main job: scan every double-bounce pair, pick the hot ones, append GPIM
+        // rows (never replace the old report card), optionally optimize, maybe save.
         static void Apply(ZOSAPI.IZOSAPI_Application app)
         {
             var sys = app.PrimarySystem;
@@ -301,6 +319,8 @@ namespace GpimGhostReduce
                 : "Done — " + added + " GPIM operand(s) appended; existing MF kept.";
         }
 
+        // Try every surface pair with a temporary GPIM row and rank by score (hottest first).
+        // Surf1=Surf2=-1 asks OpticStudio for its own worst-of-all reading (API quirk).
         static List<GhostHit> Rank(ZOSAPI.IOpticalSystem sys, IMeritFunctionEditor mfe, int img, int mode)
         {
             var hits = new List<GhostHit>();
@@ -337,6 +357,7 @@ namespace GpimGhostReduce
                 }
             }
 
+            // Surf1=Surf2=-1: ask OpticStudio for its own worst-of-all ghost reading.
             WriteGpim(op, -1, -1, mode);
             double all = ReadValue(op, mfe);
             int awfb, awsb;
@@ -350,6 +371,8 @@ namespace GpimGhostReduce
             return hits;
         }
 
+        // Keep only the hottest pairs: stop at the cap, or when cooler than HotFrac,
+        // or once we have CoverFrac of the total ghost score.
         static List<GhostHit> SelectNeeded(List<GhostHit> ranked)
         {
             var keep = new List<GhostHit>();
@@ -372,6 +395,8 @@ namespace GpimGhostReduce
             return keep;
         }
 
+        // Set how hard each new GPIM row pulls. With -weight we use that number;
+        // otherwise scale so ghost pull ≈ Balance × existing report-card pull.
         static void AssignWeights(List<GhostHit> chosen, double m0, int weighted)
         {
             if (Opts.Explicit.Contains("weight"))
@@ -391,6 +416,7 @@ namespace GpimGhostReduce
             }
 
             int n = chosen.Count;
+            // Merit function is roughly sum of (weight * value)^2; match Balance*m0 of pull.
             double budget = (Opts.Balance * m0) * (Opts.Balance * m0);
             Say(string.Format(CI,
                 "Scaling GPIM weights so ghost contribution equals {0:0.###}× existing MF² ({1:E6}).",
@@ -410,6 +436,8 @@ namespace GpimGhostReduce
             }
         }
 
+        // Append blank + GPIM rows at the end. Skip pairs already in the report card.
+        // Abort if somehow the old rows got shorter (we must never erase them).
         static int InsertOperands(IMeritFunctionEditor mfe, List<GhostHit> chosen, int baseline, List<int> addedRows)
         {
             int added = 0;
@@ -437,6 +465,7 @@ namespace GpimGhostReduce
                 op.ChangeType(MeritOperandType.GPIM);
                 LearnMap(op);
                 WriteGpim(op, h.Surf1, h.Surf2, h.Mode);
+                // GPIM = 1/|z_ghost - z_image|; target 0 means "please defocus this ghost."
                 op.Target = 0.0;
                 op.Weight = h.Weight;
                 addedRows.Add(row);
@@ -447,6 +476,7 @@ namespace GpimGhostReduce
             return added;
         }
 
+        // Look for an existing GPIM row with the same mode and surface pair.
         static int FindExisting(IMeritFunctionEditor mfe, int mode, int s1, int s2)
         {
             for (int i = 1; i <= mfe.NumberOfOperands; i++)
@@ -462,17 +492,19 @@ namespace GpimGhostReduce
             return 0;
         }
 
+        // Add a temporary weight-0 GPIM row we reuse while scanning, then delete.
         static int EnsureScratchGpim(IMeritFunctionEditor mfe)
         {
             int row = mfe.NumberOfOperands + 1;
             mfe.InsertNewOperandAt(row);
             var op = mfe.GetOperandAt(row);
             op.ChangeType(MeritOperandType.GPIM);
-            op.Weight = 0.0;
+            op.Weight = 0.0; // scratch row must not pull on the real report card
             op.Target = 0.0;
             return row;
         }
 
+        // Count report-card rows that actually pull (weight > 0, not blank).
         static int CountWeighted(IMeritFunctionEditor mfe)
         {
             int n = 0;
@@ -489,6 +521,7 @@ namespace GpimGhostReduce
             return n;
         }
 
+        // Temporarily zero our new GPIM weights so we can read the old design score alone.
         static double DesignOnlyMf(IMeritFunctionEditor mfe, List<int> gpimRows)
         {
             var saved = new List<double>();
@@ -496,7 +529,7 @@ namespace GpimGhostReduce
             {
                 var op = mfe.GetOperandAt(gpimRows[i]);
                 saved.Add(op.Weight);
-                op.Weight = 0;
+                op.Weight = 0; // zero only our new rows so we see the old design score
             }
             double v = SafeMf(mfe);
             for (int i = 0; i < gpimRows.Count; i++)
@@ -505,6 +538,7 @@ namespace GpimGhostReduce
             return v;
         }
 
+        // Grab one cell from a merit-function row (OpticStudio 2026 uses GetOperandCell).
         static IEditorCell GetCell(IMFERow op, int col)
         {
             if (col < 0) return null;
@@ -512,6 +546,7 @@ namespace GpimGhostReduce
             catch { return null; }
         }
 
+        // Figure out which columns are Surf1 / Surf2 / Mode / WFB / WSB from headers once.
         static void LearnMap(IMFERow op)
         {
             if (MapReady) return;
@@ -538,6 +573,7 @@ namespace GpimGhostReduce
                 ColSurf1, ColSurf2, ColMode, ColWfb, ColWsb));
         }
 
+        // Fill Surf1, Surf2, and Mode on a GPIM row.
         static void WriteGpim(IMFERow op, int s1, int s2, int mode)
         {
             SetInt(op, ColSurf1, s1);
@@ -545,6 +581,7 @@ namespace GpimGhostReduce
             SetInt(op, ColMode, mode);
         }
 
+        // Write an integer cell, or a double if that is what OpticStudio gave us.
         static void SetInt(IMFERow op, int col, int value)
         {
             var cell = GetCell(op, col);
@@ -553,6 +590,7 @@ namespace GpimGhostReduce
             else cell.DoubleValue = value;
         }
 
+        // Read an integer cell; return missing if the cell is gone or weird.
         static int ReadInt(IMFERow op, int col, int missing)
         {
             var cell = GetCell(op, col);
@@ -565,18 +603,21 @@ namespace GpimGhostReduce
             catch { return missing; }
         }
 
+        // Read WFB / WSB (worst field / worst wavelength OpticStudio reports).
         static void ReadWorst(IMFERow op, out int wfb, out int wsb)
         {
             wfb = ReadInt(op, ColWfb, 0);
             wsb = ReadInt(op, ColWsb, 0);
         }
 
+        // Recalculate the report card, then read this row's GPIM value.
         static double ReadValue(IMFERow op, IMeritFunctionEditor mfe)
         {
             try { mfe.CalculateMeritFunction(); } catch { }
             try { return op.Value; } catch { return double.NaN; }
         }
 
+        // True if this GPIM number looks real (not NaN, zero, or absurdly huge).
         static bool Usable(double v)
         {
             if (double.IsNaN(v) || double.IsInfinity(v)) return false;
@@ -585,12 +626,14 @@ namespace GpimGhostReduce
             return true;
         }
 
+        // True if the overall report-card score is big enough to trust for weighting.
         static bool UsableMf(double v)
         {
             if (double.IsNaN(v) || double.IsInfinity(v)) return false;
             return v > EmptyMf;
         }
 
+        // Put a short note in the comment cell of a blank/header row.
         static void SetComment(IMFERow op, string text)
         {
             var cell = GetCell(op, (int)MeritColumn.Comment);
@@ -612,6 +655,7 @@ namespace GpimGhostReduce
             }
         }
 
+        // Run a short local optimize (damped least squares) so the lens can defocus ghosts.
         static void RunLocalOpt(ZOSAPI.IOpticalSystem sys)
         {
             var tool = sys.Tools.OpenLocalOptimization();
@@ -636,12 +680,14 @@ namespace GpimGhostReduce
             }
         }
 
+        // Calculate the report-card score; return NaN if OpticStudio throws.
         static double SafeMf(IMeritFunctionEditor mfe)
         {
             try { return mfe.CalculateMeritFunction(); }
             catch { return double.NaN; }
         }
 
+        // User hit Cancel in OpticStudio — stop scanning cleanly.
         static bool Cancelled()
         {
             try
@@ -657,6 +703,7 @@ namespace GpimGhostReduce
             return false;
         }
 
+        // Print to the console and also show the line in OpticStudio's progress bar.
         static void Say(string s)
         {
             Console.WriteLine(s);

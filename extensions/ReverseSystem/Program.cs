@@ -6,50 +6,17 @@ using System.Linq;
 
 namespace ReverseSystem
 {
-    // Reverse System — a ZOS-API User Extension.
-    //
-    // Reverses the loaded sequential system in place, INCLUDING systems that
-    // contain coordinate breaks and virtual propagation (negative thickness),
-    // which OpticStudio's built-in Reverse Elements tool does not handle (see
-    // community.zemax.com threads "How to flip the whole optical system",
-    // "Reverse elements erases materials", "Reversing the path").
-    //
-    // Method: the reversed system is the mirror image of the original
-    // traversed backwards. Formally each row operation S becomes M·S⁻¹·M
-    // (M = reflection through the x-y plane), applied in reverse order:
-    //   * optical surfaces : radius and polynomial sag terms negate, conic kept
-    //   * gaps             : order reversed, signs kept (virtual propagation OK)
-    //   * materials        : ride with their (reversed) gaps
-    //   * coordinate break : decenter X/Y and tilt Z negate, tilt X/Y kept,
-    //                        order flag flips (inverse transform, mirrored)
-    // Conjugate states swap for a TRUE reversal: the reversed object space takes
-    // on the state of the original image space (collimated in if the original
-    // exit beam was collimated; a point at the original focus distance if it
-    // converged) and vice versa, including the afocal-image-space flag. Pass
-    // -keepconj to instead keep the object/image gaps in place ("flip the lens
-    // between its mounts"). All solves in the reversed range are frozen to their
-    // current values first, so pickups cannot corrupt the result.
-    //
-    // Usage:
-    //   (no args)      reverse the system open in OpticStudio (extension mode)
-    //   -save          save a copy as <file>_Reversed.<ext>
-    //   -keepconj      keep object/image gaps in place (no conjugate swap)
-    //   -refocus       run Quick Focus after reversing
-    //   -file <path>   standalone mode: load <path>, reverse, save _Reversed copy
-    //   -out <path>    standalone mode: explicit output path
-    //   -keepaperture  do NOT convert the system aperture to Float By Stop Size
-    //   -quiet         do not auto-open the report after a ribbon (GUI) run
-    //
-    // Aperture handling: EPD / F-number / NA aperture definitions describe the
-    // beam entering the ORIGINAL front of the system, so they no longer define
-    // the same physical bundle once the system is reversed. The one definition
-    // that is direction-independent is the physical stop itself, so the tool
-    // records the stop's clear semi-diameter before reversing, fixes that value
-    // on the relocated stop surface, and switches the system aperture to
-    // Float By Stop Size — the reversed trace is then bounded by the same iris.
-    //   -georeport     report global surface geometry (no changes) and exit
-    //   -rayaim        enable real ray aiming after reversing (recommended when
-    //                  the stop ends up buried behind tilted elements)
+    // ============================================================
+    // ReverseSystem - what this program does (plain words)
+    // ============================================================
+    // Flips the whole sequential lens end-for-end so light goes the
+    // other way. OpticStudio's built-in Reverse Elements tool chokes
+    // on coordinate breaks and negative thicknesses; we handle those.
+    // Surfaces, glasses, and tilts are remapped carefully. Can save a
+    // new file. Run from User Extensions or -file / -out.
+    // ============================================================
+
+    // Switches from the command line.
     class Options
     {
         public bool SaveCopy = false;
@@ -63,6 +30,7 @@ namespace ReverseSystem
         public string OutPath = null;
     }
 
+    // Saved copy of one surface row so we can rebuild it reversed.
     class RowSnap
     {
         public int OldIndex;
@@ -92,6 +60,7 @@ namespace ReverseSystem
 
         // NOTE: must be a method, not a static field — static ZOSAPI-typed state
         // would trigger assembly loading before ZOSAPI_NetHelper.Initialize().
+        // True if we know how to reverse this surface type.
         static bool IsSupported(ZOSAPI.Editors.LDE.SurfaceType t)
         {
             switch (t)
@@ -108,6 +77,7 @@ namespace ReverseSystem
             }
         }
 
+        // Start here: find OpticStudio, then reverse the system.
         static void Main(string[] args)
         {
             ParseArgs(args);
@@ -134,6 +104,7 @@ namespace ReverseSystem
             }
         }
 
+        // Read flags (-file, -out, ...).
         static void ParseArgs(string[] args)
         {
             for (int i = 0; i < args.Length; i++)
@@ -153,9 +124,12 @@ namespace ReverseSystem
             }
         }
 
+        // Print a status line and keep it for the report.
         static void Say(string line) { Console.WriteLine(line); Report.Add(line); }
+        // Invariant-culture string format helper.
         static string F(string fmt, params object[] a) => string.Format(CultureInfo.InvariantCulture, fmt, a);
 
+        // Connect and reverse the loaded sequential system.
         static void Run()
         {
             ZOSAPI.IZOSAPI_Application app = null;
@@ -213,6 +187,7 @@ namespace ReverseSystem
             }
         }
 
+        // Reverse the open system, check metrics, maybe save, write report.
         static void RunOnSystem(ZOSAPI.IZOSAPI_Application app)
         {
             var sys = app.PrimarySystem;
@@ -846,6 +821,7 @@ namespace ReverseSystem
         // Plugin-mode (ribbon) runs lose their console the moment the process
         // exits, so the written report is the only surviving output - open it
         // with its default app unless -quiet.
+        // Open the report / saved file after a ribbon run.
         static void OpenOutputs(ZOSAPI.IZOSAPI_Application app, params string[] paths)
         {
             if (Opts.Quiet) return;
@@ -858,6 +834,7 @@ namespace ReverseSystem
             }
         }
 
+        // Which parameter slots this surface type actually uses.
         static IEnumerable<int> ParamsUsed(ZOSAPI.Editors.LDE.SurfaceType t)
         {
             switch (t)
@@ -871,12 +848,14 @@ namespace ReverseSystem
             }
         }
 
+        // Get parameter cell p on a lens row.
         static ZOSAPI.Editors.IEditorCell GetPar(ZOSAPI.Editors.LDE.ILDERow row, int p)
         {
             var col = (ZOSAPI.Editors.LDE.SurfaceColumn)Enum.Parse(typeof(ZOSAPI.Editors.LDE.SurfaceColumn), "Par" + p);
             return row.GetSurfaceCell(col);
         }
 
+        // Snapshot aperture settings before we reverse.
         static void ReadAperture(ZOSAPI.Editors.LDE.ILDERow row, RowSnap s)
         {
             s.ApType = ZOSAPI.Editors.LDE.SurfaceApertureTypes.None;
@@ -923,6 +902,7 @@ namespace ReverseSystem
             catch { s.ApType = ZOSAPI.Editors.LDE.SurfaceApertureTypes.None; }
         }
 
+        // Restore aperture settings onto a reversed row.
         static void WriteAperture(ZOSAPI.Editors.LDE.ILDERow row, RowSnap src, List<string> errs, int k)
         {
             try
@@ -976,6 +956,7 @@ namespace ReverseSystem
             }
         }
 
+        // Grab key system metrics before/after for the report card.
         static Dictionary<string, double[]> Snapshot(ZOSAPI.IOpticalSystem sys)
         {
             var m = new Dictionary<string, double[]>();
@@ -1010,6 +991,7 @@ namespace ReverseSystem
             return m;
         }
 
+        // Print before vs after metrics so you can see if reverse looked sane.
         static void PrintMetrics(Dictionary<string, double[]> before, Dictionary<string, double[]> after,
             ZOSAPI.IOpticalSystem sys)
         {
@@ -1032,6 +1014,7 @@ namespace ReverseSystem
             Say(" reversing twice must reproduce the original values exactly.)");
         }
 
+        // Write a text report of what changed.
         static string WriteReportFile(ZOSAPI.IZOSAPI_Application app, ZOSAPI.IOpticalSystem sys, string savedTo)
         {
             try
