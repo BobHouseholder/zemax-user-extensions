@@ -15,8 +15,8 @@ Chosen public/practical method (OpticStudio-native):
 4. For each candidate: reload baseline â†’ delete element (absorb CT into previous
    thickness) â†’ remap/remove MFE operands that referenced deleted surfaces â†’
    ensure an **EFFL** operand targets baseline EFFL â†’ local DLS â†’ record `MF_i`.
-5. Keep the candidate with minimum `(MF_i - MF0)`.
-6. Save `<stem>_minus1.zmx`.
+5. Keep the candidate with minimum `(MF_i - MF0)` among **valid** trials only.
+6. Save `<stem>_minus1.zmx` only when at least one trial is ok (else fail-closed, exit 2).
 
 This matches the common design practice of deleting a weak element and
 reoptimizing (see e.g. opticalensdesign.com optimization notes). Differentiable
@@ -36,6 +36,12 @@ informed the optional power prefilter only â€” they are not required at run
 | `-report [path]` | Write text report |
 | `-quiet` | Do not auto-open report |
 | `-nodialog` | Accepted (no ribbon dialog in v1) |
+| `-allowbadmf` | Override baseline MF health gate (warns hard; default is refuse) |
+
+**Fail-closed:** if every LOO trial is rejected/failed, the tool does **not** write
+`*_minus1.zmx` and exits with code **2**. Broken trials (non-finite MF/delta,
+MF ≥ 1e8, or MF ≥ 1e6×MF0) are excluded from the winner. After seed + baseline MF0,
+a non-finite / ≤0 / ≥1e8 baseline also refuses (exit 2) unless `-allowbadmf`.
 
 ## Build
 
