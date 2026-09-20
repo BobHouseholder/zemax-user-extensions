@@ -46,9 +46,15 @@ python footprint_dxf.py -file C:\path\to\sample.zmx
 
 ### Flags
 
-`-file -out -rays -rimrays -surfaces -includeimage -fields -wave -rim -perfield -global -aperture -nopng -quiet -nodialog -selftest`
+`-file -out -rays -rimrays -surfaces -includeimage -fields -wave -rim -perfield -nopng -quiet -nodialog -selftest`
 
-(Match the C# tool where practical; see C# sibling README for full semantics.)
+## Supported / C#-only
+
+**Supported:** local-surface XY DXF + optional PNG; pupil grid (or `-rim` rim-only) hulls; `-perfield` layers; `-selftest` (geometry only).
+
+**C# only (FATAL if passed):** `-global` (`GetGlobalMatrix` assembly frame) and `-aperture` (`APER_SURF_n` overlays). This twin does **not** remap local XY and call it global. Ribbon dialog / last-run also stay in C#.
+
+See the C# sibling README for full DXF/R12 / dense-rim / `$INSUNITS` semantics.
 
 ## C# sibling
 

@@ -46,9 +46,15 @@ python mold_stress.py -file C:\path\to\sample.zmx
 
 ### Flags
 
-`-run [-file] [-outdir] [-filltime] [-packpressure] [-packtime] [-prepare] …; -writecatalog [-out]`
+`-run [-file] [-outdir] [-filltime] [-packpressure] [-packtime] [-prepare] [-quiet]`
+`-writecatalog -stub [-out]`
+`-h` / `-help`
 
-(Match the C# tool where practical; see C# sibling README for full semantics.)
+## Supported / C#-only
+
+**Supported:** `-run` connect + mouldable-element inventory + `moldstress_report.txt`; process flags recorded in the report only (`-filltime -packpressure -packtime -melttemp -moldtemp -materials`); `-prepare` lists convertible names (does **not** rewrite glasses); `-writecatalog -stub` writes a **placeholder** AGF (`*_STUB` / dummy n=1.5).
+
+**C# only (FATAL if passed):** `-writecatalog` without `-stub`; `-full` STAR pipeline; `-selftest`; `-gates`; `-refcase` / `-refcase2` / `-refquench` / `-refplate`; `-directindex`; `-allow-nonspherical`; `-nz` / `-nzexport`; `-gateconfig`. Production catalog / STAR import stay in C#.
 
 ## C# sibling
 
@@ -57,7 +63,7 @@ Ribbon / deployed User Extension (C#): see
 
 ## Python limits
 
-- **Implemented:** `-run` connect + mouldable-element scan + report; `-writecatalog` stub AGF; `-help`.
+- **Implemented:** `-run` connect + mouldable-element scan + report; `-writecatalog -stub` placeholder AGF; `-help`.
 - **Not ported:** STAR stress-field import, freeze-history / Lagrangian / depth-diag /
   ref-case suite, ribbon auto `-prepare` material conversion, full polymer catalog writer.
 - Use the C# User Extension for production STAR runs.

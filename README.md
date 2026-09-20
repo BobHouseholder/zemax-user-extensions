@@ -256,6 +256,8 @@ Standalone **pythonnet + ZOS-API** twins live under `python/<Name>/` (not packed
 into the Extensions zip). Shared DLL discovery / `CreateNewApplication` helpers:
 [`python/_zos_bootstrap.py`](python/_zos_bootstrap.py).
 
+**Capability:** twins are **not always full C# parity** — unsupported C#-only flags refuse with `FATAL` and a non-zero exit rather than silently ignoring them. C# remains the ribbon / full-feature path; see each `python/<Name>/README.md` “Supported / C#-only” section.
+
 | Folder | Entry script |
 |--------|----------------|
 | [`python/ElementLeaveOneOut/`](python/ElementLeaveOneOut/) | `element_leave_one_out.py` |

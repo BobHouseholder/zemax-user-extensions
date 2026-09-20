@@ -48,7 +48,13 @@ python gpim_ghost_reduce.py -file C:\path\to\sample.zmx
 
 `-file <zmx> -save <path> -top N -weight W -balance B -mode image|pupil|both -optimize -cycles K -nodialog -quiet`
 
-(Match the C# tool where practical; see C# sibling README for full semantics.)
+(`-top` default here is 5, not C# auto. `-top 0` is refused.)
+
+## Supported / C#-only
+
+**Supported:** sequential GPIM probe via WFB/WSB, append weighted rows, `-mode image|pupil|both`, `-top N>=1`, `-weight` / `-balance`, optional local DLS (`-optimize -cycles`), `-save`.
+
+**C# only:** settings dialog / `%APPDATA%` last-run; **`-top 0` auto** (80% cover / 10% floor / cap 8) — **FATAL** if passed; full Surf1>Surf2 pair scan; scratch-GPIM cleanup after the scan. Empty-MF “skip DLS” guard is C#-stronger.
 
 ## C# sibling
 

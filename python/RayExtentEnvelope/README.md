@@ -46,9 +46,13 @@ python ray_extent_envelope.py -file C:\path\to\sample.zmx
 
 ### Flags
 
-`-file -out -png -step -rimrays -surfaces -width -height -quiet -nodialog -clap/-noclap -vertexz -envelopeonly/-lenses`
+`-file -out -png -stl -rimrays -surfaces -width -height -quiet -nodialog -clap/-noclap/-rayextent -vertexz`
 
-(Match the C# tool where practical; see C# sibling README for full semantics.)
+## Supported / C#-only
+
+**Supported:** Y-Z PNG layout (default); optional **STL facet loft** via `-stl` or `-out *.stl`; `-rimrays -surfaces -clap/-noclap/-rayextent -vertexz -width -height`.
+
+**C# only (FATAL if passed):** `-step` and `-out *.step` / `*.stp` (real AP214 / OCC named `KEEP_OUT` + MEMA solids). Also `-envelopeonly` / `-nolenses` / `-lenses` (C# STEP product set). This twin will **not** write STL and call it STEP.
 
 ## C# sibling
 
@@ -57,6 +61,6 @@ Ribbon / deployed User Extension (C#): see
 
 ## STEP / OCC note
 
-The C# tool can post-process to AP214 STEP via OCC (`tools/stl_to_rhino_step.py`).
-The Python twin writes a **PNG** layout and, with `-step`, an **STL facet loft**
-stand-in. Prefer the C# path for Rhino-ready STEP solids.
+The C# tool post-processes to AP214 STEP via OCC (`tools/stl_to_rhino_step.py`).
+Use that path for Rhino-ready STEP solids. The Python twin’s mesh, if requested
+with `-stl`, is an explicit facet loft — not AP214.
