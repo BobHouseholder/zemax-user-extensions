@@ -18,6 +18,7 @@ namespace DistortionTarget
     {
         readonly TextBox _n, _pitch, _dot, _plate, _thick, _material, _coating, _film, _draw;
         readonly CheckBox _rig;
+        readonly CheckBox _force;
         readonly Label _derived;
         readonly Button _ok;
 
@@ -79,7 +80,7 @@ namespace DistortionTarget
             Controls.Add(gChrome);
             y += gChrome.Height + 8;
 
-            var gView = new GroupBox { Text = "Display", Left = PAD, Top = y, Width = GW, Height = 80 };
+            var gView = new GroupBox { Text = "Display", Left = PAD, Top = y, Width = GW, Height = 108 };
             _draw = Field(gView, 0, "Draw limit", o.DrawLimit.ToString(CI));
             _rig = new CheckBox
             {
@@ -90,6 +91,16 @@ namespace DistortionTarget
                 Checked = o.Rig
             };
             gView.Controls.Add(_rig);
+            _force = new CheckBox
+            {
+                // Dangerous: wipes the open OpticStudio system. Off by default.
+                Text = "Replace open system (-force) — ERASES the live lens",
+                Left = 14,
+                Top = 22 + 52,
+                Width = GW - 28,
+                Checked = o.ForceReplace
+            };
+            gView.Controls.Add(_force);
             Controls.Add(gView);
             y += gView.Height + 8;
 
@@ -205,6 +216,7 @@ namespace DistortionTarget
             _film.Text = d.Film.ToString(CI);
             _draw.Text = d.DrawLimit.ToString(CI);
             _rig.Checked = d.Rig;
+            _force.Checked = d.ForceReplace;
             Recompute();
         }
 
@@ -222,6 +234,7 @@ namespace DistortionTarget
             if (!string.IsNullOrWhiteSpace(_material.Text)) o.Material = _material.Text.Trim();
             if (!string.IsNullOrWhiteSpace(_coating.Text)) o.Coating = _coating.Text.Trim();
             o.Rig = _rig.Checked;
+            o.ForceReplace = _force.Checked;
         }
 
         void SaveLastRun(Options o)

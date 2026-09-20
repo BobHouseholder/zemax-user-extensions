@@ -54,3 +54,7 @@ python reverse_system.py -file C:\path\to\sample.zmx
 
 Ribbon / deployed User Extension (C#): see
 [`extensions/ReverseSystem/`](../../extensions/ReverseSystem/).
+
+## Safety defaults (PR1)
+
+Addresses [docs/CODE_REVIEW.md](../../docs/CODE_REVIEW.md) **H1**. Same flags as C#: require `-save`/`-out` (CopySystem + SaveAs) or `-inplace`/`-apply` (live reverse). Attach with no flags → FATAL.

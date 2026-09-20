@@ -33,6 +33,9 @@ namespace DistortionTarget
         public string SavePath = null;
         public string FilePath = null;
         public bool NoDialog = false;
+        // When true, an attached (ribbon) run may wipe PrimarySystem with New(false).
+        // Default is false so a mis-click cannot erase the open lens.
+        public bool ForceReplace = false;
 
         // Which settings the command line set explicitly. The dialog seeds itself
         // from the last run, and without this that saved file silently outranks a
@@ -91,8 +94,11 @@ namespace DistortionTarget
                     case "-film": Opts.Film = double.Parse(next(), ci); Opts.Explicit.Add("film"); break;
                     case "-drawlimit": Opts.DrawLimit = int.Parse(next(), ci); Opts.Explicit.Add("drawlimit"); break;
                     case "-rig": Opts.Rig = true; Opts.Explicit.Add("rig"); break;
-                    case "-save": Opts.SavePath = next(); break;
+                    case "-save":
+                    case "-out": Opts.SavePath = next(); break;
                     case "-file": Opts.FilePath = next(); break;
+                    case "-force":
+                    case "-replace": Opts.ForceReplace = true; break;
                     case "-nodialog": Opts.NoDialog = true; break;
                 }
             }
@@ -158,7 +164,7 @@ namespace DistortionTarget
                     if (!TargetSettingsDialog.Show(Opts)) return;
                 }
                 Validate(Opts);
-                Build(app);
+                Build(app, standalone);
             }
             finally
             {
@@ -203,12 +209,52 @@ namespace DistortionTarget
         }
 
         // Create the glass plate + chrome dots Array in the NSC editor.
-        static void Build(ZOSAPI.IZOSAPI_Application app)
+        // standalone: true when we started our own OpticStudio (CreateNewApplication).
+        static void Build(ZOSAPI.IZOSAPI_Application app, bool standalone)
         {
-            var sysm = app.PrimarySystem;
             var o = Opts;
 
-            sysm.New(false);
+            // ---------------------------------------------------------------
+            // Safety gate (plain words):
+            // New(false) throws away the open lens. On a ribbon attach that is
+            // the user's live file — so we never call New on PrimarySystem
+            // unless they typed -force / -replace.
+            // Preferred: CopySystem(), New on the COPY, build there, SaveAs
+            // when -save / -out / -file imply writing a file.
+            // Standalone CreateNewApplication may New a fresh PrimarySystem.
+            // ---------------------------------------------------------------
+            ZOSAPI.IOpticalSystem sysm;
+            bool builtOnCopy = false;
+            if (standalone)
+            {
+                // Our own empty app — New is safe here.
+                sysm = app.PrimarySystem;
+                sysm.New(false);
+            }
+            else if (o.ForceReplace)
+            {
+                // User explicitly asked to wipe the live primary. Dangerous.
+                Console.WriteLine("WARNING: -force/-replace: wiping the open PrimarySystem with New(false).");
+                sysm = app.PrimarySystem;
+                sysm.New(false);
+            }
+            else if (!string.IsNullOrEmpty(o.SavePath))
+            {
+                // Keep the open lens. Build on a copy, then SaveAs to the path.
+                sysm = app.PrimarySystem.CopySystem();
+                if (sysm == null)
+                    throw new Exception("CopySystem() returned null; cannot build safely without wiping the open lens. Pass -force to replace PrimarySystem.");
+                builtOnCopy = true;
+                sysm.New(false);
+            }
+            else
+            {
+                throw new Exception(
+                    "FATAL: DistortionTarget refuses to call New(false) on the attached PrimarySystem. "
+                    + "Pass -save <path> (or -out <path>) to build on a CopySystem and write a file, "
+                    + "or pass -force / -replace to wipe the open system on purpose.");
+            }
+
             sysm.MakeNonSequential();
             sysm.SystemData.Units.LensUnits = ZOSAPI.SystemData.ZemaxSystemUnits.Millimeters;
 
@@ -283,8 +329,19 @@ namespace DistortionTarget
                     throw new Exception("SaveAs reported no error but wrote no file at " + full);
                 Console.WriteLine("saved " + full);
             }
+            else if (builtOnCopy)
+            {
+                // Should not happen (gate requires SavePath for copy path), but be loud.
+                throw new Exception("internal error: built on CopySystem without -save/-out path");
+            }
 
             Console.WriteLine(Summary(o));
+
+            // If we built on a copy, close it so we do not leak a hidden system.
+            if (builtOnCopy)
+            {
+                try { sysm.Close(false); } catch { /* best-effort */ }
+            }
         }
 
         // Add source / camera / helpers around the target if requested.
