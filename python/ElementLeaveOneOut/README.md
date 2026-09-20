@@ -15,8 +15,12 @@ User Extension and is **not** bundled in `tools/pack.ps1` / the dist zip.
 - Python **3.12** with **pythonnet 3.1.0**
 - Valid OpticStudio license for the API
 
-Shared connect helpers also live in [`python/_zos_bootstrap.py`](../_zos_bootstrap.py)
-(this script still embeds its own copy for standalone use).
+Connect helpers come from [`python/_zos_bootstrap.py`](../_zos_bootstrap.py)
+(`discover_zos_root` / `bootstrap_zosapi` / `connect_zos`), same as the other
+Python twins.
+
+**Sequential systems only.** Non-sequential (NSC) files are refused immediately
+with a `FATAL` message and exit code **2** (mirrors the C# extension).
 
 ## Finding the OpticStudio DLLs
 
@@ -75,6 +79,8 @@ If the baseline merit function is already absurd (≥1e8) — common when a file
 `*_minus1.zmx` and exits with code **2**. Broken trials (non-finite MF/delta,
 MF ≥ 1e8, or MF ≥ 1e6×MF0) are excluded from the winner. After seed + baseline MF0,
 a non-finite / ≤0 / ≥1e8 baseline also refuses (exit 2) unless `-allowbadmf`.
+A trial whose merit function still names a deleted surface after remap is also
+rejected (CODE_REVIEW H3) so a stale constraint cannot win the ranking.
 
 ## Outputs
 
@@ -96,10 +102,11 @@ Faithful port of the C# extension:
    weights to 100).
 4. Enumerate removable elements (contiguous glass/mirror runs).
 5. Optional `-top N` weakest-\|power\| prefilter; `-rank power` skips LOO.
-6. Per candidate: reload → RemapAndCleanMf → DeleteElement (absorb CT into
-   previous thickness) → EFFL anchor → thickness constraints →
-   EnsureRefocusVariable → local DLS → ClampNegativeThicknesses → score
-   ΔMF = MF_after − MF0.
+6. Per candidate: reload → RemapAndCleanMf (Param1/Param2, plus header-identified
+   surface columns and known extras such as TRAC Param6; leftover deleted-surface
+   refs fail the trial) → DeleteElement (absorb CT into previous thickness) →
+   EFFL anchor → thickness constraints → EnsureRefocusVariable → local DLS →
+   ClampNegativeThicknesses → score ΔMF = MF_after − MF0.
 7. Winner = min ΔMF among valid trials only; save `*_minus1.zmx` only if ≥1 ok
    trial (else fail-closed, exit 2); write report/CSV (CSV always).
 

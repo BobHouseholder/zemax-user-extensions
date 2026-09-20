@@ -23,6 +23,9 @@
 #   -file <zmx>  -save <path>  -out <dir>  -cycles K  -top N
 #   -rank power|loo  -report [path]  -nodialog  -quiet
 #   -allowbadmf   (let a weird baseline MF keep going — normally we stop)
+#
+# Sequential systems only (NSC → FATAL, exit 2). After MF remap,
+# leftover deleted-surface refs fail that trial (fail-closed).
 # ============================================================
 
 from __future__ import annotations
@@ -35,6 +38,18 @@ import traceback
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_PYROOT = os.path.dirname(_HERE)
+if _PYROOT not in sys.path:
+    sys.path.insert(0, _PYROOT)
+
+from _zos_bootstrap import (  # noqa: E402
+    bootstrap_zosapi,
+    connect_zos,
+    discover_zos_root,
+    parse_flag_token,
+)
 
 # --- command-line switches (filled by parse_args) ---
 FILE_PATH: Optional[str] = None
@@ -59,8 +74,6 @@ GLASS_MAX_CT = 1000.0
 AIR_MIN_CT = 0.5
 AIR_MAX_CT = 1000.0
 THICKNESS_BOUND_WEIGHT = 100.0
-
-KNOWN_INSTALL = r"C:\Program Files\Ansys Zemax OpticStudio 2026 R1.01"
 
 
 @dataclass
@@ -100,93 +113,6 @@ def fmt(template: str, *args) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Finding OpticStudio DLLs
-# ---------------------------------------------------------------------------
-# OpticStudio installs a folder of .NET libraries. Python needs that folder
-# so pythonnet can load them. Look order:
-#   1) ZEMAX_ROOT environment variable
-#   2) Known 2026 R1.01 install path
-#   3) Any Ansys Zemax OpticStudio* under Program Files
-# ---------------------------------------------------------------------------
-
-def has_zos_dlls(folder: str) -> bool:
-    if not folder or not os.path.isdir(folder):
-        return False
-    need = ("ZOSAPI.dll", "ZOSAPI_Interfaces.dll", "ZOSAPI_NetHelper.dll")
-    return all(os.path.isfile(os.path.join(folder, n)) for n in need)
-
-
-def discover_zos_root() -> str:
-    env = (os.environ.get("ZEMAX_ROOT") or "").strip().strip('"')
-    if env and has_zos_dlls(env):
-        return env.rstrip("\\/")
-    if has_zos_dlls(KNOWN_INSTALL):
-        return KNOWN_INSTALL
-
-    candidates: List[str] = []
-    for pf_key in ("ProgramFiles", "ProgramFiles(x86)"):
-        pf = os.environ.get(pf_key) or (
-            r"C:\Program Files" if pf_key == "ProgramFiles" else r"C:\Program Files (x86)"
-        )
-        if not os.path.isdir(pf):
-            continue
-        try:
-            for name in os.listdir(pf):
-                low = name.lower().replace(" ", "")
-                if "opticstudio" in low or ("zemax" in low and "optic" in low):
-                    full = os.path.join(pf, name)
-                    if has_zos_dlls(full):
-                        candidates.append(full)
-        except OSError:
-            continue
-
-    if candidates:
-        candidates = sorted(set(candidates), reverse=True)
-        for c in candidates:
-            if "2026" in c:
-                return c
-        return candidates[0]
-
-    raise RuntimeError(
-        "could not find OpticStudio ZOS-API DLLs. Set ZEMAX_ROOT to the install "
-        "folder that contains ZOSAPI.dll (tried {!r}).".format(KNOWN_INSTALL)
-    )
-
-
-def bootstrap_zosapi(zos_root: str):
-    """
-    Load OpticStudio .NET libraries into this Python process.
-
-    Why: Python cannot talk to OpticStudio alone. pythonnet (clr) lets Python
-    call .NET. We load ZOSAPI_NetHelper, initialize that install folder, then
-    load ZOSAPI + interfaces.
-    """
-    import clr  # type: ignore
-
-    if zos_root not in sys.path:
-        sys.path.append(zos_root)
-    os.environ["PATH"] = zos_root + os.pathsep + os.environ.get("PATH", "")
-
-    clr.AddReference(os.path.join(zos_root, "ZOSAPI_NetHelper"))
-    import ZOSAPI_NetHelper  # type: ignore
-
-    ok = bool(ZOSAPI_NetHelper.ZOSAPI_Initializer.Initialize(zos_root))
-    if not ok:
-        ok = bool(ZOSAPI_NetHelper.ZOSAPI_Initializer.Initialize())
-    if not ok:
-        raise RuntimeError("ZOSAPI_NetHelper failed to Initialize at " + zos_root)
-
-    resolved = ZOSAPI_NetHelper.ZOSAPI_Initializer.GetZemaxDirectory()
-    say("Found OpticStudio at: " + str(resolved or zos_root))
-
-    clr.AddReference(os.path.join(zos_root, "ZOSAPI"))
-    clr.AddReference(os.path.join(zos_root, "ZOSAPI_Interfaces"))
-    import ZOSAPI  # type: ignore
-
-    return ZOSAPI
-
-
-# ---------------------------------------------------------------------------
 # Command line
 # ---------------------------------------------------------------------------
 
@@ -199,7 +125,7 @@ def parse_args(argv: List[str]) -> None:
     while i < len(argv):
         raw = argv[i]
         if raw.startswith("-") or raw.startswith("/"):
-            a = raw.lstrip("-/").lower()
+            a = parse_flag_token(raw)
 
             def next_tok() -> Optional[str]:
                 nonlocal i
@@ -281,9 +207,18 @@ def main(argv: Optional[List[str]] = None) -> int:
         print("FATAL: failed to locate an OpticStudio installation.  " + str(ex))
         return 1
 
+    session = None
     try:
-        ZOSAPI = bootstrap_zosapi(zos_root)
-        run(ZOSAPI)
+        ZOSAPI = bootstrap_zosapi(zos_root, say=say)
+        session = connect_zos(ZOSAPI, FILE_PATH, say=say, zos_root=zos_root)
+        TheSystem = session.TheSystem
+        if TheSystem.LDE.NumberOfSurfaces < 3:
+            raise RuntimeError("failed to load " + str(FILE_PATH or "(untitled)"))
+        try:
+            session.app.ShowChangesInUI = True
+        except Exception:
+            pass
+        run_on_system(ZOSAPI, session.app, TheSystem)
         return 0
     except ToolExit as tex:
         print("FATAL: " + str(tex))
@@ -292,63 +227,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         print("FATAL: " + str(ex))
         traceback.print_exc()
         return 1
-
-
-def run(ZOSAPI) -> None:
-    """
-    Start OpticStudio, open the lens file (or attach to the open one),
-    then run leave-one-out. Close OpticStudio if we started it ourselves.
-    """
-    standalone = bool(FILE_PATH)
-    app = None
-
-    if standalone:
-        connection = ZOSAPI.ZOSAPI_Connection()
-        app = connection.CreateNewApplication()
-        if app is None or app.PrimarySystem is None or not app.IsValidLicenseForAPI:
-            raise RuntimeError("could not start a standalone OpticStudio instance")
-        TheSystem = app.PrimarySystem
-        if (not TheSystem.LoadFile(FILE_PATH, False)) or TheSystem.LDE.NumberOfSurfaces < 3:
-            try:
-                app.CloseApplication()
-            except Exception:
-                pass
-            raise RuntimeError("failed to load " + str(FILE_PATH))
-        say("Loaded: " + str(FILE_PATH))
-    else:
-        connection = ZOSAPI.ZOSAPI_Connection()
-        app = None
-        try:
-            app = connection.ConnectToApplication()
-        except Exception:
-            app = None
-        if app is None:
-            try:
-                app = connection.ConnectAsExtension(0)
-            except Exception:
-                app = None
-        if app is None or app.PrimarySystem is None:
-            raise RuntimeError(
-                "could not connect to OpticStudio "
-                "(start Interactive Extension, or pass -file <zmx>)"
-            )
-        if not app.IsValidLicenseForAPI:
-            raise RuntimeError("license is not valid for ZOS-API: " + str(app.LicenseStatus))
-        TheSystem = app.PrimarySystem
-        say("Connected to OpticStudio (mode: " + str(app.Mode) + ")")
-
-    try:
-        try:
-            app.ShowChangesInUI = True
-        except Exception:
-            pass
-        run_on_system(ZOSAPI, app, TheSystem)
     finally:
-        if standalone and app is not None:
-            try:
-                app.CloseApplication()
-            except Exception:
-                pass
+        if session is not None:
+            session.close()
 
 
 def run_on_system(ZOSAPI, app, TheSystem) -> None:
@@ -360,6 +241,16 @@ def run_on_system(ZOSAPI, app, TheSystem) -> None:
     4) Try removing each; local DLS; record score change.
     5) Keep the friendliest removal and save that .zmx.
     """
+    # Sequential-only (CODE_REVIEW H2): element grouping, MFE remap, and
+    # SEQOptimizationWizard all assume Sequential. On NSC those APIs
+    # fail oddly or score the wrong thing — refuse early, same spirit
+    # as ReverseSystem / Footprint / EGF.
+    if TheSystem.Mode != ZOSAPI.SystemType.Sequential:
+        raise ToolExit(
+            2,
+            "ElementLeaveOneOut requires a Sequential system (NSC is not supported).",
+        )
+
     say("=== ElementLeaveOneOut ===")
     say("Method: leave-one-out deletion + local DLS reopt on existing MF")
 
@@ -765,12 +656,19 @@ def delete_element(TheSystem, front: int, rear: int) -> None:
 def remap_and_clean_mf(ZOSAPI, TheSystem, front: int, rear: int) -> None:
     """
     Report-card rows name surfaces by number. After deletes, renumber:
-      - drop rows that pointed at deleted surfaces
+      - drop rows that pointed at deleted surfaces (Param1/Param2)
       - subtract removed count from larger surface numbers
+      - do the same for other columns that are really surface slots
+        (cell Header says Surf / Surf1 / ..., or a known type like TRAC)
+      - if we cannot drop a deleted-surface row, or an identified
+        surface slot is still > rear after remap, refuse the trial
+        (fail-closed) so a half-remapped MF cannot silently win
     """
     mfe = TheSystem.MFE
     removed = rear - front + 1
     MeritColumn = ZOSAPI.Editors.MFE.MeritColumn
+
+    # Pass 1: Param1/Param2 as before (most thickness / range operands).
     for row in range(int(mfe.NumberOfOperands), 0, -1):
         try:
             op = mfe.GetOperandAt(row)
@@ -780,18 +678,30 @@ def remap_and_clean_mf(ZOSAPI, TheSystem, front: int, rear: int) -> None:
         p2 = read_surf_param(op, MeritColumn.Param2)
         hit = (front <= p1 <= rear) or (front <= p2 <= rear)
         if hit:
-            try:
-                mfe.RemoveOperandAt(row)
-            except Exception:
-                try:
-                    op.Weight = 0
-                except Exception:
-                    pass
+            drop_operand_or_fail(
+                mfe,
+                row,
+                op,
+                "could not drop MF operand that referenced deleted surfaces (row {})".format(
+                    row
+                ),
+            )
             continue
-        if p1 > rear:
-            write_surf_param(op, MeritColumn.Param1, p1 - removed)
-        if p2 > rear:
-            write_surf_param(op, MeritColumn.Param2, p2 - removed)
+        remap_surf_or_fail(op, MeritColumn.Param1, p1, rear, removed, row, "Param1")
+        remap_surf_or_fail(op, MeritColumn.Param2, p2, rear, removed, row, "Param2")
+
+    # Pass 2: extra surface-bearing columns (not Param1/Param2).
+    remap_extra_surface_columns(ZOSAPI, mfe, front, rear, removed)
+
+    # Pass 3: an identified surface slot still > rear means we missed a
+    # remap (or a write did not stick). Do not test [front, rear] here:
+    # a correctly decremented higher surface lands in that numeric range
+    # (old 5 → 3 when deleting 2–3).
+    leftover = find_unremapped_high_surf_refs(ZOSAPI, mfe, rear)
+    if leftover:
+        raise RuntimeError(
+            "MF still references deleted/high surfaces after remap (" + leftover + ")"
+        )
 
 
 def read_surf_param(op, col) -> int:
@@ -806,6 +716,184 @@ def write_surf_param(op, col, value: int) -> None:
         op.GetOperandCell(col).DoubleValue = float(value)
     except Exception:
         pass
+
+
+def drop_operand_or_fail(mfe, row: int, op, why: str) -> None:
+    # Drop a row that named a deleted surface. If OpticStudio will not
+    # remove it, refuse the trial — zeroing and continuing would leave
+    # stale numbers in the editor even if the weight is quiet.
+    try:
+        mfe.RemoveOperandAt(row)
+        return
+    except Exception:
+        pass
+    try:
+        op.Weight = 0
+    except Exception:
+        pass
+    raise RuntimeError(why)
+
+
+def remap_surf_or_fail(op, col, value: int, rear: int, removed: int, row: int, label: str) -> None:
+    # Decrement one surface slot and read it back. A silent write miss
+    # would keep the old house number, so we fail-closed instead.
+    if value <= rear:
+        return
+    want = value - removed
+    write_surf_param(op, col, want)
+    got = read_surf_param(op, col)
+    if got != want:
+        raise RuntimeError(
+            "could not remap MF {} {} -> {} (row {}, read back {})".format(
+                label, value, want, row, got
+            )
+        )
+
+
+def _mf_column_count(ZOSAPI) -> int:
+    # How many MFE columns we can walk (Weight … Contrib). Same span as C#.
+    return int(ZOSAPI.Editors.MFE.MeritColumn.Contrib)
+
+
+def _mf_col(ZOSAPI, index: int):
+    MeritColumn = ZOSAPI.Editors.MFE.MeritColumn
+    try:
+        return MeritColumn(index)
+    except Exception:
+        return index
+
+
+def is_surface_header(header: Optional[str]) -> bool:
+    # True when a cell header is a surface index (Surf, Surf1, StartSurf, ...)
+    # and not a type/count label (SurfType, NSurf).
+    if not header:
+        return False
+    u = header.strip().upper().replace(" ", "").replace("_", "")
+    if not u:
+        return False
+    if "TYPE" in u or "FORM" in u:
+        return False
+    if u in ("NSURF", "NUMSURF", "NSURFACES"):
+        return False
+    if u in ("SURF", "SUR", "SURFACE"):
+        return True
+    if u.startswith("SURF") and len(u) <= 6:
+        return True
+    if u.startswith("SUR") and len(u) <= 5 and u[-1].isdigit():
+        return True
+    if u.endswith("SURF") or u.endswith("SURFACE"):
+        return True
+    return False
+
+
+def read_cell_header(op, col) -> str:
+    try:
+        cell = op.GetOperandCell(col)
+        if cell is None:
+            return ""
+        return str(getattr(cell, "Header", "") or "")
+    except Exception:
+        return ""
+
+
+def add_type_aware_extra_surf_columns(ZOSAPI, type_name: str, into: list) -> None:
+    # Extra surface slots we know about when headers are blank.
+    # Only types we are sure of — guessing would remap Wave/Field and lie.
+    if not type_name:
+        return
+    u = type_name.upper()
+    # TRAC data order is Hx, Hy, Px, Py, Wave, Surf — Surf is Param6.
+    if "TRAC" in u:
+        col = ZOSAPI.Editors.MFE.MeritColumn.Param6
+        if col not in into:
+            into.append(col)
+
+
+def collect_extra_surf_columns(ZOSAPI, op) -> list:
+    # Columns other than Param1/Param2 that hold surface numbers on this row.
+    extra = []
+    p1 = ZOSAPI.Editors.MFE.MeritColumn.Param1
+    p2 = ZOSAPI.Editors.MFE.MeritColumn.Param2
+    n_cols = _mf_column_count(ZOSAPI)
+    for c in range(1, n_cols + 1):
+        col = _mf_col(ZOSAPI, c)
+        if col in (p1, p2):
+            continue
+        if is_surface_header(read_cell_header(op, col)):
+            if col not in extra:
+                extra.append(col)
+    type_name = ""
+    try:
+        type_name = str(op.Type)
+    except Exception:
+        pass
+    add_type_aware_extra_surf_columns(ZOSAPI, type_name, extra)
+    return extra
+
+
+def remap_extra_surface_columns(ZOSAPI, mfe, front: int, rear: int, removed: int) -> None:
+    # Same remove-or-decrement rules as Param1/Param2, for extra surface columns.
+    for row in range(int(mfe.NumberOfOperands), 0, -1):
+        try:
+            op = mfe.GetOperandAt(row)
+        except Exception:
+            continue
+        extra = collect_extra_surf_columns(ZOSAPI, op)
+        if not extra:
+            continue
+        hit = False
+        for col in extra:
+            v = read_surf_param(op, col)
+            if front <= v <= rear:
+                hit = True
+                break
+        if hit:
+            drop_operand_or_fail(
+                mfe,
+                row,
+                op,
+                "could not drop MF operand that referenced deleted surfaces (row {})".format(
+                    row
+                ),
+            )
+            continue
+        for col in extra:
+            v = read_surf_param(op, col)
+            remap_surf_or_fail(op, col, v, rear, removed, row, str(col))
+
+
+def find_unremapped_high_surf_refs(ZOSAPI, mfe, rear: int) -> str:
+    # After remap: any identified surface slot still > rear was not
+    # decremented. That is a stale high house number, not a remapped one.
+    bits: List[str] = []
+    MeritColumn = ZOSAPI.Editors.MFE.MeritColumn
+    p1 = MeritColumn.Param1
+    p2 = MeritColumn.Param2
+    for row in range(1, int(mfe.NumberOfOperands) + 1):
+        if len(bits) >= 8:
+            break
+        try:
+            op = mfe.GetOperandAt(row)
+        except Exception:
+            continue
+        type_name = "?"
+        try:
+            type_name = str(op.Type)
+        except Exception:
+            pass
+        v1 = read_surf_param(op, p1)
+        v2 = read_surf_param(op, p2)
+        if v1 > rear:
+            bits.append("row {} {} Param1={}".format(row, type_name, v1))
+        if v2 > rear:
+            bits.append("row {} {} Param2={}".format(row, type_name, v2))
+        for col in collect_extra_surf_columns(ZOSAPI, op):
+            if len(bits) >= 8:
+                break
+            v = read_surf_param(op, col)
+            if v > rear:
+                bits.append("row {} {} {}={}".format(row, type_name, col, v))
+    return "; ".join(bits)
 
 
 def has_thickness_boundary_operands(mfe) -> bool:
