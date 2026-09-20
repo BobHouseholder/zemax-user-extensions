@@ -44,3 +44,14 @@ standalone, `-nodialog` to skip the window.
 Options: `-mode image|pupil|both`, `-top N` (0 = auto), `-balance B` (default 1),
 `-weight W` (raw override), `-optimize`, `-cycles K` (0 = automatic DLS),
 `-nodialog`, `-file <zmx>`, `-save <zmx>`.
+
+## Python (ZOS-API)
+
+A standalone **Python** port (pythonnet + ZOS-API, same CLI flags where practical)
+lives outside this Extensions folder so `tools/pack.ps1` never ships it:
+
+- Script + run notes: [`python/GpimGhostReduce/`](../../python/GpimGhostReduce/)
+- Shared connect helpers: [`python/_zos_bootstrap.py`](../../python/_zos_bootstrap.py)
+
+Prefer that tree for scripting / headless smoke. This folder remains the C#
+User Extension (ribbon deploy).

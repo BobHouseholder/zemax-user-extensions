@@ -237,6 +237,34 @@ coordinate-break systems and 10 reflective ones.
 Options: `-save`, `-keepconj`, `-refocus`, `-rayaim`, `-keepaperture`,
 `-georeport`, `-file <path>`, `-out <path>`, `-quiet`.
 
+
+
+## Python (ZOS-API)
+
+Standalone **pythonnet + ZOS-API** twins live under `python/<Name>/` (not packed
+into the Extensions zip). Shared DLL discovery / `CreateNewApplication` helpers:
+[`python/_zos_bootstrap.py`](python/_zos_bootstrap.py).
+
+| Folder | Entry script |
+|--------|----------------|
+| [`python/ElementLeaveOneOut/`](python/ElementLeaveOneOut/) | `element_leave_one_out.py` |
+| [`python/DetectorPowerSum/`](python/DetectorPowerSum/) | `detector_power_sum.py` |
+| [`python/DetectorDump/`](python/DetectorDump/) | `detector_dump.py` |
+| [`python/CryoGlass/`](python/CryoGlass/) | `cryo_glass.py` |
+| [`python/LayoutRender/`](python/LayoutRender/) | `layout_render.py` |
+| [`python/GpimGhostReduce/`](python/GpimGhostReduce/) | `gpim_ghost_reduce.py` |
+| [`python/EquivalentGlassFinder/`](python/EquivalentGlassFinder/) | `equivalent_glass_finder.py` |
+| [`python/FootprintDxf/`](python/FootprintDxf/) | `footprint_dxf.py` |
+| [`python/RayExtentEnvelope/`](python/RayExtentEnvelope/) | `ray_extent_envelope.py` |
+| [`python/ReverseSystem/`](python/ReverseSystem/) | `reverse_system.py` |
+| [`python/DistortionTarget/`](python/DistortionTarget/) | `distortion_target.py` |
+| [`python/AthermalScan/`](python/AthermalScan/) | `athermal_scan.py` |
+| [`python/AthermalAnalysis/`](python/AthermalAnalysis/) | `athermal_analysis.py` (thin wrapper → AthermalScan) |
+| [`python/MoldStress/`](python/MoldStress/) | `mold_stress.py` (`-run` / `-writecatalog` surface) |
+
+Set `ZEMAX_ROOT` to the OpticStudio install folder that contains `ZOSAPI.dll`.
+Prefer `-file <zmx>` standalone runs. Parent smokes on Windows with a licensed machine.
+
 ## Building
 
 Needs the .NET SDK and an OpticStudio install. `ZemaxPaths.props` sets

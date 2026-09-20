@@ -15,6 +15,9 @@ User Extension and is **not** bundled in `tools/pack.ps1` / the dist zip.
 - Python **3.12** with **pythonnet 3.1.0**
 - Valid OpticStudio license for the API
 
+Shared connect helpers also live in [`python/_zos_bootstrap.py`](../_zos_bootstrap.py)
+(this script still embeds its own copy for standalone use).
+
 ## Finding the OpticStudio DLLs
 
 The script looks for `ZOSAPI.dll`, `ZOSAPI_Interfaces.dll`, and
