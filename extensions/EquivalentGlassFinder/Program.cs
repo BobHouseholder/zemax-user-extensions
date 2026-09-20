@@ -12,7 +12,7 @@ namespace EquivalentGlassFinder
     // You designed a lens with fancy glasses. Now you want cheaper /
     // stock glasses that behave almost the same. This tool looks up
     // each glass's index (n) and dispersion (Abbe / Vd), finds the
-    // closest matches in a chosen catalog, optionally swaps them in,
+    // closest matches in a chosen catalog, reports matches by default; swaps them in only with -apply,
     // and writes a report. The merit function (report card) can be
     // checked before/after. Community ask: "Equivalent Glass Feature
     // Proposal". Run from User Extensions or -file / -catalog.
@@ -23,7 +23,9 @@ namespace EquivalentGlassFinder
     {
         public string TargetCatalog = null;
         public bool IncludeObsolete = false;
-        public bool ReportOnly = false;
+        // Default true = report only. Ribbon with no flags never swaps glass.
+        // Pass -apply to write best matches onto the live LDE.
+        public bool ReportOnly = true;
         public bool ReOptimize = false;
         public bool SaveCopy = false;
         public int TopN = 3;
@@ -92,7 +94,8 @@ namespace EquivalentGlassFinder
                 {
                     case "catalog": if (i + 1 < args.Length) Opts.TargetCatalog = args[++i]; break;
                     case "includeobsolete": Opts.IncludeObsolete = true; break;
-                    case "report": Opts.ReportOnly = true; break;
+                    case "report": Opts.ReportOnly = true; break; // explicit alias for default
+                    case "apply": Opts.ReportOnly = false; break; // required to mutate materials
                     case "reopt": Opts.ReOptimize = true; break;
                     case "save": Opts.SaveCopy = true; break;
                     case "top": if (i + 1 < args.Length) Opts.TopN = ParseInt(args[++i], Opts.TopN); break;

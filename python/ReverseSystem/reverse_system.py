@@ -7,7 +7,7 @@
 # better than OpticStudio's built-in Reverse Elements.
 # Twin of the C# User Extension.
 #
-# Flags: -file -out -save -keepconj -refocus -keepaperture
+# Flags: -file -out -save -inplace -apply -keepconj -refocus -keepaperture
 #        -georeport -rayaim -quiet -nodialog
 # ============================================================
 
@@ -39,6 +39,7 @@ KEEP_APERTURE = False
 GEO_REPORT = False
 RAY_AIM = False
 QUIET = False
+IN_PLACE = False  # reverse live primary only with -inplace/-apply
 FILE_PATH: Optional[str] = None
 OUT_PATH: Optional[str] = None
 REPORT: List[str] = []
@@ -71,7 +72,7 @@ def fmt(t, *a):
 
 def parse_args(argv):
     global SAVE_COPY, KEEP_CONJUGATES, REFOCUS, KEEP_APERTURE, GEO_REPORT
-    global RAY_AIM, QUIET, FILE_PATH, OUT_PATH
+    global RAY_AIM, QUIET, IN_PLACE, FILE_PATH, OUT_PATH
     i = 0
     while i < len(argv):
         raw = argv[i]
@@ -85,6 +86,8 @@ def parse_args(argv):
                 return None
             if a == "save":
                 SAVE_COPY = True
+            elif a in ("inplace", "apply"):
+                IN_PLACE = True  # reverse live primary (dangerous)
             elif a == "keepconj":
                 KEEP_CONJUGATES = True
             elif a == "refocus":
@@ -186,6 +189,33 @@ def run_on_system(session) -> None:
         return
 
     lde = sys_.LDE
+
+    # ---------------------------------------------------------------
+    # Safety gate (plain words) — mirror of C#:
+    # Do not reverse the attached PrimarySystem in place by default.
+    # Require -inplace/-apply, or -save/-out to reverse a CopySystem
+    # and write a file. -georeport is read-only and skips this gate.
+    # ---------------------------------------------------------------
+    standalone = bool(FILE_PATH)
+    want_file = SAVE_COPY or bool(OUT_PATH)
+    built_on_copy = False
+    if not GEO_REPORT:
+        if not standalone and not IN_PLACE and not want_file:
+            say("FATAL: ReverseSystem refuses to reverse the attached PrimarySystem in place.")
+            say("  Pass -save and/or -out <path> to reverse a CopySystem and write a file,")
+            say("  or pass -inplace / -apply to reverse the live open lens on purpose (dangerous).")
+            raise RuntimeError("refusing attach+mutate without -inplace/-apply or -save/-out")
+        if not IN_PLACE and want_file and not standalone:
+            copy = sys_.CopySystem()
+            if copy is None:
+                raise RuntimeError("CopySystem() returned null; pass -inplace to mutate PrimarySystem.")
+            sys_ = copy
+            session.TheSystem = copy
+            built_on_copy = True
+            say("Working on CopySystem() clone (open PrimarySystem left unchanged).")
+        elif IN_PLACE and not standalone:
+            say("WARNING: -inplace/-apply: reversing the live PrimarySystem in place.")
+
     img_idx = lde.NumberOfSurfaces - 1
     say("")
     say("=== Reverse System ===")
@@ -555,7 +585,7 @@ def run_on_system(session) -> None:
         say("WARNING: " + e)
 
     saved_to = ""
-    if SAVE_COPY or OUT_PATH:
+    if SAVE_COPY or OUT_PATH or built_on_copy:
         path = OUT_PATH
         if not path:
             src = sys_.SystemFile or "system.zmx"
@@ -590,6 +620,12 @@ def run_on_system(session) -> None:
         app.ProgressPercent = 100
     except Exception:
         pass
+
+    if built_on_copy:
+        try:
+            sys_.Close(False)
+        except Exception:
+            pass
 
 
 def main(argv=None) -> int:

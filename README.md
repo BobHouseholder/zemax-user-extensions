@@ -106,6 +106,11 @@ count cells are Integer (`DoubleValue` throws); `Draw Limit` caps *drawn*
 replicas only (default here 2000 of 39601). Radiometry needs **ray splitting on**.
 
 Options: `-n`, `-pitch`, `-dot`, `-plate`, `-thick`, `-material`, `-coating`,
+`-film`, `-drawlimit`, `-rig`, `-save`/`-out`, `-file`, `-force`/`-replace`, `-nodialog`.
+
+**Safety (PR1 / C1):** never `New(false)` on attached PrimarySystem without `-force`/`-replace`;
+prefer `-save`/`-out` via CopySystem. See tool README.
+
 `-film`, `-drawlimit`, `-rig`, `-save`, `-file`, `-nodialog`.
 
 ### ElementLeaveOneOut
@@ -132,8 +137,10 @@ closest catalog glass by weighted (nd, vd, dPgF), ranked candidates, optional
 swap, before/after EFFL / MF / RMS. Default is obsolete glasses in catalogs in
 use; `-catalog NAME` converts the whole design to that vendor.
 
-Options: `-catalog NAME`, `-includeObsolete`, `-report`, `-reopt`, `-save`,
+Options: `-catalog NAME`, `-includeObsolete`, `-report` (default), `-apply`, `-reopt`, `-save`,
 `-top N`, `-wnd/-wvd/-wpgf`, `-quiet`.
+
+**Safety (PR1 / C2):** default report-only; ribbon with no flags does not swap glass. Pass `-apply` to mutate.
 
 ### FootprintDxf
 
@@ -234,8 +241,10 @@ MCE operands are **refused**, not silently corrupted.
 Validated by exact double-reversal identity (LDE + RMS) on 8 refractive
 coordinate-break systems and 10 reflective ones.
 
-Options: `-save`, `-keepconj`, `-refocus`, `-rayaim`, `-keepaperture`,
-`-georeport`, `-file <path>`, `-out <path>`, `-quiet`.
+Options: `-save`, `-out <path>`, `-inplace`/`-apply`, `-keepconj`, `-refocus`, `-rayaim`,
+`-keepaperture`, `-georeport`, `-file <path>`, `-quiet`.
+
+**Safety (PR1 / H1):** default refuses attach+in-place reverse; use `-save`/`-out` (CopySystem) or `-inplace`/`-apply`.
 
 
 
