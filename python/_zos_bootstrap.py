@@ -4,7 +4,8 @@
 # ============================================================
 # Finds OpticStudio DLLs and starts (or attaches to) a ZOS-API
 # session. Extracted from ElementLeaveOneOut so every twin can
-# import the same connect helpers without copy-paste drift.
+# import the same connect helpers without copy-paste drift
+# (ELOO now imports this module too).
 #
 # Prefer CreateNewApplication + -file for standalone / headless
 # runs. Interactive Extension attach is the fallback when no

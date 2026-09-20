@@ -118,6 +118,8 @@ prefer `-save`/`-out` via CopySystem. See tool README.
 Leave-one-out ranking of removable sequential **lenses and mirrors**: delete one
 element, adapt the existing merit function, run a local DLS, and score by
 `ΔMF = MF_after − MF0`. Winner is the smallest ΔMF; writes `<stem>_minus1.zmx`.
+NSC is refused (`FATAL`, exit 2). After remap, leftover deleted-surface MF refs
+fail that trial instead of silently ranking a stale constraint.
 Empty/unweighted MFE is seeded with OpticStudio's default RMS Spot wizard; missing
 thickness bounds get MNCT/MXCT; an image-gap thickness variable provides refocus.
 Optional `-top N` prefilters to the N weakest-|power| elements. System copies are

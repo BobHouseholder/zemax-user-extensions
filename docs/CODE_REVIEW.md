@@ -3,6 +3,7 @@
 **Repo:** BobHouseholder/zemax-user-extensions  
 **HEAD reviewed:** `32bd838` (`Stop tracking python __pycache__ bytecode artifacts.`) on `main`  
 **Date:** 2026-09-19 (America/Bogota)  
+**Follow-up:** H2 + H3 (ElementLeaveOneOut Sequential gate + MF remap fail-closed) addressed in PR2 on current `main` (after PR1 safety defaults). M1 (ELOO imports `_zos_bootstrap`) done in the same PR.
 **Scope:** entire tree under `extensions/*`, `python/*`, `tools/pack.ps1`, `ZemaxPaths.props`, `.gitignore`, READMEs — read from source, not invented.  
 **Not reviewed line-by-line:** MoldStress physics (~15k LOC C# under `extensions/MoldStress/`, plus `validation/mtf-triplet/`); sampled Session/Runner/Program, Polymers, CatalogWriter, and the intentional thin Python twin.
 
@@ -45,12 +46,14 @@ The highest risks are **destructive in-session mutations with weak defaults**: D
 - **What:** Uses LDE/MFE/SEQOptimizationWizard with no `sys.Mode != Sequential` check (unlike ReverseSystem, Footprint, EGF, Gpim, LayoutRender, Athermal*).
 - **Why:** On an NSC system this will fail oddly or corrupt assumptions (surface enumeration, thickness bounds, wizard). Fail-open into wrong API surface.
 - **Suggested fix:** Refuse early with a clear message if not Sequential (both C# and Python).
+- **Addressed (PR2):** Early refuse if `Mode != Sequential`; `FATAL` + exit 2 in C# and Python.
 
 ### H3 — ElementLeaveOneOut MF remapping only touches Param1/Param2
 - **Location:** `RemapAndCleanMf` in C# (~625–651) and Python twin.
 - **What:** After deletion, only MeritColumn Param1/Param2 surface integers are remapped or zeroed; other surface-bearing columns / operand types are ignored.
 - **Why:** Many MF operands encode surfaces outside P1/P2 (or use Hx/Hy/Wave slots differently). Stale surface indices → wrong constraints → silent bad LOO ranking / bad saved `*_minus1.zmx`.
 - **Suggested fix:** Type-aware remap table per `MeritOperandType`, or fail-closed when any remaining operand still references deleted surfaces after remap; expand tests on MF with REAY/TRAC/CONF/etc.
+- **Addressed (PR2):** Keep Param1/Param2 remap; also remap header-identified surface columns and known extras (TRAC Param6); leftover deleted-surface refs fail the trial. Existing MF health gates unchanged.
 
 ### H4 — Python FootprintDxf accepts `-global` / `-aperture` but never applies them
 - **Location:** `python/FootprintDxf/footprint_dxf.py` — flags set GLOBAL/APERTURE (~98–101); `run()` never reads them; no `GetGlobalMatrix` path (C# has `GlobalApertureHelpers` / `FootprintExport`).
@@ -79,6 +82,7 @@ The highest risks are **destructive in-session mutations with weak defaults**: D
 - **What:** Gold-standard twin does **not** `import _zos_bootstrap`; other twins do. Bootstrap comment in `_zos_bootstrap.py` says it was extracted from ELOO — ELOO was not updated.
 - **Why:** Drift risk (already: locator heuristics diverge from C# `ZemaxLocator` version sorting).
 - **Suggested fix:** Delete duplicated helpers; call `connect_zos` / `bootstrap_zosapi` from `_zos_bootstrap`.
+- **Addressed (PR2):** ELOO now imports `_zos_bootstrap` (`discover_zos_root` / `bootstrap_zosapi` / `connect_zos`) like the other twins.
 
 ### M2 — C# `ZemaxLocator.HasZosApi` only checks `ZOSAPI.dll`
 - **Location:** `extensions/Shared/ZemaxLocator.cs` (~166–169) vs Python `has_zos_dlls` requiring NetHelper + Interfaces.
@@ -185,10 +189,10 @@ The highest risks are **destructive in-session mutations with weak defaults**: D
 
 ## Suggested follow-up PR order
 
-1. **Safety defaults:** DistortionTarget never `New` on live primary; EGF default `-report`; ReverseSystem CopySystem or forced SaveAs — unblock Critical/High attach hazards.
-2. **ElementLeaveOneOut gates:** Sequential mode check + broader MF remap / fail-closed on unmapped surface refs (C#+Python together).
+1. **Safety defaults:** DistortionTarget never `New` on live primary; EGF default `-report`; ReverseSystem CopySystem or forced SaveAs — unblock Critical/High attach hazards. **(PR1 merged)**
+2. **ElementLeaveOneOut gates:** Sequential mode check + broader MF remap / fail-closed on unmapped surface refs (C#+Python together). **(PR2)**
 3. **Python twin honesty:** Footprint refuse or implement `-global`/`-aperture`; RayExtent refuse real STEP; capability matrices in READMEs.
-4. **Bootstrap cleanup:** ELOO imports `_zos_bootstrap`; align `HasZosApi` with three-DLL check.
+4. **Bootstrap cleanup:** ELOO imports `_zos_bootstrap` **(done in PR2)**; align `HasZosApi` with three-DLL check.
 5. **Terminate + restore:** ReverseSystem / DistortionTarget / MoldStress poll Cancel; snapshot restore on abort.
 6. **Doc hygiene:** scrub `C:\Users\bob` / BobStudio / client wording from python READMEs and smoke bat.
 7. **MoldStress (separate epic):** only after safety/parity PRs — deepen Python or formally mark C#-only STAR in root README capability table.
