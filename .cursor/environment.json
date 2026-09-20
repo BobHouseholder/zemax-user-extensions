@@ -1,0 +1,7 @@
+{
+  "install": "true",
+  "repositoryDependencies": [
+    "github.com/BobHouseholder/zemax-speos-stray-light",
+    "github.com/BobHouseholder/speos-lunar-starfield"
+  ]
+}
