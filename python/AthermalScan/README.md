@@ -48,7 +48,11 @@ python athermal_scan.py -file C:\path\to\sample.zmx
 
 `-tmin -tmax -steps -track -pressure -vacuum -psweep -temp0 -press0 -freezesolves -dump -out -outdir -file -quiet -nodialog`
 
-(Match the C# tool where practical; see C# sibling README for full semantics.)
+## Supported / C#-only
+
+**Supported:** sequential T (optional P) sweep, restore, text/CSV/PNG reports — same refuse gates as C# for TEMP/PRES MCE, solves, Adjust Index.
+
+**C# only:** WinForms settings dialog / last-run (`-dialog` is accepted and noted, not a window). Ribbon progress open-outputs is C#.
 
 ## C# sibling
 

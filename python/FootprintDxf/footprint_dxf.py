@@ -6,9 +6,10 @@
 # exports DXF (+ optional PNG). Twin of the C# User Extension.
 # Dialogs are -nodialog only. Self-test is geometry-only.
 #
-# Flags match C#: -file -out -rays -rimrays -surfaces -includeimage
-#   -fields -wave -rim -perfield -global -aperture -nopng
-#   -quiet -nodialog -selftest
+# Flags: -file -out -rays -rimrays -surfaces -includeimage
+#   -fields -wave -rim -perfield -nopng -quiet -nodialog -selftest
+# C#-only (FATAL, not silent): -global -aperture — local XY is not a
+#   global frame. Use the C# FootprintDxf extension for those.
 # ============================================================
 
 from __future__ import annotations
@@ -119,6 +120,18 @@ def parse_args(argv):
         RAYS += 1
     if "rimrays" in EXPLICIT:
         RIM_RAYS = max(16, min(1024, RIM_RAYS))
+
+
+def refuse_csharp_only() -> None:
+    # Child-level refuse gate (CODE_REVIEW H4): this twin traces local
+    # surface XY only. There is no GetGlobalMatrix path and no APER_SURF_n
+    # overlay. Silently accepting -global/-aperture would ship the wrong
+    # CAD frame. Do not remap local XY and call it global.
+    if GLOBAL or APERTURE:
+        raise RuntimeError(
+            "Python twin does not support -global/-aperture; "
+            "use the C# FootprintDxf extension"
+        )
 
 
 def convex_hull(points: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
@@ -352,6 +365,7 @@ def run(session):
 def main(argv=None) -> int:
     try:
         parse_args(list(argv if argv is not None else sys.argv[1:]))
+        refuse_csharp_only()
     except Exception as ex:
         print("FATAL: " + str(ex)); return 1
     if SELF_TEST:

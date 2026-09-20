@@ -13,14 +13,15 @@
 #     ref cases, depth diagnostics, and self-test gates stay in C#.
 #   - Python -run connects, finds MS_* / convertible polymer
 #     elements, writes a moldstress_report.txt summarizing what
-#     would be analysed, and optionally -writecatalog for the
-#     polymer stress-optic AGF stub.
-#   - For production STAR runs, use the C# User Extension.
+#     would be analysed. -writecatalog requires -stub (placeholder
+#     n=1.5 AGF) so it cannot be mistaken for C# CatalogWriter.
+#   - For production STAR runs / real AGF, use the C# User Extension.
 #
 # Flags (-run reads): -file -outdir -filltime -packpressure -packtime
-#   -melttemp -moldtemp -materials -gateconfig -prepare -allow-nonspherical
-#   -directindex -nz -nzexport -full -ribbon -quiet
-# Also: -writecatalog -out, -h/-help
+#   -melttemp -moldtemp -materials -prepare -ribbon -quiet
+# Also: -writecatalog -stub -out, -h/-help
+# C#-only (FATAL): -full -selftest -gates -refcase* -directindex
+#   -allow-nonspherical -nz -nzexport -gateconfig
 # ============================================================
 
 from __future__ import annotations
@@ -94,26 +95,52 @@ def usage() -> None:
     print("""MoldStress (Python twin) — usable -run / -writecatalog surface
 
   -run [-file <lens.zmx>] [-outdir <d>] [-filltime] [-packpressure] [-packtime]
-       [-melttemp] [-moldtemp] [-materials] [-gateconfig] [-prepare] [-quiet]
-  -writecatalog [-out <agf>]
+       [-melttemp] [-moldtemp] [-materials] [-prepare] [-quiet]
+  -writecatalog -stub [-out <agf>]
   -h / -help
 
-Full STAR import / freeze-history / ref-case suite: use the C# extension.
+Full STAR import / freeze-history / ref-case suite / production AGF:
+use the C# extension. Python -writecatalog requires -stub (placeholder n=1.5).
 """)
 
 
+# C# modes / physics flags this twin must not silently accept (CODE_REVIEW H5/M4).
+CSHARP_ONLY_FLAGS = (
+    "full", "selftest", "gates", "refcase", "refcase2", "refquench", "refplate",
+    "directindex", "allow-nonspherical", "nz", "nzexport", "gateconfig",
+)
+
+
+def refuse_csharp_only(args) -> None:
+    # Child-level refuse gate: STAR / catalog / ref-case flags look like the
+    # C# CLI but this twin only inventories elements. Accepting them would
+    # pretend a production run happened.
+    hit = [a for a in CSHARP_ONLY_FLAGS if has_flag(args, a)]
+    if not hit:
+        return
+    pretty = "/".join("-" + n for n in hit)
+    raise RuntimeError(
+        "Python twin does not support {}; "
+        "use the C# MoldStress extension".format(pretty)
+    )
+
+
 def write_catalog(out_path: Optional[str]) -> int:
+    # Child-level refuse already required -stub. n=1.500000 is a dummy Schott
+    # NM so the file cannot be loaded as a real MoldStress catalog by accident.
     if not out_path:
-        out_path = os.path.join(os.getcwd(), "MOLDSTRESS.AGF")
+        out_path = os.path.join(os.getcwd(), "MOLDSTRESS_STUB.AGF")
     lines = [
-        "CC MoldStress polymer stress-optic catalog (Python twin stub)",
+        "CC *** STUB / PLACEHOLDER — NOT a production MoldStress catalog ***",
+        "CC Python twin only. NM n=1.500000 is dummy Schott index, not measured.",
+        "CC Use C# MoldStress -writecatalog for real polymer stress-optic AGF.",
         "CC " + SCOPE,
         "CC Units: Brewster = 1e-6 mm^2/N. K = K12 - K11.",
     ]
     for name, K, K11, K12, prov in POLYMERS:
-        # Minimal Schott-like placeholder; real C# CatalogWriter writes full AGF
-        lines.append("NM {0} 1 0 1.500000 0.0 0 -1 -1 -1 -1".format(name))
-        lines.append("GC MoldStress glassy K={0:.3f} K11={1:.3f} K12={2:.3f}{3}".format(
+        # Placeholder Schott-like row; C# CatalogWriter writes the real AGF.
+        lines.append("NM {0}_STUB 1 0 1.500000 0.0 0 -1 -1 -1 -1".format(name))
+        lines.append("GC STUB placeholder n=1.5; glassy K={0:.3f} K11={1:.3f} K12={2:.3f}{3}".format(
             K, K11, K12, " PROVISIONAL" if prov else ""))
         lines.append("CD 1.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0")
         lines.append("TD 0 0 0 0 0 0 20")
@@ -125,8 +152,9 @@ def write_catalog(out_path: Optional[str]) -> int:
         os.makedirs(parent, exist_ok=True)
     with open(out_path, "w", encoding="utf-8", newline="\r\n") as f:
         f.write("\r\n".join(lines) + "\r\n")
-    print("MoldStress polymer stress-optic catalog")
+    print("MoldStress polymer stress-optic catalog (STUB / PLACEHOLDER)")
     print("  " + SCOPE)
+    print("  n=1.500000 is dummy Schott index; materials named *_STUB.")
     print()
     print("  wrote " + out_path)
     print()
@@ -134,10 +162,9 @@ def write_catalog(out_path: Optional[str]) -> int:
         "material", "K", "K11", "K12", "source"))
     for name, K, K11, K12, prov in POLYMERS:
         print("  {0:<22} {1:8.3f} {2:8.3f} {3:8.3f}   {4}".format(
-            name, K, K11, K12, "PROVISIONAL" if prov else "measured"))
+            name + "_STUB", K, K11, K12, "STUB placeholder"))
     print()
-    print("  NOTE: this is a stub AGF for scripting; prefer C# -writecatalog for")
-    print("  production catalog rows with full stress-optic metadata.")
+    print("  This is NOT the C# CatalogWriter AGF. Do not load it into a design.")
     return 0
 
 
@@ -232,8 +259,6 @@ def run_mode(args) -> int:
             say("", log)
             say("  Python twin stops before STAR stress-field import.", log)
             say("  Re-run with the C# MoldStress User Extension for full -run physics.", log)
-            if has_flag(args, "-full"):
-                say("  (-full requested: still requires C# for STAR pipeline)", log)
             code = 0
 
         os.makedirs(out_dir, exist_ok=True)
@@ -256,7 +281,21 @@ def main(argv=None) -> int:
     if not args or has_flag(args, "-h") or has_flag(args, "-help") or (args and args[0] == "help"):
         usage()
         return 0
+    try:
+        refuse_csharp_only(args)
+    except Exception as ex:
+        print("FATAL: " + str(ex))
+        return 1
     if has_flag(args, "-writecatalog"):
+        # Child-level refuse (CODE_REVIEW M4): placeholder n=1.5 AGF must
+        # not look like a real catalog unless the caller opts into -stub.
+        if not has_flag(args, "-stub"):
+            print(
+                "FATAL: Python twin -writecatalog writes a placeholder n=1.5 AGF; "
+                "pass -stub to emit MOLDSTRESS_STUB.AGF, or use the C# MoldStress "
+                "extension for the real catalog"
+            )
+            return 1
         return write_catalog(value(args, "-out"))
     if has_flag(args, "-run") or has_flag(args, "-ribbon"):
         return run_mode(args)

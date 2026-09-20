@@ -3,12 +3,13 @@
 # RayExtentEnvelope (Python / ZOS-API)
 # ============================================================
 # Builds a keep-out / ray-extent envelope from rim rays and
-# exports PNG (and a simple facet mesh as STL; STEP/OCC path
-# is C#-primary — see README). Twin of the C# User Extension.
+# exports PNG and an optional STL facet loft. Real AP214 STEP
+# (OCC / named KEEP_OUT + MEMA solids) is C#-only — refused here.
 #
-# Flags: -file -out -png -step -rimrays -surfaces -width -height
+# Flags: -file -out -png -stl -rimrays -surfaces -width -height
 #        -quiet -nodialog -clap/-noclap/-rayextent -vertexz
-#        -envelopeonly/-nolenses -lenses
+# C#-only (FATAL, not silent): -step / .step|.stp out, and
+#   -envelopeonly/-nolenses/-lenses (STEP product set).
 # ============================================================
 
 from __future__ import annotations
@@ -29,7 +30,7 @@ from _zos_bootstrap import bootstrap_zosapi, connect_zos, discover_zos_root, par
 FILE_PATH = None
 OUT_PATH = None
 WANT_PNG = True
-WANT_STEP = False
+WANT_STL = False
 EXPLICIT_OUTPUTS = False
 RIM_RAYS = 64
 SURFACES = "auto"
@@ -39,7 +40,9 @@ QUIET = False
 NO_DIALOG = False
 NO_CLAP = True  # default ray-extent (not clear aperture)
 USE_VERTEX_Z = False
-ENVELOPE_ONLY = False
+# Set when the user asked for C#-only STEP / AP214 / STEP product flags.
+STEP_OR_AP214 = False
+CSHARP_STEP_PRODUCTS = False
 
 
 def say(s):
@@ -54,9 +57,10 @@ def parse_int(s, keep):
 
 
 def parse_args(argv):
-    global FILE_PATH, OUT_PATH, WANT_PNG, WANT_STEP, EXPLICIT_OUTPUTS, RIM_RAYS, SURFACES
-    global WIDTH, HEIGHT, QUIET, NO_DIALOG, NO_CLAP, USE_VERTEX_Z, ENVELOPE_ONLY
-    saw_png = saw_step = False
+    global FILE_PATH, OUT_PATH, WANT_PNG, WANT_STL, EXPLICIT_OUTPUTS, RIM_RAYS, SURFACES
+    global WIDTH, HEIGHT, QUIET, NO_DIALOG, NO_CLAP, USE_VERTEX_Z
+    global STEP_OR_AP214, CSHARP_STEP_PRODUCTS
+    saw_png = saw_step = saw_stl = False
     i = 0
     while i < len(argv):
         raw = argv[i]
@@ -76,6 +80,8 @@ def parse_args(argv):
                 saw_png = True
             elif a == "step":
                 saw_step = True
+            elif a == "stl":
+                saw_stl = True
             elif a == "rimrays":
                 RIM_RAYS = parse_int(next_tok(), RIM_RAYS)
             elif a == "surfaces":
@@ -94,23 +100,45 @@ def parse_args(argv):
                 NO_CLAP = True
             elif a == "vertexz":
                 USE_VERTEX_Z = True
-            elif a in ("envelopeonly", "nolenses"):
-                ENVELOPE_ONLY = True
-            elif a == "lenses":
-                ENVELOPE_ONLY = False
+            elif a in ("envelopeonly", "nolenses", "lenses"):
+                # C# STEP product set (KEEP_OUT vs MEMA L* solids) — not a Python loft knob.
+                CSHARP_STEP_PRODUCTS = True
             else:
                 raise RuntimeError("unknown flag " + raw)
         else:
             if not FILE_PATH:
                 FILE_PATH = raw
         i += 1
-    if saw_png or saw_step:
+    if saw_png or saw_step or saw_stl:
         EXPLICIT_OUTPUTS = True
         WANT_PNG = saw_png
-        WANT_STEP = saw_step
+        WANT_STL = saw_stl
+    if saw_step:
+        STEP_OR_AP214 = True
+    if OUT_PATH:
+        ext = os.path.splitext(OUT_PATH)[1].lower()
+        if ext in (".step", ".stp"):
+            STEP_OR_AP214 = True
+        elif ext == ".stl":
+            WANT_STL = True
     RIM_RAYS = max(16, min(256, RIM_RAYS))
     WIDTH = max(200, WIDTH)
     HEIGHT = max(200, HEIGHT)
+
+
+def refuse_csharp_only() -> None:
+    # Child-level refuse gate (CODE_REVIEW H5): do not write an STL facet
+    # loft and label it AP214 STEP. Real OCC / named-solids STEP lives in C#.
+    if STEP_OR_AP214:
+        raise RuntimeError(
+            "Python twin does not support -step / AP214 STEP; "
+            "use the C# RayExtentEnvelope extension for real STEP"
+        )
+    if CSHARP_STEP_PRODUCTS:
+        raise RuntimeError(
+            "Python twin does not support -envelopeonly/-nolenses/-lenses "
+            "(C# STEP product set); use the C# RayExtentEnvelope extension"
+        )
 
 
 def get_frame(lde, surf):
@@ -324,16 +352,16 @@ def run(session):
         png = base + ".png"
         write_png_layout(png, envelopes, os.path.basename(base))
         say("PNG: " + png)
-    if WANT_STEP:
-        # Full OCC/AP214 STEP is C#-primary; write STL loft as a usable stand-in
+    if WANT_STL:
+        # Intentional Python mesh path — facet loft, never advertised as STEP.
         stl = base + ".stl"
         write_stl_facets(stl, envelopes)
-        say("NOTE: Python twin writes STL facet loft instead of OCC AP214 STEP (see README).")
 
 
 def main(argv=None) -> int:
     try:
         parse_args(list(argv if argv is not None else sys.argv[1:]))
+        refuse_csharp_only()
     except Exception as ex:
         print("FATAL: " + str(ex)); return 1
     try:
