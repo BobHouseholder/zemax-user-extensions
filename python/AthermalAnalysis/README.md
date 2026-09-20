@@ -48,7 +48,11 @@ python athermal_analysis.py -file C:\path\to\sample.zmx
 
 `same as AthermalScan; always implies -nodialog`
 
-(Match the C# tool where practical; see C# sibling README for full semantics.)
+## Supported / C#-only
+
+**Supported:** thin wrapper → [`athermal_scan.py`](../AthermalScan/athermal_scan.py) (same scan/report CLI).
+
+**C# only:** dockable User Analysis window. This script always forces `-nodialog` and prints a NOTE.
 
 ## C# sibling
 
