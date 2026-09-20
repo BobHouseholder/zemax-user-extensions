@@ -54,3 +54,7 @@ python equivalent_glass_finder.py -file C:\path\to\sample.zmx
 
 Ribbon / deployed User Extension (C#): see
 [`extensions/EquivalentGlassFinder/`](../../extensions/EquivalentGlassFinder/).
+
+## Safety defaults (PR1)
+
+Addresses [docs/CODE_REVIEW.md](../../docs/CODE_REVIEW.md) **C2**. Same as C#: `REPORT_ONLY = True` by default; pass `-apply` to mutate materials. `-report` remains an explicit alias.

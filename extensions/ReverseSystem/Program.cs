@@ -26,6 +26,9 @@ namespace ReverseSystem
         public bool GeoReport = false;
         public bool RayAim = false;
         public bool Quiet = false;
+        // When true, reverse the live PrimarySystem in place (dangerous).
+        // Default false: require -save/-out (write a file) or -inplace/-apply.
+        public bool InPlace = false;
         public string FilePath = null;   // standalone test mode
         public string OutPath = null;
     }
@@ -112,6 +115,8 @@ namespace ReverseSystem
                 switch (args[i].TrimStart('-', '/').ToLowerInvariant())
                 {
                     case "save": Opts.SaveCopy = true; break;
+                    case "inplace":
+                    case "apply": Opts.InPlace = true; break; // reverse live primary (dangerous)
                     case "keepconj": Opts.KeepConjugates = true; break;
                     case "refocus": Opts.Refocus = true; break;
                     case "keepaperture": Opts.KeepAperture = true; break;
@@ -197,7 +202,49 @@ namespace ReverseSystem
                 return;
             }
 
-            var lde = sys.LDE;
+            
+            // ---------------------------------------------------------------
+            // Safety gate (plain words):
+            // Reversing rewrites every surface. On a ribbon attach that is the
+            // user's open lens — so we do not reverse PrimarySystem in place
+            // unless they pass -inplace / -apply, OR they ask to write a file
+            // with -save / -out (we reverse a CopySystem then SaveAs).
+            // -georeport only reads, so it skips this gate.
+            // ---------------------------------------------------------------
+            bool standalone = !string.IsNullOrEmpty(Opts.FilePath);
+            bool wantFile = Opts.SaveCopy || !string.IsNullOrEmpty(Opts.OutPath);
+            bool builtOnCopy = false;
+            if (!Opts.GeoReport)
+            {
+                if (!standalone && !Opts.InPlace && !wantFile)
+                {
+                    Say("FATAL: ReverseSystem refuses to reverse the attached PrimarySystem in place.");
+                    Say("  Pass -save and/or -out <path> to reverse a CopySystem and write a file,");
+                    Say("  or pass -inplace / -apply to reverse the live open lens on purpose (dangerous).");
+                    Environment.ExitCode = 1;
+                    return;
+                }
+                if (!Opts.InPlace && wantFile && !standalone)
+                {
+                    // Prefer: reverse a copy, then SaveAs — leave the open lens alone.
+                    var copy = sys.CopySystem();
+                    if (copy == null)
+                    {
+                        Say("FATAL: CopySystem() returned null; cannot reverse safely. Pass -inplace to mutate PrimarySystem.");
+                        Environment.ExitCode = 1;
+                        return;
+                    }
+                    sys = copy;
+                    builtOnCopy = true;
+                    Say("Working on CopySystem() clone (open PrimarySystem left unchanged).");
+                }
+                else if (Opts.InPlace && !standalone)
+                {
+                    Say("WARNING: -inplace/-apply: reversing the live PrimarySystem in place.");
+                }
+            }
+
+var lde = sys.LDE;
             int imgIdx = lde.NumberOfSurfaces - 1;
 
             Say("");
@@ -587,6 +634,14 @@ namespace ReverseSystem
             var writeErrors = new List<string>();
             for (int k = 1; k < imgIdx; k++)
             {
+                // Let the user Cancel a long reverse write (nice-to-have).
+                if (app.TerminateRequested)
+                {
+                    Say("Terminated by user during write — stopping further surface updates.");
+                    writeErrors.Add("terminated by user");
+                    break;
+                }
+
                 var row = lde.GetSurfaceAt(k);
                 try
                 {
@@ -794,7 +849,7 @@ namespace ReverseSystem
 
             // ---- save --------------------------------------------------------------
             string savedTo = null;
-            if (Opts.SaveCopy || !string.IsNullOrEmpty(Opts.FilePath))
+            if (Opts.SaveCopy || !string.IsNullOrEmpty(Opts.FilePath) || !string.IsNullOrEmpty(Opts.OutPath) || builtOnCopy)
             {
                 savedTo = Opts.OutPath;
                 if (string.IsNullOrEmpty(savedTo))
@@ -816,6 +871,12 @@ namespace ReverseSystem
                 before["EFFL"][0], after["EFFL"][0],
                 rp == null ? "(not written)" : Path.GetFileName(rp));
             OpenOutputs(app, rp);
+
+            // Close the working copy so we do not leak a hidden system.
+            if (builtOnCopy)
+            {
+                try { sys.Close(false); } catch { /* best-effort */ }
+            }
         }
 
         // Plugin-mode (ribbon) runs lose their console the moment the process
