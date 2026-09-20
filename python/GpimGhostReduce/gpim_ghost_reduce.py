@@ -8,6 +8,8 @@
 #
 # Flags: -file -save -top N -weight W -balance B -mode image|pupil|both
 #        -optimize -cycles K -nodialog -quiet
+# C#-only: settings dialog / last-run; -top 0 auto (80% cover / cap 8);
+#   full Surf1>Surf2 pair scan + scratch-GPIM cleanup. -top 0 is FATAL.
 # ============================================================
 
 from __future__ import annotations
@@ -99,6 +101,13 @@ def parse_args(argv):
         i += 1
     if MODE not in ("image", "pupil", "both", "0", "1"):
         raise RuntimeError("unknown -mode (use image|pupil|both)")
+    # Child-level refuse gate: C# -top 0 means auto rank (80% cover / 10%
+    # floor / cap 8). Clamping to 1 would silently drop most ghosts.
+    if "top" in EXPLICIT and TOP_N < 1:
+        raise RuntimeError(
+            "Python twin does not support -top 0 auto ranking; "
+            "use the C# GpimGhostReduce extension (or pass -top N>=1)"
+        )
     if TOP_N < 1:
         TOP_N = 1
     if WEIGHT <= 0:
