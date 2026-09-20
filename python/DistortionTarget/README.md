@@ -54,3 +54,11 @@ python distortion_target.py -file C:\path\to\sample.zmx
 
 Ribbon / deployed User Extension (C#): see
 [`extensions/DistortionTarget/`](../../extensions/DistortionTarget/).
+
+## Safety defaults (PR1)
+
+Addresses [docs/CODE_REVIEW.md](../../docs/CODE_REVIEW.md) **C1**. Same policy as the C# twin.
+
+- Never `New(False)` on an attached live primary without `-force` / `-replace`.
+- Prefer `-save` / `-out` `<path>`: `CopySystem()` → build on copy → `SaveAs`.
+- Standalone `CreateNewApplication` may `New` a fresh system.

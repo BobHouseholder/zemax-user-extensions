@@ -9,7 +9,7 @@
 # Dialogs are -nodialog only (no WinForms port).
 #
 # Flags: -n -pitch -dot -plate -thick -material -coating -film
-#        -drawlimit -rig -save -file -nodialog -quiet
+#        -drawlimit -rig -save -out -file -force -replace -nodialog -quiet
 # ============================================================
 
 from __future__ import annotations
@@ -46,6 +46,7 @@ SAVE_PATH: Optional[str] = None
 FILE_PATH: Optional[str] = None
 NO_DIALOG = False
 QUIET = False
+FORCE_REPLACE = False  # attached New() only with -force/-replace
 EXPLICIT: Set[str] = set()
 
 
@@ -72,7 +73,7 @@ def say(line: str) -> None:
 def parse_args(argv: List[str]) -> None:
     """Read -n / -pitch / -file / ... and fill the global switches."""
     global N, PITCH, DOT_DIA, PLATE, PLATE_T, MATERIAL, COATING, FILM
-    global DRAW_LIMIT, RIG, SAVE_PATH, FILE_PATH, NO_DIALOG, QUIET
+    global DRAW_LIMIT, RIG, SAVE_PATH, FILE_PATH, NO_DIALOG, QUIET, FORCE_REPLACE
     i = 0
     while i < len(argv):
         raw = argv[i]
@@ -116,10 +117,12 @@ def parse_args(argv: List[str]) -> None:
             elif a == "rig":
                 RIG = True
                 EXPLICIT.add("rig")
-            elif a == "save":
+            elif a in ("save", "out"):
                 SAVE_PATH = next_tok()
             elif a == "file":
                 FILE_PATH = next_tok()
+            elif a in ("force", "replace"):
+                FORCE_REPLACE = True
             elif a == "nodialog":
                 NO_DIALOG = True
             elif a == "quiet":
@@ -225,8 +228,39 @@ def build(session) -> None:
     sysm = session.TheSystem
     OT = ZOSAPI.Editors.NCE.ObjectType
 
-    # Fresh NSC system (same as C#)
-    sysm.New(False)
+    # ---------------------------------------------------------------
+    # Safety gate (plain words) — mirror of C#:
+    # New(False) throws away the open lens. On an attach that is the
+    # user's live file — never call New on PrimarySystem unless they
+    # passed -force / -replace. Prefer CopySystem + New on the copy +
+    # SaveAs when -save/-out is set. Standalone may New a fresh system.
+    # ---------------------------------------------------------------
+    standalone = bool(getattr(session, "standalone", False))
+    built_on_copy = False
+    if standalone:
+        # Our own empty app — New is safe here.
+        sysm.New(False)
+    elif FORCE_REPLACE:
+        say("WARNING: -force/-replace: wiping the open PrimarySystem with New(False).")
+        sysm.New(False)
+    elif SAVE_PATH:
+        # Keep the open lens. Build on a copy, then SaveAs to the path.
+        copy = session.app.PrimarySystem.CopySystem()
+        if copy is None:
+            raise RuntimeError(
+                "CopySystem() returned null; cannot build safely. Pass -force to replace PrimarySystem."
+            )
+        sysm = copy
+        session.TheSystem = copy  # so SaveAs / summary use the copy
+        built_on_copy = True
+        sysm.New(False)
+    else:
+        raise RuntimeError(
+            "FATAL: DistortionTarget refuses to call New(False) on the attached PrimarySystem. "
+            "Pass -save <path> (or -out <path>) to build on a CopySystem and write a file, "
+            "or pass -force / -replace to wipe the open system on purpose."
+        )
+
     sysm.MakeNonSequential()
     sysm.SystemData.Units.LensUnits = ZOSAPI.SystemData.ZemaxSystemUnits.Millimeters
     nce = sysm.NCE
@@ -306,6 +340,13 @@ def build(session) -> None:
         app.ProgressPercent = 100
     except Exception:
         pass
+
+    if built_on_copy:
+        try:
+            sysm.Close(False)
+        except Exception:
+            pass
+
 
 
 def main(argv: Optional[List[str]] = None) -> int:

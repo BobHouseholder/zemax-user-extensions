@@ -7,7 +7,7 @@
 # Twin of the C# User Extension. Adds -file for standalone
 # (C# is Interactive Extension only).
 #
-# Flags: -file -catalog -includeobsolete -report -reopt -save
+# Flags: -file -catalog -includeobsolete -report -apply -reopt -save
 #        -top N -wnd -wvd -wpgf -quiet -nodialog -out
 # ============================================================
 
@@ -34,7 +34,7 @@ from _zos_bootstrap import (  # noqa: E402
 
 TARGET_CATALOG: Optional[str] = None
 INCLUDE_OBSOLETE = False
-REPORT_ONLY = False
+REPORT_ONLY = True  # default safe: never mutate without -apply
 REOPTIMIZE = False
 SAVE_COPY = False
 TOP_N = 3
@@ -102,7 +102,9 @@ def parse_args(argv):
             elif a == "includeobsolete":
                 INCLUDE_OBSOLETE = True
             elif a == "report":
-                REPORT_ONLY = True
+                REPORT_ONLY = True  # explicit alias for default
+            elif a == "apply":
+                REPORT_ONLY = False  # required to mutate materials
             elif a == "reopt":
                 REOPTIMIZE = True
             elif a == "save":
