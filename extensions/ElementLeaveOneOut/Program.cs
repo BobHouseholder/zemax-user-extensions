@@ -19,6 +19,8 @@
 //   -file <zmx>  -save <path>  -out <dir>  -cycles K  -top N
 //   -rank power|loo  -report [path]  -nodialog  -quiet
 //   -allowbadmf   (let a weird baseline MF keep going — normally we stop)
+// Sequential systems only (NSC → FATAL, exit 2). After MF remap,
+// leftover high / undroppable surface refs fail that trial.
 // ============================================================
 
 using System;
@@ -232,6 +234,16 @@ namespace ElementLeaveOneOut
         // 5) Pick the friendliest removal and save that new lens file.
         static void RunOnSystem(ZOSAPI.IZOSAPI_Application app, ZOSAPI.IOpticalSystem sys)
         {
+            // Sequential-only (CODE_REVIEW H2): element grouping, MFE remap, and
+            // SEQOptimizationWizard all assume Sequential. On NSC those APIs
+            // fail oddly or score the wrong thing — refuse early, same spirit
+            // as ReverseSystem / Footprint / EGF.
+            if (sys.Mode != ZOSAPI.SystemType.Sequential)
+            {
+                throw new ToolExitException(2,
+                    "ElementLeaveOneOut requires a Sequential system (NSC is not supported).");
+            }
+
             Say("=== ElementLeaveOneOut ===");
             Say("Method: leave-one-out deletion + local DLS reopt on existing MF");
 
@@ -620,12 +632,19 @@ namespace ElementLeaveOneOut
         // The report card names surfaces by number. After we delete some surfaces,
         // those numbers would point at the wrong places — like a house number after
         // you tear a house out of the street. So we:
-        //   - throw away rules that talked about deleted surfaces
+        //   - throw away rules that talked about deleted surfaces (Param1/Param2)
         //   - subtract how many we removed from bigger surface numbers
+        //   - do the same for other columns that are really surface slots
+        //     (cell Header says Surf / Surf1 / ..., or a known type like TRAC)
+        //   - if we cannot drop a deleted-surface row, or an identified
+        //     surface slot is still > rear after remap, refuse the trial
+        //     (fail-closed) so a half-remapped MF cannot silently win
         static void RemapAndCleanMf(ZOSAPI.IOpticalSystem sys, int front, int rear)
         {
             var mfe = sys.MFE;
             int removed = rear - front + 1;
+
+            // Pass 1: Param1/Param2 as before (most thickness / range operands).
             for (int row = mfe.NumberOfOperands; row >= 1; row--)
             {
                 ZOSAPI.Editors.MFE.IMFERow op;
@@ -640,14 +659,27 @@ namespace ElementLeaveOneOut
                     (p2 >= front && p2 <= rear);
                 if (hitDeleted)
                 {
-                    try { mfe.RemoveOperandAt(row); }
-                    catch { try { op.Weight = 0; } catch { } }
+                    DropOperandOrFail(mfe, row, op,
+                        "could not drop MF operand that referenced deleted surfaces (row "
+                        + row.ToString(CultureInfo.InvariantCulture) + ")");
                     continue;
                 }
-                if (p1 > rear)
-                    WriteSurfParam(op, ZOSAPI.Editors.MFE.MeritColumn.Param1, p1 - removed);
-                if (p2 > rear)
-                    WriteSurfParam(op, ZOSAPI.Editors.MFE.MeritColumn.Param2, p2 - removed);
+                RemapSurfOrFail(op, ZOSAPI.Editors.MFE.MeritColumn.Param1, p1, rear, removed, row, "Param1");
+                RemapSurfOrFail(op, ZOSAPI.Editors.MFE.MeritColumn.Param2, p2, rear, removed, row, "Param2");
+            }
+
+            // Pass 2: extra surface-bearing columns (not Param1/Param2).
+            RemapExtraSurfaceColumns(mfe, front, rear, removed);
+
+            // Pass 3: an identified surface slot still > rear means we missed a
+            // remap (or a write did not stick). Do not test [front, rear] here:
+            // a correctly decremented higher surface lands in that numeric range
+            // (old 5 → 3 when deleting 2–3).
+            string leftover = FindUnremappedHighSurfRefs(mfe, rear);
+            if (!string.IsNullOrEmpty(leftover))
+            {
+                throw new Exception(
+                    "MF still references deleted/high surfaces after remap (" + leftover + ")");
             }
         }
 
@@ -665,6 +697,188 @@ namespace ElementLeaveOneOut
         static void WriteSurfParam(ZOSAPI.Editors.MFE.IMFERow op, ZOSAPI.Editors.MFE.MeritColumn col, int value)
         {
             try { op.GetOperandCell(col).DoubleValue = value; } catch { }
+        }
+
+        // Drop a row that named a deleted surface. If OpticStudio will not
+        // remove it, refuse the trial — zeroing and continuing would leave
+        // stale numbers in the editor even if the weight is quiet.
+        static void DropOperandOrFail(
+            ZOSAPI.Editors.MFE.IMeritFunctionEditor mfe, int row,
+            ZOSAPI.Editors.MFE.IMFERow op, string why)
+        {
+            try { mfe.RemoveOperandAt(row); return; }
+            catch { }
+            try { op.Weight = 0; } catch { }
+            throw new Exception(why);
+        }
+
+        // Decrement one surface slot and read it back. A silent write miss
+        // would keep the old house number, so we fail-closed instead.
+        static void RemapSurfOrFail(
+            ZOSAPI.Editors.MFE.IMFERow op, ZOSAPI.Editors.MFE.MeritColumn col,
+            int value, int rear, int removed, int row, string label)
+        {
+            if (value <= rear) return;
+            int want = value - removed;
+            WriteSurfParam(op, col, want);
+            int got = ReadSurfParam(op, col);
+            if (got != want)
+            {
+                throw new Exception(F(
+                    "could not remap MF {0} {1} -> {2} (row {3}, read back {4})",
+                    label, value, want, row, got));
+            }
+        }
+
+        // How many MFE columns we can walk (Weight … Contrib). Same span as GpimGhostReduce.
+        static int MfColumnCount()
+        {
+            return (int)ZOSAPI.Editors.MFE.MeritColumn.Contrib;
+        }
+
+        // True when a cell header is a surface index (Surf, Surf1, StartSurf, ...)
+        // and not a type/count label (SurfType, NSurf).
+        static bool IsSurfaceHeader(string header)
+        {
+            if (string.IsNullOrEmpty(header)) return false;
+            string u = header.Trim().ToUpperInvariant().Replace(" ", "").Replace("_", "");
+            if (u.Length == 0) return false;
+            if (u.IndexOf("TYPE", StringComparison.Ordinal) >= 0) return false;
+            if (u.IndexOf("FORM", StringComparison.Ordinal) >= 0) return false;
+            if (u == "NSURF" || u == "NUMSURF" || u == "NSURFACES") return false;
+            if (u == "SURF" || u == "SUR" || u == "SURFACE") return true;
+            if (u.StartsWith("SURF", StringComparison.Ordinal) && u.Length <= 6) return true;
+            if (u.StartsWith("SUR", StringComparison.Ordinal) && u.Length <= 5
+                && char.IsDigit(u[u.Length - 1])) return true;
+            if (u.EndsWith("SURF", StringComparison.Ordinal)
+                || u.EndsWith("SURFACE", StringComparison.Ordinal)) return true;
+            return false;
+        }
+
+        static string ReadCellHeader(ZOSAPI.Editors.MFE.IMFERow op, ZOSAPI.Editors.MFE.MeritColumn col)
+        {
+            try
+            {
+                var cell = op.GetOperandCell(col);
+                if (cell == null) return null;
+                return cell.Header;
+            }
+            catch { return null; }
+        }
+
+        static void AddUniqueColumn(
+            List<ZOSAPI.Editors.MFE.MeritColumn> into,
+            ZOSAPI.Editors.MFE.MeritColumn col)
+        {
+            if (!into.Contains(col)) into.Add(col);
+        }
+
+        // Extra surface slots we know about when headers are blank.
+        // Only types we are sure of — guessing would remap Wave/Field and lie.
+        static void AddTypeAwareExtraSurfColumns(
+            string typeName, List<ZOSAPI.Editors.MFE.MeritColumn> into)
+        {
+            if (string.IsNullOrEmpty(typeName)) return;
+            string u = typeName.ToUpperInvariant();
+            // TRAC data order is Hx, Hy, Px, Py, Wave, Surf — Surf is Param6.
+            if (u.IndexOf("TRAC", StringComparison.Ordinal) >= 0)
+                AddUniqueColumn(into, ZOSAPI.Editors.MFE.MeritColumn.Param6);
+        }
+
+        // Columns other than Param1/Param2 that hold surface numbers on this row.
+        static void CollectExtraSurfColumns(
+            ZOSAPI.Editors.MFE.IMFERow op,
+            List<ZOSAPI.Editors.MFE.MeritColumn> into)
+        {
+            into.Clear();
+            var p1 = ZOSAPI.Editors.MFE.MeritColumn.Param1;
+            var p2 = ZOSAPI.Editors.MFE.MeritColumn.Param2;
+            int nCols = MfColumnCount();
+            for (int c = 1; c <= nCols; c++)
+            {
+                var col = (ZOSAPI.Editors.MFE.MeritColumn)c;
+                if (col == p1 || col == p2) continue;
+                if (IsSurfaceHeader(ReadCellHeader(op, col)))
+                    AddUniqueColumn(into, col);
+            }
+            string typeName = "";
+            try { typeName = op.Type.ToString(); } catch { }
+            AddTypeAwareExtraSurfColumns(typeName, into);
+        }
+
+        // Same remove-or-decrement rules as Param1/Param2, for extra surface columns.
+        static void RemapExtraSurfaceColumns(
+            ZOSAPI.Editors.MFE.IMeritFunctionEditor mfe, int front, int rear, int removed)
+        {
+            var extra = new List<ZOSAPI.Editors.MFE.MeritColumn>(8);
+            for (int row = mfe.NumberOfOperands; row >= 1; row--)
+            {
+                ZOSAPI.Editors.MFE.IMFERow op;
+                try { op = mfe.GetOperandAt(row); }
+                catch { continue; }
+
+                CollectExtraSurfColumns(op, extra);
+                if (extra.Count == 0) continue;
+
+                bool hitDeleted = false;
+                for (int i = 0; i < extra.Count; i++)
+                {
+                    int v = ReadSurfParam(op, extra[i]);
+                    if (v >= front && v <= rear)
+                    {
+                        hitDeleted = true;
+                        break;
+                    }
+                }
+                if (hitDeleted)
+                {
+                    DropOperandOrFail(mfe, row, op,
+                        "could not drop MF operand that referenced deleted surfaces (row "
+                        + row.ToString(CultureInfo.InvariantCulture) + ")");
+                    continue;
+                }
+                for (int i = 0; i < extra.Count; i++)
+                {
+                    int v = ReadSurfParam(op, extra[i]);
+                    RemapSurfOrFail(op, extra[i], v, rear, removed, row, extra[i].ToString());
+                }
+            }
+        }
+
+        // After remap: any identified surface slot still > rear was not
+        // decremented. That is a stale high house number, not a remapped one.
+        static string FindUnremappedHighSurfRefs(
+            ZOSAPI.Editors.MFE.IMeritFunctionEditor mfe, int rear)
+        {
+            var bits = new List<string>();
+            var extra = new List<ZOSAPI.Editors.MFE.MeritColumn>(8);
+            var p1 = ZOSAPI.Editors.MFE.MeritColumn.Param1;
+            var p2 = ZOSAPI.Editors.MFE.MeritColumn.Param2;
+            for (int row = 1; row <= mfe.NumberOfOperands && bits.Count < 8; row++)
+            {
+                ZOSAPI.Editors.MFE.IMFERow op;
+                try { op = mfe.GetOperandAt(row); }
+                catch { continue; }
+
+                string typeName = "?";
+                try { typeName = op.Type.ToString(); } catch { }
+
+                int v1 = ReadSurfParam(op, p1);
+                int v2 = ReadSurfParam(op, p2);
+                if (v1 > rear)
+                    bits.Add(F("row {0} {1} Param1={2}", row, typeName, v1));
+                if (v2 > rear)
+                    bits.Add(F("row {0} {1} Param2={2}", row, typeName, v2));
+
+                CollectExtraSurfColumns(op, extra);
+                for (int i = 0; i < extra.Count && bits.Count < 8; i++)
+                {
+                    int v = ReadSurfParam(op, extra[i]);
+                    if (v > rear)
+                        bits.Add(F("row {0} {1} {2}={3}", row, typeName, extra[i], v));
+                }
+            }
+            return bits.Count == 0 ? null : string.Join("; ", bits);
         }
 
         // These numbers are the fences: glass must stay at least 1 mm thick,

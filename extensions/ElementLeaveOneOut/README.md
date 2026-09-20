@@ -5,6 +5,10 @@ ZOS-API User Extension. Ranks each removable **lens or mirror** by a
 function, locally reoptimize (DLS), and score by the change in merit function.
 Writes a new `.zmx` with the winning element removed.
 
+**Sequential systems only.** Non-sequential (NSC) files are refused immediately
+with a `FATAL` message and exit code **2** (same spirit as ReverseSystem /
+Footprint / EGF).
+
 ## Algorithm
 
 Chosen public/practical method (OpticStudio-native):
@@ -12,9 +16,13 @@ Chosen public/practical method (OpticStudio-native):
 1. Evaluate baseline merit function `MF0` and EFFL.
 2. Enumerate glass/mirror elements (contiguous material runs + rear face).
 3. If the MFE is empty/unweighted, builds OpticStudio **default RMS Spot** MF via `SEQOptimizationWizard2` (Spot/RMS/Centroid/GQ + glass/air boundary values). If the MF lacks thickness bounds, adds MNCT/MXCT (glass ≥1 mm, air ≥0.5 mm).\n\nOptional `-top N`: only test the N weakest-|power| elements (crude |Ï†| proxy).
-4. For each candidate: reload baseline â†’ delete element (absorb CT into previous
-   thickness) â†’ remap/remove MFE operands that referenced deleted surfaces â†’
-   ensure an **EFFL** operand targets baseline EFFL â†’ local DLS â†’ record `MF_i`.
+4. For each candidate: reload baseline → delete element (absorb CT into previous
+   thickness) → remap/remove MFE operands that referenced deleted surfaces
+   (Param1/Param2, plus other columns whose header is a surface slot, plus a
+   short type-aware list such as TRAC Param6) → if any remaining operand still
+   names a deleted surface, **refuse that trial** (fail-closed; no silent bad
+   ranking) → ensure an **EFFL** operand targets baseline EFFL → local DLS →
+   record `MF_i`.
 5. Keep the candidate with minimum `(MF_i - MF0)` among **valid** trials only.
 6. Save `<stem>_minus1.zmx` only when at least one trial is ok (else fail-closed, exit 2).
 
@@ -44,6 +52,8 @@ If the baseline merit function is already absurd (≥1e8) — common when a file
 `*_minus1.zmx` and exits with code **2**. Broken trials (non-finite MF/delta,
 MF ≥ 1e8, or MF ≥ 1e6×MF0) are excluded from the winner. After seed + baseline MF0,
 a non-finite / ≤0 / ≥1e8 baseline also refuses (exit 2) unless `-allowbadmf`.
+A trial whose merit function still names a deleted surface after remap is also
+rejected (CODE_REVIEW H3) so a stale constraint cannot win the ranking.
 
 ## Build
 

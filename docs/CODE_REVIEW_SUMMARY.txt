@@ -5,11 +5,11 @@ TOP FINDINGS
 1. CRITICAL: DistortionTarget Build() calls New(false) on PrimarySystem — wipes live designs from ribbon (C#+Python).
 2. CRITICAL: EquivalentGlassFinder defaults to APPLY glass swaps in place; need -report or flip default to report-only.
 3. HIGH: ReverseSystem mutates open LDE with no CopySystem / Terminate; save only with -save/-file.
-4. HIGH: ElementLeaveOneOut has no Sequential mode gate (C#+Python).
-5. HIGH: ELOO RemapAndCleanMf only remaps MF Param1/Param2 — stale surface refs possible.
+4. HIGH: ElementLeaveOneOut has no Sequential mode gate (C#+Python). **(PR2 addressed)**
+5. HIGH: ELOO RemapAndCleanMf only remaps MF Param1/Param2 — stale surface refs possible. **(PR2 addressed)**
 6. HIGH: Python FootprintDxf accepts -global/-aperture but never uses them (local XY only).
 7. HIGH: Several Python twins thin vs C# (Footprint/RayExtent/Gpim; MoldStress intentional stub).
-8. MED: ELOO Python duplicates bootstrap instead of python/_zos_bootstrap.py.
+8. MED: ELOO Python duplicates bootstrap instead of python/_zos_bootstrap.py. **(PR2 addressed)**
 
 SOLID
 - ELOO fail-closed MF / thickness / CloseApplication gold standard
@@ -18,9 +18,9 @@ SOLID
 
 FOLLOW-UP PR ORDER
 1) Distortion/EGF/Reverse safety defaults
-2) ELOO Sequential + MF remap
+2) ELOO Sequential + MF remap **(PR2)**
 3) Python twin honesty / refuse unsupported flags
-4) ELOO → _zos_bootstrap; locator DLL check parity
+4) ELOO → _zos_bootstrap **(done in PR2)**; locator DLL check parity
 5) Terminate on mutators; scrub C:\Users\bob paths in python READMEs
 
 NOT DEEP-DIVED: MoldStress ~15k LOC physics + validation/mtf-triplet (high-level only).
