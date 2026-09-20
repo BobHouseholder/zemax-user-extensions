@@ -118,3 +118,14 @@ FootprintDxf.exe -file C:\designs\cooke.zmx -out C:\designs\sample_footprints_ni
 
 Or open the lens in OpticStudio and run **Programming > User Extensions >
 FootprintDxf**.
+
+## Python (ZOS-API)
+
+A standalone **Python** port (pythonnet + ZOS-API, same CLI flags where practical)
+lives outside this Extensions folder so `tools/pack.ps1` never ships it:
+
+- Script + run notes: [`python/FootprintDxf/`](../../python/FootprintDxf/)
+- Shared connect helpers: [`python/_zos_bootstrap.py`](../../python/_zos_bootstrap.py)
+
+Prefer that tree for scripting / headless smoke. This folder remains the C#
+User Extension (ribbon deploy).

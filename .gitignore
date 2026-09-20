@@ -16,3 +16,5 @@ dist/*
 
 # local-only session settings
 .claude/settings.local.json
+__pycache__/
+*.pyc
