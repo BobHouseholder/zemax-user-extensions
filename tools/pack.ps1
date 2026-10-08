@@ -13,7 +13,9 @@
 # running a .ps1 from file is disabled outright:
 #     powershell -NoProfile -ExecutionPolicy Bypass -File tools\pack.ps1
 #
-# THIRTEEN add-ins: twelve User Extensions + AthermalAnalysis User Analysis.
+# FIFTEEN add-ins: fourteen User Extensions + AthermalAnalysis User Analysis.
+# INSTALL.txt states the count of what was actually staged (see $nAll below),
+# so it cannot drift when a project is added; keep this line in step by hand.
 #
 # Build first - this packs what is in bin\Release (or bin\<platform>\Release),
 # it does not compile. Default pack is x64, matching the csproj PlatformTarget;
@@ -146,6 +148,13 @@ foreach ($f in (Get-ChildItem $stage -Recurse -File -Filter *.exe)) {
   }
 }
 
+# --- counts for INSTALL.txt, from what was actually staged --------------------
+# Counted here rather than written into the text, so a new project can never
+# leave the install notes quoting a stale number.
+$nAll = @($rows).Count
+$nUA  = @($rows | Where-Object { $_.Kind -eq 'User Analysis' }).Count
+$nExt = $nAll - $nUA
+
 # --- manifest -----------------------------------------------------------------
 $m = @(
   "Zemax OpticStudio user add-ins"
@@ -180,9 +189,9 @@ READ THIS FIRST IF YOU HAVE INSTALLED AN ANSYS EXTENSION BEFORE
 --------------------------------------------------------------
 Ansys's own extension zips - the CODE V Converter, for instance - are extracted
 INTO the Extensions folder. Do not do that with this one. This zip carries TWO
-destinations, because it has THIRTEEN add-ins (twelve User Extensions plus the
-AthermalAnalysis User Analysis), so its top level is a ZOS-API folder rather
-than loose .exe files.
+destinations, because it has $nAll add-ins ($nExt User Extensions plus
+$nUA User Analysis - AthermalAnalysis), so its top level is a ZOS-API folder
+rather than loose .exe files.
 Extracting it into Extensions would give you
 
     ...\Zemax\ZOS-API\Extensions\ZOS-API\Extensions\*.exe
@@ -223,8 +232,9 @@ Or right-click each .exe, Properties, tick Unblock, OK.
 CANCEL DOES NOT WORK EVERYWHERE
 -------------------------------
 AthermalScan, DetectorDump, DetectorPowerSum, EquivalentGlassFinder,
-LayoutRender, GpimGhostReduce, FootprintDxf and RayExtentEnvelope poll for the
-Terminate button and stop at the next iteration. CryoGlass, DistortionTarget,
+LayoutRender, GpimGhostReduce, FootprintDxf, RayExtentEnvelope,
+ElementLeaveOneOut and StartPointFinder poll for the Terminate button and
+stop at the next iteration. CryoGlass, DistortionTarget,
 MoldStress, ReverseSystem and the AthermalAnalysis window do not - Cancel does
 nothing there and the run continues to completion.
 

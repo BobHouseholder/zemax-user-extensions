@@ -11,9 +11,9 @@ Ribbon runs report through OpticStudio's progress display and auto-open
 report/image outputs (`-quiet` disables that). Tools that edit the system show
 the edits live.
 
-**Terminate is honoured by nine of the fourteen.** AthermalScan, DetectorDump,
+**Terminate is honoured by ten of the fifteen.** AthermalScan, DetectorDump,
 DetectorPowerSum, EquivalentGlassFinder, LayoutRender, GpimGhostReduce, FootprintDxf,
-RayExtentEnvelope and ElementLeaveOneOut poll `TerminateRequested` inside their loops.
+RayExtentEnvelope, ElementLeaveOneOut and StartPointFinder poll `TerminateRequested` inside their loops.
 CryoGlass, DistortionTarget, MoldStress, ReverseSystem and the AthermalAnalysis window do
 not — Cancel does nothing there. That gap matters most on DistortionTarget and MoldStress. OpticStudio's template checks the flag
 once before your code runs, which is why checking it is not the same as honouring
@@ -248,6 +248,43 @@ Options: `-save`, `-out <path>`, `-inplace`/`-apply`, `-keepconj`, `-refocus`, `
 
 **Safety (PR1 / H1):** default refuses attach+in-place reverse; use `-save`/`-out` (CopySystem) or `-inplace`/`-apply`.
 
+### StartPointFinder
+
+Builds a new intermediate **starting design** from a folder of similar
+sequential imaging objectives (same glass/air layout and object distance, e.g.
+several Double Gauss lenses) for the **F/# and half field you ask for** (`-fno`,
+`-hfov`, or a small window after the folder pick; default = the folder's
+medians; values outside the inputs' min..max are refused unless `-clamp`; an
+F/# + field pair outside the inputs' hull gets a 2D-extrapolation warning).
+By default (`-start best`) every input scaled to the request and a blend of
+the Standard-surface inputs are scored with the same RMS-spot merit function
+(thickness fences and track limits from the inputs) before optimizing; the 3
+best-scored starts are optimized (if none of them passes the checks, the next
+ones are tried; `-top N`; `-top all` optimizes every start),
+each optimized lens gets the same checks as the final result (focal length,
+F/#, field, track, glass and edge thickness, rays through every surface,
+pupil-edge rays at every field, defined sag), and the lowest merit among those
+that pass wins; the screen ranking and all optimized candidates are printed
+with the runtime. Optional `-hammer SEC` polishes the 3 best passing lenses
+(wall-time limited, so results vary slightly by PC) and keeps the best. `-start
+nearest|blend` forces one. Distances use the folder's own F/# and field
+spread; for a field request, on-axis-only inputs get a distance penalty and stay out of the blend. Even Asphere / Zernike /
+Paraxial designs are candidates (rebuilt from their own file, asphere terms
+fixed) but never blended. Skips duplicates, glass that does not resolve (names
+the missing catalog), unphysical files, other surface types, mirrors, NSC and
+mismatched layouts or object distances, with a count per reason; `-layout`
+picks another family. Inputs are never written; outputs go to
+`<folder>\_StartPointFinder\` (`-force` to replace). From the ribbon it
+offers to open the result in the main window (default No).
+
+Options: `-dir <folder>` (else folder picker), `-out <dir>`, `-fno`, `-hfov`, `-efl`,
+`-clamp`, `-start best|nearest|blend`, `-layout <fingerprint>`, `-weight near|soft|equal`,
+`-glass nearest|majority`, `-passes K`, `-hammer SEC`, `-top N|all`, `-compare reopt|refocus|none`,
+`-min N`, `-force`, `-ask`, `-nopng`, `-nodialog`, `-quiet`. Exit 3 = result written but
+outside the envelope check.
+
+Python (ZOS-API) twin: [`python/StartPointFinder/`](python/StartPointFinder/) (not packed into the Extensions zip).
+
 
 
 ## Python (ZOS-API)
@@ -274,6 +311,7 @@ into the Extensions zip). Shared DLL discovery / `CreateNewApplication` helpers:
 | [`python/AthermalScan/`](python/AthermalScan/) | `athermal_scan.py` |
 | [`python/AthermalAnalysis/`](python/AthermalAnalysis/) | `athermal_analysis.py` (thin wrapper → AthermalScan) |
 | [`python/MoldStress/`](python/MoldStress/) | `mold_stress.py` (`-run` / `-writecatalog` surface) |
+| [`python/StartPointFinder/`](python/StartPointFinder/) | `start_point_finder.py` |
 
 Set `ZEMAX_ROOT` to the OpticStudio install folder that contains `ZOSAPI.dll`.
 Prefer `-file <zmx>` standalone runs. Parent smokes on Windows with a licensed machine.
@@ -288,7 +326,7 @@ Get-ChildItem extensions -Filter *.csproj -Recurse -Depth 1 |
     ForEach-Object { dotnet build $_.FullName --configuration Release }
 ```
 
-That is thirteen User Extensions plus the AthermalAnalysis User Analysis. csproj
+That is fourteen User Extensions plus the AthermalAnalysis User Analysis. csproj
 defaults stay **x64**. An x86 ribbon listing (needed on OpticStudio 2026 R1.01
 here) is an override, not a project edit:
 
@@ -310,7 +348,7 @@ on the next run.
 [Releases](https://github.com/BobHouseholder/zemax-user-extensions/releases)
 (also mirrored under [`dist/`](dist/) on `main`). Extract, read `INSTALL.txt`,
 drag the `ZOS-API` folder onto the Zemax **data** folder (not into `Extensions`
-- one of the fourteen is a User Analysis). Binaries are **x64** .NET Framework 4.8,
+- one of the fifteen is a User Analysis). Binaries are **x64** .NET Framework 4.8,
 unsigned; `INSTALL.txt` has `Unblock-File`. Built against the OpticStudio release
 named in the zip / `manifest.txt` (ZOS-API resolves at run time against yours).
 
