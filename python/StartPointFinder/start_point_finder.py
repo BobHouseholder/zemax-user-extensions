@@ -15,6 +15,9 @@
 #      does not resolve (catalog not installed) or whose numbers
 #      are absurd (EFL 1e10, F/0.001) is skipped with the reason.
 #      Byte-identical files (and identical prescriptions) count once.
+#      Files in inches, cm or m are converted to mm in memory (the
+#      file itself is never changed), so every number is in mm.
+#      Zoom files (more than one configuration) are skipped.
 #   2) Keeps only the files that share one lens layout AND one
 #      object distance (infinite, or the same finite distance) and
 #      skips the odd ones out, with a count per reason. -layout
@@ -59,6 +62,9 @@
 # No -dir: a folder picker opens, then a small window asks for
 # F/# and field (tkinter). The Python twin always runs its own
 # OpticStudio (standalone), so it never touches an open session.
+# With a window (no -dir, or -ask) every error or refusal also pops
+# up a message, and when the folder already holds a result it asks:
+# Replace / New folder / Cancel.
 #
 # Exit codes: 0 ok, 1 error, 2 refused (bad inputs / target
 # outside the envelope / outputs exist without -force),
@@ -112,6 +118,8 @@ PASSES: int = 3  # how many automatic DLS runs (stops early when stuck)
 HAMMER_SEC: int = 0  # optional Hammer time in seconds per polished lens (0 = off)
 TOP_N: int = 3  # -top: in -start best, optimize only this many best-screened starts (0 = all)
 HAMMER_KEEP = 3  # -hammer polishes this many of the best optimized lenses that pass the checks
+HAMMER_MAX = 600  # largest Hammer time (s) per lens, for -hammer and the F/# window alike
+BIG_FOLDER = 200  # more .zmx files than this: warn (and ask, with a window) before reading
 COMPARE: str = "reopt"  # how to score the inputs at the target point
 MIN_GROUP: int = 2  # need at least this many matching designs
 FORCE: bool = False
@@ -120,6 +128,8 @@ NO_DIALOG: bool = False
 QUIET: bool = False
 
 REPORT_LINES: List[str] = []
+RUN_OUTS: Optional[Dict[str, str]] = None  # this run's output paths (so a failed run can tidy up)
+RUN_WROTE_RESULT = False  # did this run save a result/start .zmx yet?
 
 # Steering by F/# and field (see norm_dist): NEAR_EPS softens an exact match;
 # FAR_DIST = farther than this from every input means "warn"; ON_AXIS_PENALTY
@@ -146,9 +156,11 @@ OUT_NAMES = {
 
 class ToolExit(Exception):
     # Stop the tool with a known exit code (2 = refused, 3 = result outside envelope).
-    def __init__(self, code: int, message: str) -> None:
+    # user_cancel = the user pressed Cancel; that needs no error pop-up.
+    def __init__(self, code: int, message: str, user_cancel: bool = False) -> None:
         super().__init__(message)
         self.code = code
+        self.user_cancel = user_cancel
 
 
 @dataclass
@@ -198,6 +210,8 @@ class Design:
     spot_reopt_um: float = float("nan")
     reopt_pass: bool = True  # did its optimized version pass the result checks?
     note: str = ""
+    units: str = "mm"  # the file's own lens units (numbers above are always mm)
+    ray_aim: int = 0  # the file's ray aiming: 0 off, 1 paraxial, 2 real
 
     @property
     def track_ratio(self) -> float:
@@ -315,17 +329,17 @@ def parse_args(argv: List[str]) -> None:
             elif a == "glass":
                 GLASS_MODE = pick(next_tok(), ("nearest", "majority"), raw)
             elif a == "passes":
-                PASSES = max(1, int(parse_float(next_tok(), raw)))
+                PASSES = whole_num(next_tok(), raw, 1, 100)
             elif a == "hammer":
-                HAMMER_SEC = max(0, int(parse_float(next_tok(), raw)))
+                HAMMER_SEC = whole_num(next_tok(), raw, 0, HAMMER_MAX)
             elif a == "top":
                 # "-top all" = optimize every start (the v2 behavior); "-top N" = only the N best-screened.
                 tok = next_tok()
-                TOP_N = 0 if tok.strip().lower() == "all" else max(1, int(parse_float(tok, raw)))
+                TOP_N = 0 if tok.strip().lower() == "all" else whole_num(tok, raw, 1, 100000)
             elif a == "compare":
                 COMPARE = pick(next_tok(), ("reopt", "refocus", "none"), raw)
             elif a == "min":
-                MIN_GROUP = max(2, int(parse_float(next_tok(), raw)))
+                MIN_GROUP = whole_num(next_tok(), raw, 2, 100000)
             elif a == "force":
                 FORCE = True
             elif a == "nopng":
@@ -342,10 +356,66 @@ def parse_args(argv: List[str]) -> None:
 
 
 def parse_float(s: str, flag: str) -> float:
+    """A normal number (nan, inf and 1e999 are refused: they would only cause trouble later)."""
     try:
-        return float(s)
+        v = float(s)
     except ValueError:
+        v = float("nan")
+    if not finite(v):
         raise RuntimeError("flag " + flag + " needs a number, got " + repr(s))
+    return v
+
+
+def whole_num(s: str, flag: str, lo: int, hi: int) -> int:
+    """A whole number from lo to hi ("2.9" or "1e10" is refused instead of being cut)."""
+    t = (s or "").strip()
+    body = t[1:] if t[:1] in "+-" else t
+    if body.isascii() and body.isdigit() and lo <= int(t) <= hi:
+        return int(t)
+    raise RuntimeError("flag {} needs a whole number from {} to {}, got {!r}".format(flag, lo, hi, s))
+
+
+def interactive() -> bool:
+    """Pop-ups are for people: no -dir (folder picker) or -ask, never with -nodialog."""
+    return not NO_DIALOG and (not DIR_PATH or ASK)
+
+
+def pop_up(text: str, is_error: bool) -> None:
+    """Show a message box when someone is watching; the console line is always printed too."""
+    if not interactive():
+        return
+    try:
+        import tkinter
+        from tkinter import messagebox
+        root = tkinter.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        (messagebox.showerror if is_error else messagebox.showwarning)(TOOL, text, parent=root)
+        root.destroy()
+    except Exception:
+        pass  # a pop-up that cannot show must never crash the tool
+
+
+def report_hint() -> str:
+    """' Details: <report path>' when a report was written, so the pop-up says where to look."""
+    if RUN_OUTS and os.path.exists(RUN_OUTS["report"]):
+        return "\n\nDetails: " + RUN_OUTS["report"]
+    return ""
+
+
+def tidy_failed_run() -> None:
+    """
+    A run that stopped with an error or a refusal must not leave a result behind
+    that blocks the next run (or looks finished when it is not): delete the
+    result/start .zmx this run wrote, and any temp lenses. The report stays.
+    """
+    if not RUN_OUTS:
+        return
+    if RUN_WROTE_RESULT:
+        try_delete(RUN_OUTS["result"])
+        try_delete(RUN_OUTS["start"])
+        print("Removed this run's unfinished result files.")
+    delete_temp_lenses(os.path.dirname(RUN_OUTS["result"]))
 
 
 def pick(value: str, allowed: Tuple[str, ...], flag: str) -> str:
@@ -376,7 +446,7 @@ def choose_folder() -> str:
     except Exception as ex:
         raise ToolExit(2, "folder dialog failed (" + str(ex) + "); pass -dir <folder>")
     if not picked:
-        raise ToolExit(2, "no folder picked")
+        raise ToolExit(2, "no folder picked", True)
     FOLDER_FROM_DIALOG = True
     return picked
 
@@ -390,12 +460,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         parse_args(list(argv if argv is not None else sys.argv[1:]))
     except Exception as ex:
         print("FATAL: " + str(ex))
+        pop_up("StartPointFinder could not start:\n\n" + str(ex), True)
         return 1
 
     try:
         zos_root = discover_zos_root()
     except Exception as ex:
         print("FATAL: failed to locate an OpticStudio installation.  " + str(ex))
+        pop_up("StartPointFinder: failed to locate an OpticStudio installation.  " + str(ex), True)
         return 1
 
     app = None
@@ -407,14 +479,24 @@ def main(argv: Optional[List[str]] = None) -> int:
         if app is None or app.PrimarySystem is None:
             raise RuntimeError("could not start a standalone OpticStudio instance")
         if not app.IsValidLicenseForAPI:
-            raise RuntimeError("license is not valid for ZOS-API: " + str(app.LicenseStatus))
+            raise RuntimeError("the license is not valid for ZOS-API (status: " + str(app.LicenseStatus) + ")")
         return run(ZOSAPI, app.PrimarySystem, folder)
     except ToolExit as tex:
         say("FATAL: " + str(tex))
+        # Exit 3 keeps its result (it was written on purpose); any other stop tidies up.
+        if tex.code != 3:
+            tidy_failed_run()
+        if not tex.user_cancel:
+            if tex.code == 3:
+                pop_up("The result was saved, but it FAILED the final check:\n\n" + str(tex) + report_hint(), False)
+            else:
+                pop_up("StartPointFinder stopped (exit {}):\n\n{}{}".format(tex.code, tex, report_hint()), True)
         return int(tex.code)
     except Exception as ex:
         say("FATAL: " + str(ex))
         traceback.print_exc()
+        tidy_failed_run()
+        pop_up("StartPointFinder hit an error:\n\n" + str(ex) + report_hint(), True)
         return 1
     finally:
         if app is not None:
@@ -438,25 +520,40 @@ def run(Z, S, folder: str) -> int:
     5) Closeness + blend recipe.
     6) Try every candidate start, keep the best (or the forced one), check, write files.
     """
-    global AVAIL_CATS
+    global AVAIL_CATS, RUN_OUTS
     clock = time.monotonic()
     folder = os.path.abspath(folder)
     if not os.path.isdir(folder):
         raise ToolExit(2, "folder not found: " + folder)
-    files = sorted(
+    every = sorted(
         (str(p) for p in Path(folder).iterdir()
          if p.is_file() and p.suffix.lower() == ".zmx"),
         key=lambda p: os.path.basename(p).upper(),  # same order as C# OrdinalIgnoreCase
     )
+    # Our own earlier outputs (StartPointFinder_result.zmx, temp lenses...) are not inputs:
+    # reading them would let an old result steer the new one.
+    files = [f for f in every if not is_own_output(f)]
     say("=== " + TOOL + " ===")
     say("Folder: " + folder)
+    if len(files) < len(every):
+        say("Ignored {} earlier {} output file(s) in the folder (they are results, not inputs).".format(
+            len(every) - len(files), TOOL))
     if not files:
         raise ToolExit(2, "no .zmx files in " + folder)
     say("Found {} .zmx file(s).".format(len(files)))
+    if len(files) > BIG_FOLDER:
+        # Every file is opened, and every kept one is built and scored once ("the screen").
+        mins = len(files) * 1.5 / 60.0
+        say("  Large folder: {} files. Reading and screening take roughly {:.0f} min before any optimizing.".format(
+            len(files), mins))
+        if interactive() and not ask_yes_no("The folder has {} lens files. Reading and screening them all takes "
+                                            "roughly {:.0f} minutes.\n\nContinue?".format(len(files), mins)):
+            raise ToolExit(2, "cancelled: large folder", True)
 
     out_dir = os.path.abspath(OUT_DIR or os.path.join(folder, "_" + TOOL))
-    outs = {k: os.path.join(out_dir, v) for k, v in OUT_NAMES.items()}
-    guard_outputs(outs, files)
+    out_dir = guard_outputs(out_dir, folder, files)
+    outs = out_paths(out_dir)
+    RUN_OUTS = outs  # from here on a failed run tidies up after itself
 
     # 1) read (the installed catalog list lets a skip reason name a missing catalog)
     AVAIL_CATS = installed_catalogs(S)
@@ -503,8 +600,15 @@ def run(Z, S, folder: str) -> int:
         ask_targets(group, env)
     target = pick_target(env)
     target["obj"] = obj
-    say("Target: EFL {}  F/{}  half-FOV {} deg".format(
+    say("Target: EFL {} mm  F/{}  half-FOV {} deg".format(
         g(target["efl"]), g(target["fno"]), g(target["hfov"])))
+    # Every candidate is scored with ray aiming off (like a new lens), so a lens rebuilt
+    # from its own file and a lens built from numbers are scored alike. Say so when
+    # some inputs had it on: the user may want to switch it back on afterward.
+    aimed = [d for d in group if d.ray_aim != 0]
+    if aimed:
+        say("  Ray aiming: off for every candidate ({} of {} inputs use {}); turn it on in OpticStudio afterward if your design needs it.".format(
+            len(aimed), len(group), ray_aim_name(aimed[0].ray_aim)))
     pair = pair_check(group, target["fno"], target["hfov"])
     say("  " + pair["text"])
     if pair["warn"]:
@@ -552,77 +656,80 @@ def run(Z, S, folder: str) -> int:
     reopt = COMPARE == "reopt"
     # The top-N screen only applies to -start best with the full re-optimized comparison.
     screen = mode == "best" and reopt and TOP_N > 0
-    if screen:
-        # Step A: build and score every start WITHOUT optimizing (fast: no DLS at all).
-        say("Screening every start at the request (sized + refocused, no optimization):")
-        for d in group:
-            c = evaluate(Z, S, x, "input", d, None, False)
-            d.mf_refocus = c.mf_start
-            cands.append(c)
-        if blend_ok:
-            cands.append(evaluate(Z, S, x, "blend", None, blend_rx, False))
-        set_screen_ranks(cands)
-        picked = {id(c) for c in cands if 0 < c.screen_rank <= TOP_N}
-        for c in sorted(cands, key=lambda c: c.screen_rank):
-            say("  #{:<2} {:<34} start MF {:>12}{}{}".format(
-                c.screen_rank, c.label, g(c.mf_start), "   -> optimize" if id(c) in picked else "",
-                "   (" + c.note + ")" if c.note else ""))
-        say("Optimizing the {} best-screened start(s) of {} (-top {}; -top all optimizes every start):".format(
-            len(picked), len(cands), TOP_N))
-        # Step B: optimize only the picked starts, best-screened first. Each is rebuilt exactly
-        # as in the screen (same numbers), so its result is the same as when every start was optimized.
-        # Safety net: if none of the top N passes the checks, keep going down the screen
-        # list one start at a time until one passes (or every start has been tried).
-        fallback_said = False
-        for i in sorted(range(len(cands)), key=lambda i: cands[i].screen_rank):
-            c = cands[i]
-            if id(c) not in picked:
-                if any(o.optimized and o.passed for o in cands):
-                    if c.d is not None:
-                        c.d.note = "not optimized (screen rank {} of {}; -top {})".format(c.screen_rank, len(cands), TOP_N)
-                    continue
-                if not fallback_said:
-                    say("  None of the top {} passed the checks; optimizing the next screened start(s) until one passes:".format(TOP_N))
-                    fallback_said = True
-            rank = c.screen_rank
-            c = evaluate(Z, S, x, c.kind, c.d, blend_rx if c.kind == "blend" else None, True)
-            c.screen_rank = rank
-            cands[i] = c
-            if c.d is not None:
-                c.d.mf_reopt, c.d.spot_reopt_um, c.d.reopt_pass = c.mf, c.spot, c.passed
-            say("  #{:<2} {:<34} start MF {:>12} -> MF {:>12}  spot {:>8} um{}".format(
-                rank, c.label, g(c.mf_start), g(c.mf), g(c.spot, 4),
-                "   FAILS CHECK: " + c.fail if c.optimized and not c.passed else ""))
-    else:
-        if COMPARE != "none":
-            say("Scoring every kept input at the request ({}):".format(COMPARE))
+    # Temp lenses must go on every way out (error, Ctrl+C), not only on success.
+    try:
+        if screen:
+            # Step A: build and score every start WITHOUT optimizing (fast: no DLS at all).
+            say("Screening every start at the request (sized + refocused, no optimization):")
             for d in group:
-                c = evaluate(Z, S, x, "input", d, None, reopt)
+                c = evaluate(Z, S, x, "input", d, None, False)
                 d.mf_refocus = c.mf_start
-                if reopt:
-                    d.mf_reopt, d.spot_reopt_um, d.reopt_pass = c.mf, c.spot, c.passed
-                    cands.append(c)
-                say("  {:<28} refocus MF {:>12}   reopt MF {:>12}   reopt spot {:>8} um{}{}".format(
-                    d.name, g(d.mf_refocus), g(d.mf_reopt), g(d.spot_reopt_um, 4),
-                    "   (own file, scaled)" if d.is_special else "",
+                cands.append(c)
+            if blend_ok:
+                cands.append(evaluate(Z, S, x, "blend", None, blend_rx, False))
+            set_screen_ranks(cands)
+            picked = {id(c) for c in cands if 0 < c.screen_rank <= TOP_N}
+            for c in sorted(cands, key=lambda c: c.screen_rank):
+                say("  #{:<2} {:<34} start MF {:>12}{}{}".format(
+                    c.screen_rank, c.label, g(c.mf_start), "   -> optimize" if id(c) in picked else "",
+                    "   (" + c.note + ")" if c.note else ""))
+            say("Optimizing the {} best-screened start(s) of {} (-top {}; -top all optimizes every start):".format(
+                len(picked), len(cands), TOP_N))
+            # Step B: optimize only the picked starts, best-screened first. Each is rebuilt exactly
+            # as in the screen (same numbers), so its result is the same as when every start was optimized.
+            # Safety net: if none of the top N passes the checks, keep going down the screen
+            # list one start at a time until one passes (or every start has been tried).
+            fallback_said = False
+            for i in sorted(range(len(cands)), key=lambda i: cands[i].screen_rank):
+                c = cands[i]
+                if id(c) not in picked:
+                    if any(o.optimized and o.passed for o in cands):
+                        if c.d is not None:
+                            c.d.note = "not optimized (screen rank {} of {}; -top {})".format(c.screen_rank, len(cands), TOP_N)
+                        continue
+                    if not fallback_said:
+                        say("  None of the top {} passed the checks; optimizing the next screened start(s) until one passes:".format(TOP_N))
+                        fallback_said = True
+                rank = c.screen_rank
+                c = evaluate(Z, S, x, c.kind, c.d, blend_rx if c.kind == "blend" else None, True)
+                c.screen_rank = rank
+                cands[i] = c
+                if c.d is not None:
+                    c.d.mf_reopt, c.d.spot_reopt_um, c.d.reopt_pass = c.mf, c.spot, c.passed
+                say("  #{:<2} {:<34} start MF {:>12} -> MF {:>12}  spot {:>8} um{}".format(
+                    rank, c.label, g(c.mf_start), g(c.mf), g(c.spot, 4),
                     "   FAILS CHECK: " + c.fail if c.optimized and not c.passed else ""))
-        # Inputs not optimized above: the nearest input is still a candidate.
-        if not reopt and pair["nearest"] is not None and mode != "blend":
-            cands.append(evaluate(Z, S, x, "input", pair["nearest"], None, True))
-        if blend_ok and (mode != "nearest" or COMPARE != "none"):
-            cands.append(evaluate(Z, S, x, "blend", None, blend_rx, True))
-        set_screen_ranks(cands)
-    try_delete(x["tmp"])
-    chosen: Optional[Cand] = x["chosen"]
-    if chosen is None:
-        cleanup_cand_files(cands)
-        raise ToolExit(1, "no candidate start could be built and optimized (see the lines above)")
+        else:
+            if COMPARE != "none":
+                say("Scoring every kept input at the request ({}):".format(COMPARE))
+                for d in group:
+                    c = evaluate(Z, S, x, "input", d, None, reopt)
+                    d.mf_refocus = c.mf_start
+                    if reopt:
+                        d.mf_reopt, d.spot_reopt_um, d.reopt_pass = c.mf, c.spot, c.passed
+                        cands.append(c)
+                    say("  {:<28} refocus MF {:>12}   reopt MF {:>12}   reopt spot {:>8} um{}{}".format(
+                        d.name, g(d.mf_refocus), g(d.mf_reopt), g(d.spot_reopt_um, 4),
+                        "   (own file, scaled)" if d.is_special else "",
+                        "   FAILS CHECK: " + c.fail if c.optimized and not c.passed else ""))
+            # Inputs not optimized above: the nearest input is still a candidate.
+            if not reopt and pair["nearest"] is not None and mode != "blend":
+                cands.append(evaluate(Z, S, x, "input", pair["nearest"], None, True))
+            if blend_ok and (mode != "nearest" or COMPARE != "none"):
+                cands.append(evaluate(Z, S, x, "blend", None, blend_rx, True))
+            set_screen_ranks(cands)
+        try_delete(x["tmp"])
+        chosen: Optional[Cand] = x["chosen"]
+        if chosen is None:
+            raise ToolExit(1, "no candidate start could be built and optimized (see the lines above)")
 
-    # Optional Hammer polish: the best few lenses that pass the checks (or just the forced
-    # keeper for -start nearest/blend), then keep the best again. It writes the keeper's files.
-    if HAMMER_SEC > 0:
-        chosen = hammer_polish(Z, S, x, cands, chosen)
-    cleanup_cand_files(cands)
+        # Optional Hammer polish: the best few lenses that pass the checks (or just the forced
+        # keeper for -start nearest/blend), then keep the best again. It writes the keeper's files.
+        if HAMMER_SEC > 0:
+            chosen = hammer_polish(Z, S, x, cands, chosen)
+    finally:
+        try_delete(x["tmp"])
+        cleanup_cand_files(cands)
     S.LoadFile(outs["result"], False)
     mf_result = chosen.mf
     mf_start = chosen.mf_start
@@ -724,6 +831,7 @@ def evaluate(Z, S, x, kind: str, d: Optional[Design], rx, optimize_it: bool) -> 
     this mode wants (best = passes the checks, then lowest MF so far). The keeper's start and result are
     written right away, so nothing has to be rebuilt at the end.
     """
+    global RUN_WROTE_RESULT
     c = Cand(kind=kind, d=d, label="blend of {} designs".format(x["blend_count"]) if kind == "blend" else d.name)
     try:
         t = x["target"]
@@ -769,6 +877,7 @@ def evaluate(Z, S, x, kind: str, d: Optional[Design], rx, optimize_it: bool) -> 
         else:
             keep = kind == "input" and d is x["pair"]["nearest"]
         if keep:
+            RUN_WROTE_RESULT = True  # set first: a half-written pair is tidied up too
             S.SaveAs(x["outs"]["result"])
             shutil.copyfile(x["tmp"], x["outs"]["start"])
             x["chosen"] = c
@@ -816,6 +925,7 @@ def hammer_polish(Z, S, x, cands: List[Cand], chosen: Cand) -> Cand:
     A polished lens that now FAILS the checks is not used when its DLS version passed.
     Writes the keeper's result and start files and returns the (possibly new) keeper.
     """
+    global RUN_WROTE_RESULT
     if x["mode"] == "best":
         polish = [c for c in ranked_cands(cands) if c.passed][:HAMMER_KEEP] or [chosen]
     else:
@@ -830,8 +940,10 @@ def hammer_polish(Z, S, x, cands: List[Cand], chosen: Cand) -> Cand:
         fo = measure(Z, S, t["obj"])
         chk = validate(Z, S, fo, t, x["env"], x["bounds"], mf_h)
         fail_h = "; ".join(short_check(text) for text, ok in chk["items"] if not ok)
-        # Use the polished lens when it passes, or when neither version passes and it scores lower.
-        use = finite(mf_h) and (chk["pass"] or (not c.passed and mf_h < c.mf))
+        # Use the polished lens when it passes and is not worse than the DLS lens (or the
+        # DLS lens failed anyway), or when neither version passes and it scores lower.
+        worse = finite(c.mf) and mf_h > c.mf
+        use = finite(mf_h) and ((chk["pass"] and (not c.passed or not worse)) or (not c.passed and mf_h < c.mf))
         if use:
             ham_path = c.opt_path.replace(".tmp.zmx", "_ham.tmp.zmx")
             S.SaveAs(ham_path)
@@ -839,17 +951,22 @@ def hammer_polish(Z, S, x, cands: List[Cand], chosen: Cand) -> Cand:
             c.mf, c.spot, c.passed, c.fail, c.edge_ok = mf_h, fo["spot_um"], chk["pass"], fail_h, chk["edge_ok"]
             c.hammered = True
             c.ham_note = "Hammer {} -> {}".format(g(c.mf_dls), g(mf_h))
+        elif not finite(mf_h):
+            c.ham_note = "Hammer gave no usable score; kept DLS"
+        elif chk["pass"] and worse:
+            c.ham_note = "Hammer result {} is worse than DLS; kept DLS".format(g(mf_h))
         else:
             c.ham_note = "Hammer result {} failed checks ({}); kept DLS".format(g(mf_h), fail_h)
         say("  {:<34} DLS MF {:>12} -> Hammer MF {:>12}  spot {:>8} um  {}".format(
             c.label, g(c.mf_dls), g(mf_h), g(fo["spot_um"], 4),
-            "used" if use else "NOT used (fails: " + fail_h + ")"))
+            "used" if use else "NOT used (" + c.ham_note + ")"))
     # Pick the keeper again among every optimized candidate (polished ones now carry Hammer numbers).
     if x["mode"] == "best":
         for c in ranked_cands(cands):
             if finite(c.mf) and better(c, chosen):
                 chosen = c
     if chosen.opt_path and os.path.exists(chosen.opt_path):
+        RUN_WROTE_RESULT = True
         shutil.copyfile(chosen.opt_path, x["outs"]["result"])
         shutil.copyfile(chosen.start_path, x["outs"]["start"])
     x["chosen"] = chosen
@@ -924,16 +1041,145 @@ def write_report(outs: Dict[str, str]) -> None:
         fh.write("\n".join(REPORT_LINES) + "\n")
 
 
-def guard_outputs(outs: Dict[str, str], inputs: List[str]) -> None:
-    """Never write over an input; only overwrite old outputs with -force."""
+def out_paths(out_dir: str) -> Dict[str, str]:
+    """The 6 output files of a run in one folder."""
+    return {k: os.path.join(out_dir, v) for k, v in OUT_NAMES.items()}
+
+
+def guard_outputs(out_dir: str, folder: str, inputs: List[str]) -> str:
+    """
+    Decide where this run writes, before anything is read:
+    - never into the input folder itself (the results would be read as inputs next time);
+    - never over an input file;
+    - an earlier RESULT there is only replaced with -force, or after asking (window):
+      Replace / New folder (_StartPointFinder_2, _3, ...) / Cancel;
+    - leftovers of a run that never finished (report or tables without a result, temp
+      lenses) never block: they are cleared, like every old output we are about to rewrite,
+      so the folder never mixes files from two runs.
+    Returns the output folder to use.
+    """
+    if same_path(out_dir, folder):
+        raise ToolExit(2, "the output folder is the input folder (" + out_dir
+                       + "); the results would be read as inputs next time. Pick another -out folder.")
     low_inputs = {os.path.normcase(os.path.abspath(p)) for p in inputs}
-    for path in outs.values():
+    for path in out_paths(out_dir).values():
         if os.path.normcase(path) in low_inputs:
             raise ToolExit(2, "output would overwrite an input: " + path)
-    existing = [p for p in outs.values() if os.path.exists(p)]
-    if existing and not FORCE:
-        raise ToolExit(
-            2, "outputs already exist (pass -force to replace them): " + existing[0])
+    if os.path.exists(out_paths(out_dir)["result"]) and not FORCE:
+        if not interactive():
+            raise ToolExit(2, "a result already exists (pass -force to replace it): " + out_paths(out_dir)["result"])
+        fresh = next_free_dir(out_dir)
+        answer = ask_replace(out_dir, fresh)
+        if answer == "replace":
+            say("Replacing the earlier result in " + out_dir + " (you chose Replace).")
+        elif answer == "new":
+            out_dir = fresh
+            say("Writing to a new folder: " + out_dir + " (you chose New folder).")
+        else:
+            raise ToolExit(2, "cancelled: a result already exists in " + out_dir, True)
+    # Clear our own old files here (only the 6 output names and our temp lenses).
+    cleared = 0
+    for p in out_paths(out_dir).values():
+        if os.path.exists(p):
+            try_delete(p)
+            cleared += 1
+    cleared += delete_temp_lenses(out_dir)
+    if cleared:
+        say("Cleared {} old output file(s) in {}.".format(cleared, out_dir))
+    return out_dir
+
+
+def ask_replace(out_dir: str, fresh: str) -> str:
+    """
+    The question when the folder already holds a result: "replace", "new" (folder)
+    or "cancel". A tiny window with plain button names; Enter = New folder (safe).
+    """
+    try:
+        import tkinter as tk
+    except Exception:
+        return "cancel"
+    answer = {"v": "cancel"}
+    root = tk.Tk()
+    root.title(TOOL + ": earlier result found")
+    root.attributes("-topmost", True)
+    root.resizable(False, False)
+    tk.Label(root, justify="left", wraplength=480, text=(
+        "This folder already holds a StartPointFinder result:\n" + out_dir
+        + "\n\nReplace it, or write this run to a new folder (" + os.path.basename(fresh) + ")?")).pack(
+        padx=12, pady=12, anchor="w")
+    row = tk.Frame(root)
+    row.pack(padx=12, pady=(0, 12), anchor="e")
+
+    def choose(v: str) -> None:
+        answer["v"] = v
+        root.destroy()
+
+    tk.Button(row, text="Replace", width=12, command=lambda: choose("replace")).pack(side="left", padx=4)
+    new_btn = tk.Button(row, text="New folder", width=12, command=lambda: choose("new"))
+    new_btn.pack(side="left", padx=4)
+    tk.Button(row, text="Cancel", width=12, command=lambda: choose("cancel")).pack(side="left", padx=4)
+    root.bind("<Return>", lambda e: choose("new"))
+    root.bind("<Escape>", lambda e: choose("cancel"))
+    root.protocol("WM_DELETE_WINDOW", lambda: choose("cancel"))
+    new_btn.focus_set()
+    root.mainloop()
+    return answer["v"]
+
+
+def ask_yes_no(text: str) -> bool:
+    """A plain Yes/No question box (tkinter)."""
+    try:
+        import tkinter
+        from tkinter import messagebox
+        root = tkinter.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        ok = messagebox.askyesno(TOOL, text, parent=root)
+        root.destroy()
+        return bool(ok)
+    except Exception:
+        return True  # no window possible: carry on, the console already says it
+
+
+def next_free_dir(out_dir: str) -> str:
+    """The first of dir_2, dir_3, ... that has no result in it yet."""
+    base = out_dir.rstrip("\\/")
+    k = 2
+    while os.path.exists(out_paths(base + "_" + str(k))["result"]):
+        k += 1
+    return base + "_" + str(k)
+
+
+def same_path(a: str, b: str) -> bool:
+    """Same folder? (full paths, any case, with or without a trailing slash)"""
+    return os.path.normcase(os.path.abspath(a)).rstrip("\\/") == os.path.normcase(os.path.abspath(b)).rstrip("\\/")
+
+
+def is_own_output(path: str) -> bool:
+    """A file this tool writes (result, start, temp lenses), not a design someone made."""
+    n = os.path.basename(path).lower()
+    if not n.startswith(TOOL.lower() + "_"):
+        return False
+    return n.endswith(".tmp.zmx") or n in {v.lower() for v in OUT_NAMES.values()}
+
+
+def delete_temp_lenses(folder: str) -> int:
+    """Delete our temp lenses (StartPointFinder_*.tmp.zmx and their side files) in a folder."""
+    k = 0
+    try:
+        for name in os.listdir(folder):
+            low = name.lower()
+            if low.startswith(TOOL.lower() + "_") and low.endswith(".tmp.zmx"):
+                try_delete(os.path.join(folder, name))
+                k += 1
+    except OSError:
+        pass
+    return k
+
+
+def ray_aim_name(r: int) -> str:
+    """Ray aiming in words (0 off, 1 paraxial, 2 real)."""
+    return {1: "paraxial", 2: "real"}.get(r, "off")
 
 
 # ---------------------------------------------------------------------------
@@ -956,9 +1202,26 @@ def read_design(Z, S, path: str, glass_cache) -> Design:
             return reject(d, "could not load", "could not load")
         if S.Mode != Z.SystemType.Sequential:
             return reject(d, "not a Sequential system", "not sequential")
+        # A zoom lens (several configurations) is several lenses in one file; we would
+        # only see whichever one was active when it was saved, so it is skipped.
+        n_conf = int(S.MCE.NumberOfConfigurations)
+        if n_conf > 1:
+            return reject(d, "has {} configurations (zoom or multi-setup files are not supported)".format(n_conf),
+                          "multi-configuration")
+        # Inches, cm or m: convert the copy in memory to mm (OpticStudio's own unit
+        # conversion; the file on disk is not touched), so every number below is mm.
+        d.units = unit_name(Z, S.SystemData.Units.LensUnits)
+        if d.units != "mm":
+            to_millimeters(Z, S)
+        try:
+            d.ray_aim = int(S.SystemData.RayAiming.RayAiming)
+        except Exception:
+            d.ray_aim = 0
         lde = S.LDE
         n = lde.NumberOfSurfaces
         d.nsurf = n
+        if n < 3:
+            return reject(d, "has no lens surfaces between object and image", "no lens surfaces")
         d.stop = int(lde.StopSurface)
         # Infinite object (objectives) or a finite one; a finite one must match the group's.
         t0 = float(lde.GetSurfaceAt(0).Thickness)
@@ -997,7 +1260,8 @@ def read_design(Z, S, path: str, glass_cache) -> Design:
                 nd, vd = glass_index(Z, S, cat, mat, glass_cache)
                 d.glass_nd_vd[i] = (nd, vd)
                 if not (nd > 1.0001 and vd > 0):
-                    missing = [c for c in d.file_catalogs if c not in AVAIL_CATS]
+                    # Only blame a catalog when we could read the list of installed ones.
+                    missing = [c for c in d.file_catalogs if c not in AVAIL_CATS] if AVAIL_CATS else []
                     if missing:
                         return reject(d, "surface {} glass '{}' does not resolve: catalog {} is not installed".format(
                             i, mat, ", ".join(missing)), "missing glass catalog")
@@ -1021,6 +1285,8 @@ def read_design(Z, S, path: str, glass_cache) -> Design:
             return reject(d, "field type {} is not supported here".format(S.SystemData.Fields.GetFieldType()),
                           "field type")
         d.ok = True
+        if d.units != "mm":
+            say("  {}: lens units {}, converted to mm for this run (file unchanged).".format(d.name, d.units))
         return d
     except Exception as ex:
         return reject(d, "read error: " + str(ex), "read error")
@@ -1030,6 +1296,31 @@ def reject(d: Design, reason: str, cat: str) -> Design:
     """Mark a design skipped with a reason (long) and a category (short)."""
     d.ok, d.reason, d.cat = False, reason, cat
     return d
+
+
+def unit_name(Z, u) -> str:
+    """Lens units as short text: "mm", "cm", "in", "m"."""
+    U = Z.SystemData.ZemaxSystemUnits
+    return {int(U.Millimeters): "mm", int(U.Centimeters): "cm", int(U.Inches): "in"}.get(int(u), "m")
+
+
+def to_millimeters(Z, S) -> None:
+    """
+    Convert the lens in memory to millimeters with OpticStudio's Scale Lens tool
+    ("scale by units": every length, asphere term and aperture is converted, and
+    the lens units become mm). Raises when it does not end up in mm.
+    """
+    sc = S.Tools.OpenScale()
+    if sc is None:
+        raise RuntimeError("could not open the Scale Lens tool to convert units")
+    try:
+        sc.ScaleByUnits = True
+        sc.ScaleToUnit = Z.Tools.General.ScaleToUnits.Millimeters
+        sc.RunAndWaitForCompletion()
+    finally:
+        sc.Close()
+    if unit_name(Z, S.SystemData.Units.LensUnits) != "mm":
+        raise RuntimeError("could not convert the lens units to mm")
 
 
 def read_pars(Z, s) -> List[float]:
@@ -1478,19 +1769,21 @@ def ask_targets(group: List[Design], env) -> None:
     The "what job?" window (interactive use): F/#, half field and EFL, prefilled
     with the folder's medians and showing each min..max. Out-of-range values are
     refused here unless "clamp" is ticked; a 2D-extrapolation pair asks "continue?".
+    It also takes the optional Hammer time (same as -hammer SEC).
     Cancel = exit 2. The answers go into the same globals as the command-line flags.
     """
-    global TARGET_FNO, TARGET_FOV, TARGET_EFL, CLAMP, START_MODE
+    global TARGET_FNO, TARGET_FOV, TARGET_EFL, CLAMP, START_MODE, HAMMER_SEC
     try:
         import tkinter as tk
         from tkinter import messagebox, simpledialog
     except Exception as ex:
         raise ToolExit(2, "F/# and field window failed (" + str(ex) + "); pass -fno/-hfov and -nodialog")
 
-    names = ("F/# (image space)", "Half field of view (deg)", "Focal length EFL (lens units)")
+    names = ("F/# (image space)", "Half field of view (deg)", "Focal length EFL (mm)")
     spans = (env["fno"], env["hfov"], env["efl"])
     given = (TARGET_FNO, TARGET_FOV, TARGET_EFL)
     prefill = ["{:.10g}".format(given[i] if given[i] is not None else spans[i][1]) for i in range(3)]
+    hammer_prefill = str(HAMMER_SEC)  # -hammer value, so it shows up here and can be changed
 
     class TargetDialog(simpledialog.Dialog):
         def body(self, master):
@@ -1521,12 +1814,19 @@ def ask_targets(group: List[Design], env) -> None:
                            value="nearest").pack(side="left")
             tk.Radiobutton(frm, text="blend of the inputs (closest count most)", variable=self.start,
                            value="blend").pack(side="left")
+            # Optional Hammer polish, in whole seconds (0 = off).
+            tk.Label(master, text="Hammer polish (seconds, 0 = off)").grid(row=6, column=0, sticky="w", pady=2)
+            self.hammer = tk.Entry(master, width=12)
+            self.hammer.insert(0, hammer_prefill)
+            self.hammer.grid(row=6, column=1, sticky="w")
+            tk.Label(master, text="polishes the {} best passing lenses; 0 .. {}".format(
+                HAMMER_KEEP, HAMMER_MAX)).grid(row=6, column=2, sticky="w")
             # The inputs' own pairs, so the user can see where designs exist.
             lst = tk.Listbox(master, width=80, height=min(12, len(group)), font=("Courier", 9))
             for d in sorted(group, key=lambda d: (d.fno, d.hfov)):
                 lst.insert("end", "F/{:<7} {:>7} deg  EFL {:<9} {}".format(
                     g(d.fno, 4), g(d.hfov, 4), g(d.efl, 5), d.name))
-            lst.grid(row=6, column=0, columnspan=3, sticky="we", pady=4)
+            lst.grid(row=7, column=0, columnspan=3, sticky="we", pady=4)
             return self.boxes[0]
 
         def validate(self):
@@ -1539,6 +1839,8 @@ def ask_targets(group: List[Design], env) -> None:
                 else:
                     try:
                         v = float(txt.replace(",", "."))
+                        if not finite(v):  # "nan" and "inf" parse, but are not numbers we can use
+                            raise ValueError(txt)
                     except ValueError:
                         messagebox.showerror(TOOL, "{}: '{}' is not a number.".format(names[i], txt), parent=self)
                         return False
@@ -1554,6 +1856,16 @@ def ask_targets(group: List[Design], env) -> None:
             if picked[0] <= 0 or picked[2] <= 0:
                 messagebox.showerror(TOOL, "F/# and EFL must be positive.", parent=self)
                 return False
+            # Hammer box: an untouched box keeps the -hammer value as given (already
+            # checked); anything typed must be a whole number of seconds from 0 to the cap.
+            h_txt = self.hammer.get().strip()
+            hammer_sec = HAMMER_SEC
+            if h_txt != hammer_prefill:
+                if not (h_txt.isascii() and h_txt.isdigit()) or int(h_txt) > HAMMER_MAX:
+                    messagebox.showerror(TOOL, "Hammer polish: '{}' is not a whole number of seconds from 0 to {} "
+                                         "(0 = off).".format(h_txt, HAMMER_MAX), parent=self)
+                    return False
+                hammer_sec = int(h_txt)
             # 2D check: each value may be in range while the pair is not.
             pc = pair_check(group, picked[0], picked[1])
             if pc["warn"] and not messagebox.askyesno(TOOL, pc["text"] + "\n\nNo input was made for this F/# + "
@@ -1561,10 +1873,11 @@ def ask_targets(group: List[Design], env) -> None:
                                                       "Continue?", parent=self):
                 return False
             self.picked = picked
+            self.hammer_sec = hammer_sec
             return True
 
         def apply(self):
-            self.result = (self.picked, self.clamp.get(), self.start.get())
+            self.result = (self.picked, self.clamp.get(), self.start.get(), self.hammer_sec)
 
     root = tk.Tk()
     root.withdraw()
@@ -1572,10 +1885,11 @@ def ask_targets(group: List[Design], env) -> None:
     dlg = TargetDialog(root, title="StartPointFinder: F/# and field of view")
     root.destroy()
     if dlg.result is None:
-        raise ToolExit(2, "cancelled in the F/# and field window")
-    (TARGET_FNO, TARGET_FOV, TARGET_EFL), CLAMP, START_MODE = dlg.result
-    say("Window: F/{}  half-FOV {} deg  EFL {}  start {}{}".format(
-        g(TARGET_FNO), g(TARGET_FOV), g(TARGET_EFL), START_MODE, "  (clamp on)" if CLAMP else ""))
+        raise ToolExit(2, "cancelled in the F/# and field window", True)
+    (TARGET_FNO, TARGET_FOV, TARGET_EFL), CLAMP, START_MODE, HAMMER_SEC = dlg.result  # same path as -hammer SEC
+    say("Window: F/{}  half-FOV {} deg  EFL {}  start {}{}{}".format(
+        g(TARGET_FNO), g(TARGET_FOV), g(TARGET_EFL), START_MODE, "  (clamp on)" if CLAMP else "",
+        "  hammer {} s".format(HAMMER_SEC) if HAMMER_SEC > 0 else ""))
 
 
 def thickness_bounds(group: List[Design]) -> Dict[str, float]:
@@ -1589,6 +1903,10 @@ def thickness_bounds(group: List[Design]) -> Dict[str, float]:
         for s in d.surfs[:-1]:  # last gap is the focus distance; it gets its own rule
             (glass if s.glass else air).append(s.thick / d.efl)
     bfl = [d.surfs[-1].thick / d.efl for d in group]
+    # A layout with no glass at all (e.g. only Paraxial surfaces) has no glass fence:
+    # use a wide one rather than failing on an empty list.
+    if not glass:
+        glass = [0.01, 0.5]
     return {
         "glass_min": 0.8 * min(glass),
         "glass_max": 1.2 * max(glass),
@@ -1669,6 +1987,9 @@ def build_system(Z, S, rx: List[SurfRx], stop: int, target, catalogs: List[str],
     """
     S.New(False)
     sd = S.SystemData
+    # Say mm out loud: a new lens takes the user's default units, which could be inches.
+    sd.Units.LensUnits = Z.SystemData.ZemaxSystemUnits.Millimeters
+    same_settings(Z, S, target)
     efl_t = target["efl"]
     sd.Aperture.ApertureType = Z.SystemData.ZemaxApertureType.EntrancePupilDiameter
     sd.Aperture.ApertureValue = efl_t / target["fno"]
@@ -1734,6 +2055,8 @@ def build_native(Z, S, d: Design, target, title: str) -> None:
             S.MCE.MakeSingleConfiguration()
     except Exception:
         pass
+    if unit_name(Z, S.SystemData.Units.LensUnits) != "mm":
+        to_millimeters(Z, S)  # d.efl is in mm
     try:
         S.Tools.RemoveAllVariables()
     except Exception:
@@ -1798,6 +2121,31 @@ def retarget(Z, S, target) -> None:
     sd.Wavelengths.SelectWavelengthPreset(Z.SystemData.WavelengthPreset.FdC_Visible)
     if finite(target["obj"]):
         S.LDE.GetSurfaceAt(0).Thickness = target["obj"]
+    same_settings(Z, S, target)
+
+
+def same_settings(Z, S, target) -> None:
+    """
+    The same system settings for every candidate, whether it was built from numbers
+    or rebuilt from its own file, so their scores compare fairly: ray aiming off,
+    an evenly lit pupil (no apodization), and 20 C / 1 atm with the glass
+    index not adjusted for temperature (OpticStudio's defaults for a new lens).
+    """
+    sd = S.SystemData
+    try:
+        sd.RayAiming.RayAiming = Z.SystemData.RayAimingMethod.Off
+    except Exception:
+        pass
+    try:
+        sd.Aperture.ApodizationType = Z.SystemData.ZemaxApodizationType.Uniform
+    except Exception:
+        pass
+    try:
+        sd.Environment.AdjustIndexToEnvironment = False
+        sd.Environment.Temperature = 20.0
+        sd.Environment.Pressure = 1.0
+    except Exception:
+        pass
 
 
 def paraxial_focus(Z, S) -> None:
@@ -1842,11 +2190,16 @@ def quick_focus(Z, S) -> None:
 
 def build_merit(Z, S, target, env, bounds) -> None:
     """
-    The report card: OpticStudio default RMS spot (centroid, Gaussian quadrature)
-    with glass/air thickness fences taken from the inputs, plus
-      EFFL  = target focal length (keeps the size right),
-      TOTR  between the shortest and longest input track (scaled),
-      ISFN  shown with weight 0 (F/# is held by fixed pupil + fixed EFL).
+    The report card ("merit function": one number, smaller = better lens):
+    OpticStudio's default RMS spot size (how wide the blur dot is, measured
+    around its own center = "centroid", with rays placed on a smart pattern of
+    rings and arms = "Gaussian quadrature"), with glass/air thickness fences
+    taken from the inputs, plus
+      EFFL  = focal length must equal the target (keeps the size right),
+      TOTR  = total track (lens length); OPLT / OPGT = "keep it less than / greater
+              than", so the track stays between the shortest and longest input (scaled),
+      ISFN  = image F/#, shown with weight 0 (only displayed: the F/# is already
+              held by the fixed pupil size plus the fixed EFL).
     """
     efl_t = target["efl"]
     mfe = S.MFE
@@ -2171,16 +2524,18 @@ def edge_ray_check(Z, S, has_field: bool) -> Dict:
     for hy, px, py in rays:
         mfe.AddOperand()
         row = mfe.NumberOfOperands
-        o = mfe.GetOperandAt(row)
-        o.ChangeType(Z.Editors.MFE.MeritOperandType.REAY)
-        o.GetOperandCell(C.Param1).IntegerValue = img
-        o.GetOperandCell(C.Param2).IntegerValue = wave
-        o.GetOperandCell(C.Param4).DoubleValue = hy
-        o.GetOperandCell(C.Param5).DoubleValue = px
-        o.GetOperandCell(C.Param6).DoubleValue = py
-        o.Weight = 0.0
-        m = merit(S)
-        mfe.RemoveOperandAt(row)
+        try:
+            o = mfe.GetOperandAt(row)
+            o.ChangeType(Z.Editors.MFE.MeritOperandType.REAY)
+            o.GetOperandCell(C.Param1).IntegerValue = img
+            o.GetOperandCell(C.Param2).IntegerValue = wave
+            o.GetOperandCell(C.Param4).DoubleValue = hy
+            o.GetOperandCell(C.Param5).DoubleValue = px
+            o.GetOperandCell(C.Param6).DoubleValue = py
+            o.Weight = 0.0
+            m = merit(S)
+        finally:
+            mfe.RemoveOperandAt(row)  # the temporary row never stays, even after an error
         if not (finite(m) and m < 1e8):
             failed.append("Hy {} P({}, {})".format(g(hy), g(px), g(py)))
     merit(S)  # recompute with the original rows only
@@ -2241,7 +2596,7 @@ def write_tables(outs, designs, env, target, mf_start, mf_result, result_fo, che
         "tool": TOOL,
         "inputs": [{"name": d.name, "kept": d.ok, "reason": d.reason, "skip_category": d.cat,
                     "signature": d.signature, "efl": d.efl, "fno": d.fno, "hfov_deg": d.hfov, "track": d.track,
-                    "object_distance": d.obj_dist, "surfaces": d.special_note,
+                    "object_distance": d.obj_dist, "lens_units": d.units, "surfaces": d.special_note,
                     "blend_member": d.ok and d.blend_member, "on_axis": d.ok and d.on_axis,
                     "weight": d.blend_weight, "dist_norm": d.dist, "mf_scaled_refocus": d.mf_refocus,
                     "mf_scaled_reopt": d.mf_reopt, "spot_scaled_reopt_um": d.spot_reopt_um,
@@ -2302,7 +2657,9 @@ def obj_csv(v: float) -> str:
 def draw_layout_png(Z, S, path: str, target, mf: float, start_label: str = "") -> bool:
     """
     Draw a side view (Y-Z) of the result: each surface as a curve, glass edges,
-    and a fan of real rays for each field (traced with REAY/REAZ, placed with GLCZ).
+    and a fan of real rays for each field. REAY / REAZ = where a real ray hits a
+    surface (height / along the axis, local to that surface); GLCZ = where that
+    surface sits along the axis, so the pieces line up in one picture.
     Needs matplotlib; if it is missing we skip the picture and say so.
     """
     try:

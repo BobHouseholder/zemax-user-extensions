@@ -14,6 +14,9 @@
 //      does not resolve (catalog not installed) or whose numbers
 //      are absurd (EFL 1e10, F/0.001) is skipped with the reason.
 //      Byte-identical files (and identical prescriptions) count once.
+//      Files in inches, cm or m are converted to mm in memory (the
+//      file itself is never changed), so every number is in mm.
+//      Zoom files (more than one configuration) are skipped.
 //   2) Keeps only the files that share one lens layout AND one
 //      object distance (infinite, or the same finite distance) and
 //      skips the odd ones out, with a count per reason. -layout
@@ -54,7 +57,10 @@
 // fails the checks like any other failure.
 // No -dir: a folder picker opens (ribbon use), then a small window
 // asks for F/# and field; at the end it offers to open the result
-// in the main window. Exit codes: 0 ok,
+// in the main window. From the ribbon every error or refusal also
+// pops up a message (there is no console to read), and when the
+// folder already holds a result it asks: Replace / New folder / Cancel.
+// Exit codes: 0 ok,
 // 1 error, 2 refused, 3 result written but failed envelope check.
 // Python twin: python/StartPointFinder/start_point_finder.py
 // ============================================================
@@ -97,10 +103,12 @@ namespace StartPointFinder
     }
 
     // Stop the tool with a known exit code (2 = refused, 3 = outside envelope).
+    // UserCancel = the user pressed Cancel; that needs no error pop-up.
     class ToolExitException : Exception
     {
         public int Code;
-        public ToolExitException(int code, string message) : base(message) { Code = code; }
+        public bool UserCancel;
+        public ToolExitException(int code, string message, bool userCancel = false) : base(message) { Code = code; UserCancel = userCancel; }
     }
 
     // One surface written down as plain numbers (curvature = 1 / radius).
@@ -137,6 +145,8 @@ namespace StartPointFinder
         public Dictionary<int, double[]> NdVd = new Dictionary<int, double[]>();
         public double MfRefocus = double.NaN, MfReopt = double.NaN, SpotReoptUm = double.NaN;
         public bool ReoptPass = true;      // did its optimized version pass the result checks?
+        public string Units = "mm";         // the file's own lens units (numbers above are always mm)
+        public int RayAim;                 // the file's ray aiming: 0 off, 1 paraxial, 2 real
         public double TrackRatio => Efl != 0 ? Track / Efl : double.NaN;
     }
 
@@ -146,7 +156,8 @@ namespace StartPointFinder
         public double[] Efl, Fno, Hfov, TrackRatio;   // each is {min, median, max}
     }
 
-    class Target { public double Efl, Fno, Hfov, Obj = double.PositiveInfinity; }  // Obj = held object distance
+    // The job: EFL (mm), F/#, half field (deg) and the held object distance (mm).
+    class Target { public double Efl, Fno, Hfov, Obj = double.PositiveInfinity; }
 
     // Where the requested (F/#, field) pair sits among the inputs' pairs.
     class PairInfo
@@ -196,12 +207,19 @@ namespace StartPointFinder
     {
         const string Tool = "StartPointFinder";
         const int HammerKeep = 3;          // -hammer polishes this many of the best optimized lenses that pass the checks
+        const int HammerMax = 600;         // largest Hammer time (s) per lens, for -hammer and the F/# window alike
+        const int BigFolder = 200;         // more .zmx files than this: warn (and ask, from the ribbon) before reading
         static Options Opts = new Options();
         static readonly List<string> Report = new List<string>();
         static readonly Dictionary<string, double[]> GlassCache = new Dictionary<string, double[]>();
         static bool FolderFromDialog = false;
         static bool Attached = false;      // true = launched from the ribbon and attached to OpticStudio
         static HashSet<string> AvailCats = new HashSet<string>();  // glass catalogs installed on this PC
+        static Dictionary<string, string> RunOuts;  // this run's output paths (so a failed run can tidy up)
+        static bool RunWroteResult;        // did this run save a result/start .zmx yet?
+
+        // Pop-ups are for people: the ribbon (no -dir) or -ask, never with -nodialog.
+        static bool Interactive => !Opts.NoDialog && (string.IsNullOrEmpty(Opts.Dir) || Opts.Ask);
 
         [STAThread]
         static void Main(string[] args)
@@ -210,6 +228,7 @@ namespace StartPointFinder
             catch (Exception ex)
             {
                 Console.WriteLine("FATAL: " + ex.Message);
+                PopUp("StartPointFinder could not start:\n\n" + ex.Message, true);
                 Environment.ExitCode = 1;
                 return;
             }
@@ -217,8 +236,9 @@ namespace StartPointFinder
             string zosError;
             if (!ZemaxLocator.TryInitialize(out zosError))
             {
-                Console.WriteLine("FATAL: failed to locate an OpticStudio installation."
-                                  + (zosError == null ? "" : "  " + zosError));
+                string msg = "failed to locate an OpticStudio installation." + (zosError == null ? "" : "  " + zosError);
+                Console.WriteLine("FATAL: " + msg);
+                PopUp("StartPointFinder: " + msg, true);
                 Environment.ExitCode = 1;
                 return;
             }
@@ -229,12 +249,51 @@ namespace StartPointFinder
             {
                 Say("FATAL: " + tex.Message);
                 Environment.ExitCode = tex.Code;
+                // Exit 3 keeps its result (it was written on purpose); any other stop tidies up.
+                if (tex.Code != 3) TidyFailedRun();
+                if (!tex.UserCancel) PopUp(tex.Code == 3
+                    ? "The result was saved, but it FAILED the final check:\n\n" + tex.Message + ReportHint()
+                    : "StartPointFinder stopped (exit " + tex.Code + "):\n\n" + tex.Message + ReportHint(), tex.Code != 3);
             }
             catch (Exception ex)
             {
                 Say("FATAL: " + ex.Message + Environment.NewLine + ex.StackTrace);
                 Environment.ExitCode = 1;
+                TidyFailedRun();
+                PopUp("StartPointFinder hit an error:\n\n" + ex.Message + ReportHint(), true);
             }
+        }
+
+        // Show a message box when someone is watching (ribbon or -ask); the console
+        // line is always written too. A failure to show it must never crash the tool.
+        static void PopUp(string text, bool isError)
+        {
+            if (!Interactive) return;
+            try
+            {
+                WF.MessageBox.Show(text, Tool, WF.MessageBoxButtons.OK,
+                    isError ? WF.MessageBoxIcon.Error : WF.MessageBoxIcon.Warning);
+            }
+            catch { }
+        }
+
+        // " (details: <report path>)" when a report was written, so the pop-up says where to look.
+        static string ReportHint() =>
+            RunOuts != null && File.Exists(RunOuts["report"]) ? "\n\nDetails: " + RunOuts["report"] : "";
+
+        // A run that stopped with an error or a refusal must not leave a result behind
+        // that blocks the next run (or looks finished when it is not): delete the
+        // result/start .zmx this run wrote, and any temp lenses. The report stays.
+        static void TidyFailedRun()
+        {
+            if (RunOuts == null) return;
+            if (RunWroteResult)
+            {
+                TryDelete(RunOuts["result"]);
+                TryDelete(RunOuts["start"]);
+                Console.WriteLine("Removed this run's unfinished result files.");
+            }
+            DeleteTempLenses(Path.GetDirectoryName(RunOuts["result"]));
         }
 
         // Read the words you typed after the program name (-dir, -out, ...).
@@ -258,7 +317,7 @@ namespace StartPointFinder
                     {
                         case "dir": Opts.Dir = next(); break;
                         case "out": Opts.OutDir = next(); break;
-                        case "efl": Opts.Efl = Num(next(), raw); break;
+                        case "efl": Opts.Efl = Num(next(), raw); break;   // mm
                         case "fno": Opts.Fno = Num(next(), raw); break;
                         case "hfov":
                         case "fov": Opts.Fov = Num(next(), raw); break;  // -fov kept as an old name
@@ -268,17 +327,17 @@ namespace StartPointFinder
                         case "weight": Opts.Weight = Pick(next(), raw, "near", "soft", "equal"); break;
                         case "ask": Opts.Ask = true; break;
                         case "glass": Opts.Glass = Pick(next(), raw, "nearest", "majority"); break;
-                        case "passes": Opts.Passes = Math.Max(1, (int)Num(next(), raw)); break;
-                        case "hammer": Opts.HammerSec = Math.Max(0, (int)Num(next(), raw)); break;
+                        case "passes": Opts.Passes = WholeNum(next(), raw, 1, 100); break;
+                        case "hammer": Opts.HammerSec = WholeNum(next(), raw, 0, HammerMax); break;
                         case "top":
                             {
                                 // "-top all" = optimize every start (the v2 behavior); "-top N" = only the N best-screened.
                                 string tok = next();
-                                Opts.Top = tok.Trim().ToLowerInvariant() == "all" ? 0 : Math.Max(1, (int)Num(tok, raw));
+                                Opts.Top = tok.Trim().ToLowerInvariant() == "all" ? 0 : WholeNum(tok, raw, 1, 100000);
                                 break;
                             }
                         case "compare": Opts.Compare = Pick(next(), raw, "reopt", "refocus", "none"); break;
-                        case "min": Opts.MinGroup = Math.Max(2, (int)Num(next(), raw)); break;
+                        case "min": Opts.MinGroup = WholeNum(next(), raw, 2, 100000); break;
                         case "force": Opts.Force = true; break;
                         case "nopng": Opts.NoPng = true; break;
                         case "nodialog": Opts.NoDialog = true; break;
@@ -291,11 +350,20 @@ namespace StartPointFinder
             }
         }
 
+        // A normal number (NaN, Infinity and 1e999 are refused: they would only cause trouble later).
         static double Num(string s, string flag)
         {
             double v;
-            if (double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out v)) return v;
+            if (double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out v) && IsFinite(v)) return v;
             throw new Exception("flag " + flag + " needs a number, got '" + s + "'");
+        }
+
+        // A whole number from lo to hi ("2.9" or "1e10" is refused instead of being cut or wrapped around).
+        static int WholeNum(string s, string flag, int lo, int hi)
+        {
+            int v;
+            if (int.TryParse((s ?? "").Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out v) && v >= lo && v <= hi) return v;
+            throw new Exception(F("flag {0} needs a whole number from {1} to {2}, got '{3}'", flag, lo, hi, s));
         }
 
         static string Pick(string v, string flag, params string[] allowed)
@@ -335,7 +403,7 @@ namespace StartPointFinder
                 dlg.Description = "StartPointFinder: pick the folder that holds the starting designs";
                 dlg.ShowNewFolderButton = false;
                 if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK || string.IsNullOrEmpty(dlg.SelectedPath))
-                    throw new ToolExitException(2, "no folder picked");
+                    throw new ToolExitException(2, "no folder picked", true);
                 FolderFromDialog = true;
                 return dlg.SelectedPath;
             }
@@ -350,6 +418,7 @@ namespace StartPointFinder
             string folder = ChooseFolder();
             ZOSAPI.IZOSAPI_Application app = null;
             ZOSAPI.IOpticalSystem work = null;
+            int ourSystemId = -1;              // OpticStudio's ID number of the extra system WE made
             bool standalone = !string.IsNullOrEmpty(Opts.Dir);
             if (!standalone)
             {
@@ -357,11 +426,16 @@ namespace StartPointFinder
                 if (ZemaxLocator.TryConnect(out app, out err, false) && app != null)
                 {
                     work = app.CreateNewSystem(ZOSAPI.SystemType.Sequential);
+                    if (work == null) throw new Exception("OpticStudio could not make an extra system to work in");
+                    ourSystemId = work.SystemID;
                     Attached = true;
                     Say("Connected to OpticStudio (mode: " + app.Mode + "); working in a separate system.");
                 }
                 else
                 {
+                    // Say why, so a silent switch to a hidden OpticStudio is never a mystery.
+                    Say("Could not attach to a running OpticStudio (" + (string.IsNullOrEmpty(err) ? "no reason given" : err)
+                        + "); starting a separate hidden OpticStudio instead.");
                     standalone = true;
                     app = null;
                 }
@@ -370,11 +444,22 @@ namespace StartPointFinder
             {
                 var connection = new ZOSAPI.ZOSAPI_Connection();
                 app = connection.CreateNewApplication();
-                if (app == null || app.PrimarySystem == null || !app.IsValidLicenseForAPI)
-                    throw new Exception("could not start a standalone OpticStudio instance");
+                if (app == null) throw new Exception("could not start a standalone OpticStudio instance");
+                // From here on the hidden OpticStudio exists, so it must be closed on every way out.
+                string why = null;
+                try
+                {
+                    if (!app.IsValidLicenseForAPI) why = "the license is not valid for ZOS-API (status: " + app.LicenseStatus + ")";
+                    else if (app.PrimarySystem == null) why = "the standalone OpticStudio has no lens system";
+                }
+                catch (Exception ex) { why = "could not check the license: " + ex.Message; }
+                if (why != null)
+                {
+                    try { app.CloseApplication(); } catch { }
+                    throw new Exception(why);
+                }
                 work = app.PrimarySystem;
             }
-            if (work == null) throw new Exception("no optical system to work in");
             try
             {
                 return RunOnFolder(app, work, folder);
@@ -382,12 +467,25 @@ namespace StartPointFinder
             finally
             {
                 if (standalone) { try { app.CloseApplication(); } catch { } }
-                else
-                {
-                    // Close only the extra system we made (the last one).
-                    try { app.CloseSystemAt(app.NumberOfOpticalSystems - 1, false); } catch { }
-                }
+                else CloseOurSystem(app, ourSystemId);
             }
+        }
+
+        // Ribbon run: close the extra system we made, found by its ID number, never by
+        // position (the user may have opened another window meanwhile). Not found = leave
+        // everything open: closing someone else's lens without saving would lose work.
+        static void CloseOurSystem(ZOSAPI.IZOSAPI_Application app, int id)
+        {
+            try
+            {
+                for (int i = app.NumberOfOpticalSystems - 1; i >= 1; i--)  // index 0 = the main window, never ours
+                {
+                    var sys = app.GetSystemAt(i);
+                    if (sys != null && sys.SystemID == id) { app.CloseSystemAt(i, false); return; }
+                }
+                Console.WriteLine("Note: the tool's extra system was not found, so nothing was closed.");
+            }
+            catch (Exception ex) { Console.WriteLine("Note: could not close the tool's extra system: " + ex.Message); }
         }
 
         // Big picture:
@@ -400,17 +498,32 @@ namespace StartPointFinder
             var clock = System.Diagnostics.Stopwatch.StartNew();
             folder = Path.GetFullPath(folder);
             if (!Directory.Exists(folder)) throw new ToolExitException(2, "folder not found: " + folder);
-            var files = Directory.GetFiles(folder, "*.zmx", SearchOption.TopDirectoryOnly)
+            var all = Directory.GetFiles(folder, "*.zmx", SearchOption.TopDirectoryOnly)
                 .Where(f => string.Equals(Path.GetExtension(f), ".zmx", StringComparison.OrdinalIgnoreCase))
                 .OrderBy(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase).ToList();
+            // Our own earlier outputs (StartPointFinder_result.zmx, temp lenses...) are not inputs:
+            // reading them would let an old result steer the new one.
+            var files = all.Where(f => !IsOwnOutput(f)).ToList();
             Say("=== " + Tool + " ===");
             Say("Folder: " + folder);
+            if (files.Count < all.Count)
+                Say(F("Ignored {0} earlier {1} output file(s) in the folder (they are results, not inputs).", all.Count - files.Count, Tool));
             if (files.Count == 0) throw new ToolExitException(2, "no .zmx files in " + folder);
             Say(F("Found {0} .zmx file(s).", files.Count));
+            if (files.Count > BigFolder)
+            {
+                // Every file is opened, and every kept one is built and scored once ("the screen").
+                Say(F("  Large folder: {0} files. Reading and screening take roughly {1:0} min before any optimizing.",
+                    files.Count, files.Count * 1.5 / 60.0));
+                if (Interactive && WF.MessageBox.Show(F("The folder has {0} lens files. Reading and screening them all takes roughly {1:0} minutes.\n\nContinue?",
+                        files.Count, files.Count * 1.5 / 60.0), Tool, WF.MessageBoxButtons.YesNo, WF.MessageBoxIcon.Question) != WF.DialogResult.Yes)
+                    throw new ToolExitException(2, "cancelled: large folder", true);
+            }
 
             string outDir = Path.GetFullPath(string.IsNullOrEmpty(Opts.OutDir) ? Path.Combine(folder, "_" + Tool) : Opts.OutDir);
+            outDir = GuardOutputs(outDir, folder, files);
             var outs = OutPaths(outDir);
-            GuardOutputs(outs, files);
+            RunOuts = outs;  // from here on a failed run tidies up after itself
 
             // 1) read (the installed catalog list lets a skip reason name a missing catalog)
             AvailCats = InstalledCatalogs(S);
@@ -420,7 +533,7 @@ namespace StartPointFinder
             {
                 k++;
                 Progress(app, 2 + 18 * k / files.Count, "Reading " + Path.GetFileName(f));
-                if (Terminated(app)) throw new ToolExitException(2, "terminated by user");
+                if (Terminated(app)) throw new ToolExitException(2, "terminated by user", true);
                 designs.Add(ReadDesign(S, f));
             }
             // Identical files (or identical prescriptions) count once.
@@ -457,7 +570,14 @@ namespace StartPointFinder
             if (!Opts.NoDialog && (FolderFromDialog || Opts.Ask)) AskTargets(group, env);
             var target = PickTarget(env);
             target.Obj = obj;
-            Say(F("Target: EFL {0}  F/{1}  half-FOV {2} deg", G(target.Efl), G(target.Fno), G(target.Hfov)));
+            Say(F("Target: EFL {0} mm  F/{1}  half-FOV {2} deg", G(target.Efl), G(target.Fno), G(target.Hfov)));
+            // Every candidate is scored with ray aiming off (like a new lens), so a lens rebuilt
+            // from its own file and a lens built from numbers are scored alike. Say so when
+            // some inputs had it on: the user may want to switch it back on afterward.
+            int aimed = group.Count(d => d.RayAim != 0);
+            if (aimed > 0)
+                Say(F("  Ray aiming: off for every candidate ({0} of {1} inputs use {2}); turn it on in OpticStudio afterward if your design needs it.",
+                    aimed, group.Count, RayAimName(group.First(d => d.RayAim != 0).RayAim)));
             var pair = PairCheck(group, target.Fno, target.Hfov);
             Say("  " + pair.Text);
             if (pair.Warn)
@@ -512,106 +632,111 @@ namespace StartPointFinder
             bool reopt = Opts.Compare == "reopt";
             // The top-N screen only applies to -start best with the full re-optimized comparison.
             bool screen = mode == "best" && reopt && Opts.Top > 0;
-            if (screen)
+            // Temp lenses must go on every way out (error, Terminate), not only on success.
+            try
             {
-                // Step A: build and score every start WITHOUT optimizing (fast: no DLS at all).
-                Say("Screening every start at the request (sized + refocused, no optimization):");
-                int j = 0;
-                foreach (var d in group)
+                if (screen)
                 {
-                    j++;
-                    if (Terminated(app)) { Say("  Terminate requested; skipping the rest of the inputs."); break; }
-                    Progress(app, 20 + 10 * j / (group.Count + 1), "Screening " + d.Name);
-                    var c = Evaluate(x, "input", d, null, false);
-                    d.MfRefocus = c.MfStart;
-                    cands.Add(c);
-                }
-                if (blendOk && !Terminated(app)) cands.Add(Evaluate(x, "blend", null, blendRx, false));
-                SetScreenRanks(cands);
-                var picked = new HashSet<Cand>(cands.Where(c => c.ScreenRank > 0 && c.ScreenRank <= Opts.Top));
-                foreach (var c in cands.OrderBy(c => c.ScreenRank))
-                    Say(F("  #{0,-2} {1,-34} start MF {2,12}{3}{4}", c.ScreenRank, c.Label, G(c.MfStart),
-                        picked.Contains(c) ? "   -> optimize" : "", c.Note.Length > 0 ? "   (" + c.Note + ")" : ""));
-                Say(F("Optimizing the {0} best-screened start(s) of {1} (-top {2}; -top all optimizes every start):",
-                    picked.Count, cands.Count, Opts.Top));
-                // Step B: optimize only the picked starts, best-screened first. Each is rebuilt exactly
-                // as in the screen (same numbers), so its result is the same as when every start was optimized.
-                // Safety net: if none of the top N passes the checks, keep going down the screen
-                // list one start at a time until one passes (or every start has been tried).
-                int done = 0;
-                bool fallbackSaid = false;
-                foreach (int i in Enumerable.Range(0, cands.Count).OrderBy(i => cands[i].ScreenRank).ToList())
-                {
-                    var c = cands[i];
-                    if (!picked.Contains(c))
-                    {
-                        if (cands.Any(o => o.Optimized && o.Pass))
-                        {
-                            if (c.D != null) c.D.Note = F("not optimized (screen rank {0} of {1}; -top {2})", c.ScreenRank, cands.Count, Opts.Top);
-                            continue;
-                        }
-                        if (!fallbackSaid)
-                        {
-                            Say(F("  None of the top {0} passed the checks; optimizing the next screened start(s) until one passes:", Opts.Top));
-                            fallbackSaid = true;
-                        }
-                    }
-                    if (Terminated(app)) { Say("  Terminate requested; skipping the rest of the starts."); break; }
-                    done++;
-                    Progress(app, Math.Min(90, 30 + 60 * done / (picked.Count + 1)), "Optimizing " + c.Label);
-                    int rank = c.ScreenRank;
-                    c = Evaluate(x, c.Kind, c.D, c.Kind == "blend" ? blendRx : null, true);
-                    c.ScreenRank = rank;
-                    cands[i] = c;
-                    if (c.D != null) { c.D.MfReopt = c.Mf; c.D.SpotReoptUm = c.Spot; c.D.ReoptPass = c.Pass; }
-                    Say(F("  #{0,-2} {1,-34} start MF {2,12} -> MF {3,12}  spot {4,8} um{5}", rank, c.Label, G(c.MfStart), G(c.Mf),
-                        G(c.Spot, 4), c.Optimized && !c.Pass ? "   FAILS CHECK: " + c.Fail : ""));
-                }
-            }
-            else
-            {
-                if (Opts.Compare != "none")
-                {
-                    Say(F("Scoring every kept input at the request ({0}):", Opts.Compare));
+                    // Step A: build and score every start WITHOUT optimizing (fast: no DLS at all).
+                    Say("Screening every start at the request (sized + refocused, no optimization):");
                     int j = 0;
                     foreach (var d in group)
                     {
                         j++;
                         if (Terminated(app)) { Say("  Terminate requested; skipping the rest of the inputs."); break; }
-                        Progress(app, 20 + 70 * j / (group.Count + 1), "Scoring " + d.Name);
-                        var c = Evaluate(x, "input", d, null, reopt);
+                        Progress(app, 20 + 10 * j / (group.Count + 1), "Screening " + d.Name);
+                        var c = Evaluate(x, "input", d, null, false);
                         d.MfRefocus = c.MfStart;
-                        if (reopt) { d.MfReopt = c.Mf; d.SpotReoptUm = c.Spot; d.ReoptPass = c.Pass; cands.Add(c); }
-                        Say(F("  {0,-28} refocus MF {1,12}   reopt MF {2,12}   reopt spot {3,8} um{4}{5}",
-                            d.Name, G(d.MfRefocus), G(d.MfReopt), G(d.SpotReoptUm, 4), d.IsSpecial ? "   (own file, scaled)" : "",
-                            c.Optimized && !c.Pass ? "   FAILS CHECK: " + c.Fail : ""));
+                        cands.Add(c);
+                    }
+                    if (blendOk && !Terminated(app)) cands.Add(Evaluate(x, "blend", null, blendRx, false));
+                    SetScreenRanks(cands);
+                    var picked = new HashSet<Cand>(cands.Where(c => c.ScreenRank > 0 && c.ScreenRank <= Opts.Top));
+                    foreach (var c in cands.OrderBy(c => c.ScreenRank))
+                        Say(F("  #{0,-2} {1,-34} start MF {2,12}{3}{4}", c.ScreenRank, c.Label, G(c.MfStart),
+                            picked.Contains(c) ? "   -> optimize" : "", c.Note.Length > 0 ? "   (" + c.Note + ")" : ""));
+                    Say(F("Optimizing the {0} best-screened start(s) of {1} (-top {2}; -top all optimizes every start):",
+                        picked.Count, cands.Count, Opts.Top));
+                    // Step B: optimize only the picked starts, best-screened first. Each is rebuilt exactly
+                    // as in the screen (same numbers), so its result is the same as when every start was optimized.
+                    // Safety net: if none of the top N passes the checks, keep going down the screen
+                    // list one start at a time until one passes (or every start has been tried).
+                    int done = 0;
+                    bool fallbackSaid = false;
+                    foreach (int i in Enumerable.Range(0, cands.Count).OrderBy(i => cands[i].ScreenRank).ToList())
+                    {
+                        var c = cands[i];
+                        if (!picked.Contains(c))
+                        {
+                            if (cands.Any(o => o.Optimized && o.Pass))
+                            {
+                                if (c.D != null) c.D.Note = F("not optimized (screen rank {0} of {1}; -top {2})", c.ScreenRank, cands.Count, Opts.Top);
+                                continue;
+                            }
+                            if (!fallbackSaid)
+                            {
+                                Say(F("  None of the top {0} passed the checks; optimizing the next screened start(s) until one passes:", Opts.Top));
+                                fallbackSaid = true;
+                            }
+                        }
+                        if (Terminated(app)) { Say("  Terminate requested; skipping the rest of the starts."); break; }
+                        done++;
+                        Progress(app, Math.Min(90, 30 + 60 * done / (picked.Count + 1)), "Optimizing " + c.Label);
+                        int rank = c.ScreenRank;
+                        c = Evaluate(x, c.Kind, c.D, c.Kind == "blend" ? blendRx : null, true);
+                        c.ScreenRank = rank;
+                        cands[i] = c;
+                        if (c.D != null) { c.D.MfReopt = c.Mf; c.D.SpotReoptUm = c.Spot; c.D.ReoptPass = c.Pass; }
+                        Say(F("  #{0,-2} {1,-34} start MF {2,12} -> MF {3,12}  spot {4,8} um{5}", rank, c.Label, G(c.MfStart), G(c.Mf),
+                            G(c.Spot, 4), c.Optimized && !c.Pass ? "   FAILS CHECK: " + c.Fail : ""));
                     }
                 }
-                // Inputs not optimized above: the nearest input is still a candidate.
-                if (!reopt && pair.Nearest != null && mode != "blend" && !Terminated(app))
-                    cands.Add(Evaluate(x, "input", pair.Nearest, null, true));
-                if (blendOk && (mode != "nearest" || Opts.Compare != "none") && !Terminated(app))
+                else
                 {
-                    Progress(app, 92, "Optimizing the blend");
-                    cands.Add(Evaluate(x, "blend", null, blendRx, true));
+                    if (Opts.Compare != "none")
+                    {
+                        Say(F("Scoring every kept input at the request ({0}):", Opts.Compare));
+                        int j = 0;
+                        foreach (var d in group)
+                        {
+                            j++;
+                            if (Terminated(app)) { Say("  Terminate requested; skipping the rest of the inputs."); break; }
+                            Progress(app, 20 + 70 * j / (group.Count + 1), "Scoring " + d.Name);
+                            var c = Evaluate(x, "input", d, null, reopt);
+                            d.MfRefocus = c.MfStart;
+                            if (reopt) { d.MfReopt = c.Mf; d.SpotReoptUm = c.Spot; d.ReoptPass = c.Pass; cands.Add(c); }
+                            Say(F("  {0,-28} refocus MF {1,12}   reopt MF {2,12}   reopt spot {3,8} um{4}{5}",
+                                d.Name, G(d.MfRefocus), G(d.MfReopt), G(d.SpotReoptUm, 4), d.IsSpecial ? "   (own file, scaled)" : "",
+                                c.Optimized && !c.Pass ? "   FAILS CHECK: " + c.Fail : ""));
+                        }
+                    }
+                    // Inputs not optimized above: the nearest input is still a candidate.
+                    if (!reopt && pair.Nearest != null && mode != "blend" && !Terminated(app))
+                        cands.Add(Evaluate(x, "input", pair.Nearest, null, true));
+                    if (blendOk && (mode != "nearest" || Opts.Compare != "none") && !Terminated(app))
+                    {
+                        Progress(app, 92, "Optimizing the blend");
+                        cands.Add(Evaluate(x, "blend", null, blendRx, true));
+                    }
+                    SetScreenRanks(cands);
                 }
-                SetScreenRanks(cands);
-            }
-            TryDelete(x.TmpStart);
-            if (x.Chosen == null)
-            {
-                CleanupCandFiles(cands);
-                throw new ToolExitException(1, "no candidate start could be built and optimized (see the lines above)");
-            }
+                TryDelete(x.TmpStart);
+                if (x.Chosen == null)
+                    throw new ToolExitException(1, "no candidate start could be built and optimized (see the lines above)");
 
-            // Optional Hammer polish: the best few lenses that pass the checks (or just the forced
-            // keeper for -start nearest/blend), then keep the best again. It writes the keeper's files.
-            if (Opts.HammerSec > 0 && !Terminated(app))
-            {
-                Progress(app, 93, "Hammer polish");
-                HammerPolish(x, cands);
+                // Optional Hammer polish: the best few lenses that pass the checks (or just the forced
+                // keeper for -start nearest/blend), then keep the best again. It writes the keeper's files.
+                if (Opts.HammerSec > 0 && !Terminated(app))
+                {
+                    Progress(app, 93, "Hammer polish");
+                    HammerPolish(x, cands);
+                }
             }
-            CleanupCandFiles(cands);
+            finally
+            {
+                TryDelete(x.TmpStart);
+                CleanupCandFiles(cands);
+            }
             S.LoadFile(outs["result"], false);
             double mfResult = x.Chosen.Mf;
             double mfStart = x.Chosen.MfStart;
@@ -748,6 +873,7 @@ namespace StartPointFinder
                     : kind == "input" && ReferenceEquals(d, x.Pair.Nearest);
                 if (keep)
                 {
+                    RunWroteResult = true;  // set first: a half-written pair is tidied up too
                     S.SaveAs(x.Outs["result"]);
                     File.Copy(x.TmpStart, x.Outs["start"], true);
                     x.Chosen = c;
@@ -804,8 +930,10 @@ namespace StartPointFinder
                 bool okH; bool? edgeH;
                 var chk = Validate(S, fo, x.T, x.Env, x.B, mfH, out okH, out edgeH);
                 string failH = string.Join("; ", chk.Where(t => !t.Item2).Select(t => ShortCheck(t.Item1)));
-                // Use the polished lens when it passes, or when neither version passes and it scores lower.
-                bool use = IsFinite(mfH) && (okH || (!c.Pass && mfH < c.Mf));
+                // Use the polished lens when it passes and is not worse than the DLS lens (or the
+                // DLS lens failed anyway), or when neither version passes and it scores lower.
+                bool worse = IsFinite(c.Mf) && mfH > c.Mf;
+                bool use = IsFinite(mfH) && ((okH && (!c.Pass || !worse)) || (!c.Pass && mfH < c.Mf));
                 if (use)
                 {
                     string hamPath = c.OptPath.Replace(".tmp.zmx", "_ham.tmp.zmx");
@@ -815,9 +943,11 @@ namespace StartPointFinder
                     c.Hammered = true;
                     c.HamNote = "Hammer " + G(c.MfDls) + " -> " + G(mfH);
                 }
+                else if (!IsFinite(mfH)) c.HamNote = "Hammer gave no usable score; kept DLS";
+                else if (okH && worse) c.HamNote = "Hammer result " + G(mfH) + " is worse than DLS; kept DLS";
                 else c.HamNote = "Hammer result " + G(mfH) + " failed checks (" + failH + "); kept DLS";
                 Say(F("  {0,-34} DLS MF {1,12} -> Hammer MF {2,12}  spot {3,8} um  {4}", c.Label, G(c.MfDls), G(mfH),
-                    G(fo["spot_um"], 4), use ? "used" : "NOT used (fails: " + failH + ")"));
+                    G(fo["spot_um"], 4), use ? "used" : "NOT used (" + c.HamNote + ")"));
             }
             // Pick the keeper again among every optimized candidate (polished ones now carry Hammer numbers).
             if (x.Mode == "best")
@@ -825,6 +955,7 @@ namespace StartPointFinder
                     if (IsFinite(c.Mf) && Better(c, x.Chosen)) x.Chosen = c;
             if (!string.IsNullOrEmpty(x.Chosen.OptPath) && File.Exists(x.Chosen.OptPath))
             {
+                RunWroteResult = true;
                 File.Copy(x.Chosen.OptPath, x.Outs["result"], true);
                 File.Copy(x.Chosen.StartPath, x.Outs["start"], true);
             }
@@ -932,16 +1063,112 @@ namespace StartPointFinder
             };
         }
 
-        // Never write over an input; only replace old outputs with -force.
-        static void GuardOutputs(Dictionary<string, string> outs, List<string> inputs)
+        // Decide where this run writes, before anything is read:
+        // - never into the input folder itself (the results would be read as inputs next time);
+        // - never over an input file;
+        // - an earlier RESULT there is only replaced with -force, or after asking (ribbon):
+        //   Replace / New folder (_StartPointFinder_2, _3, ...) / Cancel;
+        // - leftovers of a run that never finished (report or tables without a result, temp
+        //   lenses) never block: they are cleared, like every old output we are about to rewrite,
+        //   so the folder never mixes files from two runs.
+        // Returns the output folder to use.
+        static string GuardOutputs(string outDir, string folder, List<string> inputs)
         {
+            if (SamePath(outDir, folder))
+                throw new ToolExitException(2, "the output folder is the input folder (" + outDir
+                    + "); the results would be read as inputs next time. Pick another -out folder.");
             var low = new HashSet<string>(inputs.Select(p => Path.GetFullPath(p)), StringComparer.OrdinalIgnoreCase);
-            foreach (var p in outs.Values)
+            foreach (var p in OutPaths(outDir).Values)
                 if (low.Contains(p)) throw new ToolExitException(2, "output would overwrite an input: " + p);
-            var existing = outs.Values.FirstOrDefault(File.Exists);
-            if (existing != null && !Opts.Force)
-                throw new ToolExitException(2, "outputs already exist (pass -force to replace them): " + existing);
+            if (File.Exists(OutPaths(outDir)["result"]) && !Opts.Force)
+            {
+                if (!Interactive)
+                    throw new ToolExitException(2, "a result already exists (pass -force to replace it): " + OutPaths(outDir)["result"]);
+                string fresh = NextFreeDir(outDir);
+                switch (AskReplace(outDir, fresh))
+                {
+                    case WF.DialogResult.Yes: Say("Replacing the earlier result in " + outDir + " (you chose Replace)."); break;
+                    case WF.DialogResult.No: outDir = fresh; Say("Writing to a new folder: " + outDir + " (you chose New folder)."); break;
+                    default: throw new ToolExitException(2, "cancelled: a result already exists in " + outDir, true);
+                }
+            }
+            // Clear our own old files here (only the 6 output names and our temp lenses).
+            int cleared = 0;
+            foreach (var p in OutPaths(outDir).Values)
+                if (File.Exists(p)) { TryDelete(p); cleared++; }
+            cleared += DeleteTempLenses(outDir);
+            if (cleared > 0) Say(F("Cleared {0} old output file(s) in {1}.", cleared, outDir));
+            return outDir;
         }
+
+        // The ribbon question when the folder already holds a result. Yes = Replace,
+        // No = New folder, Cancel = stop. A tiny window with plain button names.
+        static WF.DialogResult AskReplace(string outDir, string fresh)
+        {
+            using (var form = new WF.Form
+            {
+                Text = Tool + ": earlier result found",
+                FormBorderStyle = WF.FormBorderStyle.FixedDialog,
+                MaximizeBox = false, MinimizeBox = false,
+                StartPosition = WF.FormStartPosition.CenterScreen,
+                ClientSize = new Size(520, 150), TopMost = true,
+            })
+            {
+                form.Controls.Add(new WF.Label
+                {
+                    Left = 12, Top = 12, Width = 496, Height = 84,
+                    Text = "This folder already holds a StartPointFinder result:\n" + outDir
+                        + "\n\nReplace it, or write this run to a new folder (" + Path.GetFileName(fresh) + ")?",
+                });
+                var replace = new WF.Button { Text = "Replace", Left = 196, Top = 110, Width = 100, DialogResult = WF.DialogResult.Yes };
+                var newDir = new WF.Button { Text = "New folder", Left = 304, Top = 110, Width = 100, DialogResult = WF.DialogResult.No };
+                var cancel = new WF.Button { Text = "Cancel", Left = 412, Top = 110, Width = 96, DialogResult = WF.DialogResult.Cancel };
+                form.Controls.Add(replace); form.Controls.Add(newDir); form.Controls.Add(cancel);
+                form.AcceptButton = newDir;  // Enter = the safe choice (nothing old is touched)
+                form.CancelButton = cancel;
+                return form.ShowDialog();
+            }
+        }
+
+        // The first of dir_2, dir_3, ... that has no result in it yet.
+        static string NextFreeDir(string outDir)
+        {
+            string trimmed = outDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            for (int k = 2; ; k++)
+            {
+                string cand = trimmed + "_" + k.ToString(CultureInfo.InvariantCulture);
+                if (!File.Exists(OutPaths(cand)["result"])) return cand;
+            }
+        }
+
+        // Same folder? (full paths, any case, with or without a trailing backslash)
+        static bool SamePath(string a, string b) =>
+            string.Equals(Path.GetFullPath(a).TrimEnd('\\', '/'), Path.GetFullPath(b).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
+
+        // A file this tool writes (result, start, temp lenses), not a design someone made.
+        static bool IsOwnOutput(string path)
+        {
+            string n = Path.GetFileName(path);
+            return n.StartsWith(Tool + "_", StringComparison.OrdinalIgnoreCase)
+                && (n.EndsWith(".tmp.zmx", StringComparison.OrdinalIgnoreCase)
+                    || OutPaths("").Values.Any(p => string.Equals(Path.GetFileName(p), n, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        // Delete our temp lenses (StartPointFinder_*.tmp.zmx and their side files) in a folder.
+        static int DeleteTempLenses(string dir)
+        {
+            int k = 0;
+            try
+            {
+                if (!Directory.Exists(dir)) return 0;
+                foreach (var f in Directory.GetFiles(dir, Tool + "_*.tmp.zmx")) { TryDelete(f); k++; }
+            }
+            catch { }
+            return k;
+        }
+
+        // Ray aiming in words (0 off, 1 paraxial, 2 real).
+        static string RayAimName(int r) => r == 1 ? "paraxial" : r == 2 ? "real" : "off";
 
         // Save every line we printed into the text report.
         static void WriteReport(Dictionary<string, string> outs)
@@ -967,9 +1194,19 @@ namespace StartPointFinder
                 d.FileCatalogs = GcatList(bytes);
                 if (!S.LoadFile(path, false)) return Reject(d, "could not load", "could not load");
                 if (S.Mode != ZOSAPI.SystemType.Sequential) return Reject(d, "not a Sequential system", "not sequential");
+                // A zoom lens (several configurations) is several lenses in one file; we would
+                // only see whichever one was active when it was saved, so it is skipped.
+                int nConf = S.MCE.NumberOfConfigurations;
+                if (nConf > 1) return Reject(d, F("has {0} configurations (zoom or multi-setup files are not supported)", nConf), "multi-configuration");
+                // Inches, cm or m: convert the copy in memory to mm (OpticStudio's own unit
+                // conversion; the file on disk is not touched), so every number below is mm.
+                d.Units = UnitName(S.SystemData.Units.LensUnits);
+                if (d.Units != "mm") ToMillimeters(S);
+                try { d.RayAim = (int)S.SystemData.RayAiming.RayAiming; } catch { d.RayAim = 0; }
                 var lde = S.LDE;
                 int n = lde.NumberOfSurfaces;
                 d.NSurf = n;
+                if (n < 3) return Reject(d, "has no lens surfaces between object and image", "no lens surfaces");
                 d.Stop = lde.StopSurface;
                 // Infinite object (objectives) or a finite one; a finite one must match the group's.
                 double t0 = lde.GetSurfaceAt(0).Thickness;
@@ -1011,7 +1248,8 @@ namespace StartPointFinder
                         d.NdVd[i] = nv;
                         if (!(nv[0] > 1.0001 && nv[1] > 0))
                         {
-                            var missing = d.FileCatalogs.Where(c => !AvailCats.Contains(c)).ToList();
+                            // Only blame a catalog when we could read the list of installed ones.
+                            var missing = AvailCats.Count == 0 ? new List<string>() : d.FileCatalogs.Where(c => !AvailCats.Contains(c)).ToList();
                             return missing.Count > 0
                                 ? Reject(d, F("surface {0} glass '{1}' does not resolve: catalog {2} is not installed",
                                     i, mat, string.Join(", ", missing)), "missing glass catalog")
@@ -1035,6 +1273,7 @@ namespace StartPointFinder
                 if (!IsFinite(d.Hfov))
                     return Reject(d, "field type " + S.SystemData.Fields.GetFieldType() + " is not supported here", "field type");
                 d.Ok = true;
+                if (d.Units != "mm") Say(F("  {0}: lens units {1}, converted to mm for this run (file unchanged).", d.Name, d.Units));
                 return d;
             }
             catch (Exception ex)
@@ -1048,6 +1287,29 @@ namespace StartPointFinder
         {
             d.Ok = false; d.Reason = reason; d.Cat = cat;
             return d;
+        }
+
+        // Lens units as short text: "mm", "cm", "in", "m".
+        static string UnitName(ZOSAPI.SystemData.ZemaxSystemUnits u) =>
+            u == ZOSAPI.SystemData.ZemaxSystemUnits.Millimeters ? "mm" : u == ZOSAPI.SystemData.ZemaxSystemUnits.Centimeters ? "cm"
+            : u == ZOSAPI.SystemData.ZemaxSystemUnits.Inches ? "in" : "m";
+
+        // Convert the lens in memory to millimeters with OpticStudio's Scale Lens tool
+        // ("scale by units": every length, asphere term and aperture is converted, and
+        // the lens units become mm). Throws when it does not end up in mm.
+        static void ToMillimeters(ZOSAPI.IOpticalSystem S)
+        {
+            var sc = S.Tools.OpenScale();
+            if (sc == null) throw new Exception("could not open the Scale Lens tool to convert units");
+            try
+            {
+                sc.ScaleByUnits = true;
+                sc.ScaleToUnit = ZOSAPI.Tools.General.ScaleToUnits.Millimeters;
+                sc.RunAndWaitForCompletion();
+            }
+            finally { sc.Close(); }
+            if (S.SystemData.Units.LensUnits != ZOSAPI.SystemData.ZemaxSystemUnits.Millimeters)
+                throw new Exception("could not convert the lens units to mm");
         }
 
         // Par1..Par8 of a surface (even-asphere terms on Even Asphere / Zernike Standard Sag).
@@ -1115,7 +1377,8 @@ namespace StartPointFinder
         }
 
         // Byte-identical files count once; so do files with the same lens data
-        // (same surfaces, glasses, aperture and field) saved with other settings.
+        // (same surfaces and glasses, same EFL, F/#, half field and object distance)
+        // saved with other settings.
         static void MarkDuplicates(List<Design> designs)
         {
             var seen = new Dictionary<string, string>();
@@ -1492,7 +1755,8 @@ namespace StartPointFinder
         // The "what job?" window (ribbon / interactive use): F/#, half field and EFL,
         // prefilled with the folder's medians and showing each min..max. Out-of-range
         // values are refused here unless "clamp" is ticked; a 2D-extrapolation pair asks
-        // "continue?". Cancel = exit 2. The answers go into Opts like command-line flags.
+        // "continue?". It also takes the optional Hammer time (same as -hammer SEC).
+        // Cancel = exit 2. The answers go into Opts like command-line flags.
         static void AskTargets(List<Design> group, Envelope env)
         {
             var form = new WF.Form
@@ -1511,7 +1775,7 @@ namespace StartPointFinder
                     Text = F("{0} designs share one layout. Type the job you want; leave a box as it is to use the folder's median.", group.Count),
                 });
                 // One row per number: name, box (prefilled), and the folder's range.
-                string[] names = { "F/# (image space)", "Half field of view (deg)", "Focal length EFL (lens units)" };
+                string[] names = { "F/# (image space)", "Half field of view (deg)", "Focal length EFL (mm)" };
                 double[][] spans = { env.Fno, env.Hfov, env.Efl };
                 double?[] given = { Opts.Fno, Opts.Fov, Opts.Efl };
                 var boxes = new WF.TextBox[3];
@@ -1539,8 +1803,19 @@ namespace StartPointFinder
                 start.Items.Add("blend of the inputs (closest count most)");
                 start.SelectedIndex = Opts.Start == "nearest" ? 1 : Opts.Start == "blend" ? 2 : 0;
                 form.Controls.Add(start);
+                // Optional Hammer polish, in whole seconds (0 = off). Prefilled from
+                // -hammer, so a command-line value shows up here and can be changed.
+                form.Controls.Add(new WF.Label { Left = 12, Top = 215, Width = 180, Text = "Hammer polish (seconds, 0 = off)" });
+                string hammerPrefill = Opts.HammerSec.ToString(CultureInfo.InvariantCulture);
+                var hammer = new WF.TextBox { Left = 196, Top = 212, Width = 90, Text = hammerPrefill };
+                form.Controls.Add(hammer);
+                form.Controls.Add(new WF.Label
+                {
+                    Left = 296, Top = 215, Width = 252,
+                    Text = F("polishes the {0} best passing lenses; 0 .. {1}", HammerKeep, HammerMax),
+                });
                 // The inputs' own pairs, so the user can see where designs exist.
-                var list = new WF.ListBox { Left = 12, Top = 214, Width = 536, Height = 150, Font = new Font(FontFamily.GenericMonospace, 8.5f) };
+                var list = new WF.ListBox { Left = 12, Top = 246, Width = 536, Height = 120, Font = new Font(FontFamily.GenericMonospace, 8.5f) };
                 foreach (var d in group.OrderBy(d => d.Fno).ThenBy(d => d.Hfov))
                     list.Items.Add(F("F/{0,-7} {1,7} deg  EFL {2,-9} {3}", G(d.Fno, 4), G(d.Hfov, 4), G(d.Efl, 5), d.Name));
                 form.Controls.Add(list);
@@ -1550,6 +1825,7 @@ namespace StartPointFinder
                 form.AcceptButton = ok; form.CancelButton = cancel;
 
                 var picked = new double[3];
+                int hammerSec = Opts.HammerSec;
                 ok.Click += (sender, e) =>
                 {
                     // Read each box; an untouched box means "exactly the median".
@@ -1558,8 +1834,9 @@ namespace StartPointFinder
                         string txt = boxes[i].Text.Trim();
                         double v;
                         if (txt == prefill[i]) v = given[i] ?? spans[i][1];
-                        else if (!double.TryParse(txt, NumberStyles.Float, CultureInfo.InvariantCulture, out v)
-                                 && !double.TryParse(txt, NumberStyles.Float, CultureInfo.CurrentCulture, out v))
+                        else if ((!double.TryParse(txt, NumberStyles.Float, CultureInfo.InvariantCulture, out v)
+                                  && !double.TryParse(txt, NumberStyles.Float, CultureInfo.CurrentCulture, out v))
+                                 || !IsFinite(v))  // "NaN" and "Infinity" parse, but are not numbers we can use
                         {
                             WF.MessageBox.Show(form, names[i] + ": '" + txt + "' is not a number.", Tool);
                             return;
@@ -1574,6 +1851,20 @@ namespace StartPointFinder
                         picked[i] = Math.Min(Math.Max(v, spans[i][0]), spans[i][2]);
                     }
                     if (picked[0] <= 0 || picked[2] <= 0) { WF.MessageBox.Show(form, "F/# and EFL must be positive.", Tool); return; }
+                    // Hammer box: an untouched box keeps the -hammer value as given (already
+                    // checked); anything typed must be a whole number of seconds from 0 to the cap.
+                    string hTxt = hammer.Text.Trim();
+                    if (hTxt != hammerPrefill)
+                    {
+                        int h;
+                        if (!int.TryParse(hTxt, NumberStyles.Integer, CultureInfo.InvariantCulture, out h) || h < 0 || h > HammerMax)
+                        {
+                            WF.MessageBox.Show(form, F("Hammer polish: '{0}' is not a whole number of seconds from 0 to {1} (0 = off).",
+                                hTxt, HammerMax), Tool);
+                            return;
+                        }
+                        hammerSec = h;
+                    }
                     // 2D check: each value may be in range while the pair is not.
                     var pc = PairCheck(group, picked[0], picked[1]);
                     if (pc.Warn && WF.MessageBox.Show(form, pc.Text + "\n\nNo input was made for this F/# + field combination, "
@@ -1581,12 +1872,13 @@ namespace StartPointFinder
                         return;
                     form.DialogResult = WF.DialogResult.OK;
                 };
-                if (form.ShowDialog() != WF.DialogResult.OK) throw new ToolExitException(2, "cancelled in the F/# and field window");
+                if (form.ShowDialog() != WF.DialogResult.OK) throw new ToolExitException(2, "cancelled in the F/# and field window", true);
                 Opts.Fno = picked[0]; Opts.Fov = picked[1]; Opts.Efl = picked[2];
                 Opts.Clamp = clamp.Checked;
                 Opts.Start = start.SelectedIndex == 1 ? "nearest" : start.SelectedIndex == 2 ? "blend" : "best";
-                Say(F("Window: F/{0}  half-FOV {1} deg  EFL {2}  start {3}{4}", G(picked[0]), G(picked[1]), G(picked[2]),
-                    Opts.Start, Opts.Clamp ? "  (clamp on)" : ""));
+                Opts.HammerSec = hammerSec;  // same path as -hammer SEC from here on
+                Say(F("Window: F/{0}  half-FOV {1} deg  EFL {2}  start {3}{4}{5}", G(picked[0]), G(picked[1]), G(picked[2]),
+                    Opts.Start, Opts.Clamp ? "  (clamp on)" : "", Opts.HammerSec > 0 ? F("  hammer {0} s", Opts.HammerSec) : ""));
             }
         }
 
@@ -1602,6 +1894,9 @@ namespace StartPointFinder
                     (d.Surfs[i].Glass.Length > 0 ? glass : air).Add(d.Surfs[i].Thick / d.Efl);
                 bfl.Add(d.Surfs[d.Surfs.Count - 1].Thick / d.Efl);
             }
+            // A layout with no glass at all (e.g. only Paraxial surfaces) has no glass fence:
+            // use a wide one rather than failing on an empty list.
+            if (glass.Count == 0) glass.AddRange(new[] { 0.01, 0.5 });
             return new Bounds
             {
                 GlassMin = 0.8 * glass.Min(),
@@ -1692,6 +1987,9 @@ namespace StartPointFinder
         {
             S.New(false);
             var sd = S.SystemData;
+            // Say mm out loud: a new lens takes the user's default units, which could be inches.
+            sd.Units.LensUnits = ZOSAPI.SystemData.ZemaxSystemUnits.Millimeters;
+            SameSettings(S, t);
             sd.Aperture.ApertureType = ZOSAPI.SystemData.ZemaxApertureType.EntrancePupilDiameter;
             sd.Aperture.ApertureValue = t.Efl / t.Fno;
             sd.Fields.SetFieldType(ZOSAPI.SystemData.FieldType.Angle);
@@ -1748,6 +2046,7 @@ namespace StartPointFinder
         {
             if (!S.LoadFile(d.Path, false)) throw new Exception("could not reload " + d.Name);
             try { if (S.MCE.NumberOfConfigurations > 1) S.MCE.MakeSingleConfiguration(); } catch { }
+            if (S.SystemData.Units.LensUnits != ZOSAPI.SystemData.ZemaxSystemUnits.Millimeters) ToMillimeters(S);  // d.Efl is in mm
             try { S.Tools.RemoveAllVariables(); } catch { }
             try { S.MFE.DeleteAllRows(); } catch { }
             ScaleBy(S, t.Efl / d.Efl);
@@ -1800,6 +2099,25 @@ namespace StartPointFinder
             try { f.ClearVignetting(); } catch { }
             sd.Wavelengths.SelectWavelengthPreset(ZOSAPI.SystemData.WavelengthPreset.FdC_Visible);
             if (IsFinite(t.Obj)) S.LDE.GetSurfaceAt(0).Thickness = t.Obj;
+            SameSettings(S, t);
+        }
+
+        // The same system settings for every candidate, whether it was built from numbers
+        // or rebuilt from its own file, so their scores compare fairly: ray aiming off,
+        // an evenly lit pupil (no apodization), and 20 C / 1 atm with the glass
+        // index not adjusted for temperature (OpticStudio's defaults for a new lens).
+        static void SameSettings(ZOSAPI.IOpticalSystem S, Target t)
+        {
+            var sd = S.SystemData;
+            try { sd.RayAiming.RayAiming = ZOSAPI.SystemData.RayAimingMethod.Off; } catch { }
+            try { sd.Aperture.ApodizationType = ZOSAPI.SystemData.ZemaxApodizationType.Uniform; } catch { }
+            try
+            {
+                sd.Environment.AdjustIndexToEnvironment = false;
+                sd.Environment.Temperature = 20.0;
+                sd.Environment.Pressure = 1.0;
+            }
+            catch { }
         }
 
         // Put the image where the paraxial edge ray crosses the axis, then freeze that number.
@@ -1836,11 +2154,16 @@ namespace StartPointFinder
         // Merit function ("report card") + optimization
         // ---------------------------------------------------------------
 
-        // The report card: OpticStudio default RMS spot (centroid, Gaussian quadrature)
-        // with glass/air thickness fences taken from the inputs, plus
-        //   EFFL = target focal length (keeps the size right),
-        //   TOTR between the shortest and longest input track (scaled),
-        //   ISFN shown with weight 0 (F/# is held by fixed pupil + fixed EFL).
+        // The report card ("merit function": one number, smaller = better lens):
+        // OpticStudio's default RMS spot size (how wide the blur dot is, measured
+        // around its own center = "centroid", with rays placed on a smart pattern of
+        // rings and arms = "Gaussian quadrature"), with glass/air thickness fences
+        // taken from the inputs, plus
+        //   EFFL = focal length must equal the target (keeps the size right),
+        //   TOTR = total track (lens length); OPLT / OPGT = "keep it less than / greater
+        //          than", so the track stays between the shortest and longest input (scaled),
+        //   ISFN = image F/#, shown with weight 0 (only displayed: the F/# is already
+        //          held by the fixed pupil size plus the fixed EFL).
         static void BuildMerit(ZOSAPI.IOpticalSystem S, Target t, Envelope env, Bounds b)
         {
             var mfe = S.MFE;
@@ -2163,16 +2486,20 @@ namespace StartPointFinder
             {
                 mfe.AddOperand();
                 int row = mfe.NumberOfOperands;
-                var o = mfe.GetOperandAt(row);
-                o.ChangeType(ZOSAPI.Editors.MFE.MeritOperandType.REAY);
-                o.GetOperandCell(ZOSAPI.Editors.MFE.MeritColumn.Param1).IntegerValue = img;
-                o.GetOperandCell(ZOSAPI.Editors.MFE.MeritColumn.Param2).IntegerValue = wave;
-                o.GetOperandCell(ZOSAPI.Editors.MFE.MeritColumn.Param4).DoubleValue = r[0];
-                o.GetOperandCell(ZOSAPI.Editors.MFE.MeritColumn.Param5).DoubleValue = r[1];
-                o.GetOperandCell(ZOSAPI.Editors.MFE.MeritColumn.Param6).DoubleValue = r[2];
-                o.Weight = 0.0;
-                double m = Merit(S);
-                mfe.RemoveOperandAt(row);
+                double m;
+                try
+                {
+                    var o = mfe.GetOperandAt(row);
+                    o.ChangeType(ZOSAPI.Editors.MFE.MeritOperandType.REAY);
+                    o.GetOperandCell(ZOSAPI.Editors.MFE.MeritColumn.Param1).IntegerValue = img;
+                    o.GetOperandCell(ZOSAPI.Editors.MFE.MeritColumn.Param2).IntegerValue = wave;
+                    o.GetOperandCell(ZOSAPI.Editors.MFE.MeritColumn.Param4).DoubleValue = r[0];
+                    o.GetOperandCell(ZOSAPI.Editors.MFE.MeritColumn.Param5).DoubleValue = r[1];
+                    o.GetOperandCell(ZOSAPI.Editors.MFE.MeritColumn.Param6).DoubleValue = r[2];
+                    o.Weight = 0.0;
+                    m = Merit(S);
+                }
+                finally { mfe.RemoveOperandAt(row); }  // the temporary row never stays, even after an error
                 if (!(IsFinite(m) && m < 1e8)) failed.Add(F("Hy {0} P({1}, {2})", G(r[0]), G(r[1]), G(r[2])));
             }
             Merit(S);  // recompute with the original rows only
@@ -2192,12 +2519,33 @@ namespace StartPointFinder
         static string Csv(string s)
         {
             if (string.IsNullOrEmpty(s)) return "";
-            return s.IndexOfAny(new[] { ',', '"', '\n' }) >= 0 ? "\"" + s.Replace("\"", "\"\"") + "\"" : s;
+            return s.IndexOfAny(new[] { ',', '"', '\n', '\r' }) >= 0 ? "\"" + s.Replace("\"", "\"\"") + "\"" : s;
         }
 
         // JSON helpers: numbers (NaN becomes null) and quoted text.
         static string J(double x) => IsFinite(x) ? x.ToString("R", CultureInfo.InvariantCulture) : "null";
-        static string Js(string s) => "\"" + (s ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+        // Every character JSON forbids inside quotes is escaped (error texts can carry
+        // line breaks or tabs; a raw one would make the whole file unreadable).
+        static string Js(string s)
+        {
+            var sb = new StringBuilder("\"");
+            foreach (char ch in s ?? "")
+            {
+                switch (ch)
+                {
+                    case '\\': sb.Append("\\\\"); break;
+                    case '"': sb.Append("\\\""); break;
+                    case '\n': sb.Append("\\n"); break;
+                    case '\r': sb.Append("\\r"); break;
+                    case '\t': sb.Append("\\t"); break;
+                    default:
+                        if (ch < 0x20) sb.Append("\\u").Append(((int)ch).ToString("x4", CultureInfo.InvariantCulture));
+                        else sb.Append(ch);
+                        break;
+                }
+            }
+            return sb.Append('"').ToString();
+        }
 
         // Write the first-order CSV (inputs vs result) and a small JSON summary.
         static void WriteTables(Dictionary<string, string> outs, List<Design> designs, Envelope env, Target t,
@@ -2247,7 +2595,7 @@ namespace StartPointFinder
                 js.Append("    {\"name\": " + Js(d.Name) + ", \"kept\": " + (d.Ok ? "true" : "false")
                     + ", \"reason\": " + Js(d.Reason) + ", \"skip_category\": " + Js(d.Cat) + ", \"signature\": " + Js(d.Signature)
                     + ", \"efl\": " + J(d.Efl) + ", \"fno\": " + J(d.Fno) + ", \"hfov_deg\": " + J(d.Hfov)
-                    + ", \"track\": " + J(d.Track) + ", \"object_distance\": " + J(d.ObjDist)
+                    + ", \"track\": " + J(d.Track) + ", \"object_distance\": " + J(d.ObjDist) + ", \"lens_units\": " + Js(d.Units)
                     + ", \"surfaces\": " + Js(d.SpecialNote) + ", \"blend_member\": " + (d.Ok && d.BlendMember ? "true" : "false")
                     + ", \"on_axis\": " + (d.Ok && d.OnAxis ? "true" : "false")
                     + ", \"weight\": " + J(d.BlendWeight) + ", \"dist_norm\": " + J(d.Dist)
@@ -2309,7 +2657,9 @@ namespace StartPointFinder
         static string ObjCsv(double v) => IsFinite(v) ? G(v, 8) : "inf";
 
         // Draw a side view (Y-Z) of the result: each surface as a curve, glass edges,
-        // and a fan of real rays per field (REAY/REAZ heights, placed with GLCZ).
+        // and a fan of real rays per field. REAY / REAZ = where a real ray hits a surface
+        // (height / along the axis, local to that surface); GLCZ = where that surface sits
+        // along the axis, so the pieces line up in one picture.
         // OpticStudio's API cannot save its own layout window as a picture, so we draw it.
         static void DrawLayoutPng(ZOSAPI.IOpticalSystem S, string path, Target t, double mf, string startLabel)
         {

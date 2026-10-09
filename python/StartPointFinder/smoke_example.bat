@@ -6,11 +6,14 @@ REM scored at the request, the 3 best-scored starts are optimized, and the lowes
 REM merit that passes the checks wins). Pass nearest or blend to force one.
 REM Optional 6th argument: layout fingerprint to use instead of the biggest group.
 REM Extra flags go in the EXTRA variable, e.g. set EXTRA=-top all   or   set EXTRA=-hammer 20
+REM It always passes -force: a smoke replaces its own earlier output in out_dir.
+REM out_dir must not be the sample folder itself (that is refused).
 setlocal
 if "%PY%"=="" set PY=python
 if "%ZEMAX_ROOT%"=="" set ZEMAX_ROOT=C:\Program Files\Ansys Zemax OpticStudio 2026 R1.01
 if "%~1"=="" (
-  echo Usage: smoke_example.bat path\to\folder_of_copied_samples [out_dir] [fno] [hfov_deg] [best|nearest|blend] [layout]
+  echo Usage: smoke_example.bat path\to\folder_of_copied_samples [out_dir] [fno] [hfov_deg] [best^|nearest^|blend] [layout]
+  echo        set EXTRA=... first for more flags, e.g. set EXTRA=-hammer 20
   exit /b 2
 )
 set OUT=%~2

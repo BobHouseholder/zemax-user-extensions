@@ -265,17 +265,21 @@ each optimized lens gets the same checks as the final result (focal length,
 F/#, field, track, glass and edge thickness, rays through every surface,
 pupil-edge rays at every field, defined sag), and the lowest merit among those
 that pass wins; the screen ranking and all optimized candidates are printed
-with the runtime. Optional `-hammer SEC` polishes the 3 best passing lenses
+with the runtime. Optional `-hammer SEC` (or the window's Hammer box) polishes the 3 best passing lenses
 (wall-time limited, so results vary slightly by PC) and keeps the best. `-start
 nearest|blend` forces one. Distances use the folder's own F/# and field
 spread; for a field request, on-axis-only inputs get a distance penalty and stay out of the blend. Even Asphere / Zernike /
 Paraxial designs are candidates (rebuilt from their own file, asphere terms
 fixed) but never blended. Skips duplicates, glass that does not resolve (names
-the missing catalog), unphysical files, other surface types, mirrors, NSC and
-mismatched layouts or object distances, with a count per reason; `-layout`
-picks another family. Inputs are never written; outputs go to
-`<folder>\_StartPointFinder\` (`-force` to replace). From the ribbon it
-offers to open the result in the main window (default No).
+the missing catalog), unphysical files, other surface types, mirrors, NSC,
+zoom (multi-configuration) files and mismatched layouts or object distances,
+with a count per reason; `-layout` picks another family. Inch / cm / m files are
+converted to mm in memory. Every candidate is scored, and the result saved,
+with ray aiming off (the report says how many inputs use it). Inputs are never written; outputs go to
+`<folder>\_StartPointFinder\` (an earlier result is replaced only with
+`-force`; from the ribbon it asks Replace / New folder / Cancel). From the
+ribbon every error or refusal pops up a message, and at the end it offers to
+open the result in the main window (default No).
 
 Options: `-dir <folder>` (else folder picker), `-out <dir>`, `-fno`, `-hfov`, `-efl`,
 `-clamp`, `-start best|nearest|blend`, `-layout <fingerprint>`, `-weight near|soft|equal`,

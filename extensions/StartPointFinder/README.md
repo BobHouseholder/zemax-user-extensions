@@ -52,9 +52,16 @@ Anything else in the folder is skipped with a reason (see "What gets skipped").
      resolve: catalog PLASTICPREFERRED is not installed"*.
    - Absurd first-order data (EFL >= 1e6, F/# outside 0.05..1000, non-finite
      track) is refused as "first-order data is not physical".
+   - **Units**: a file in inches, cm or m is converted to mm in memory
+     (OpticStudio's Scale Lens "by units"; the file is not changed) and the
+     report says so. Every number, `-efl`, the window and all outputs are in mm.
+   - **Zoom / multi-configuration** files (more than one configuration) are
+     skipped: only one zoom position would be seen.
+   - Earlier `StartPointFinder_*.zmx` outputs lying in the folder are ignored
+     (they are results, not inputs).
    - **Duplicates**: byte-identical files (SHA-256) count once; so do files
-     with the same lens data (same surfaces, glasses, aperture and field at 9
-     significant digits) saved with other settings. Each skipped copy names the
+     with the same lens data (same surfaces and glasses, same EFL, F/#, half
+     field and object distance at 9 significant digits) saved with other settings. Each skipped copy names the
      file it duplicates.
 2. **Group** by layout fingerprint (surface count + stop surface + glass/air
    pattern, for a Double Gauss `13surf/stop6/GAGGAAGGAGA`) **and object
@@ -72,8 +79,10 @@ Anything else in the folder is skipped with a reason (see "What gets skipped").
    given is the folder's median. From the ribbon (or with `-ask`) a small
    window opens after the folder is read, prefilled with the medians and
    showing each min..max plus every input's (F/#, field) pair; it also offers
-   Clamp and "start from best (default) / nearest / blend". `-nodialog` never
-   opens it.
+   Clamp, "start from best (default) / nearest / blend" and a **Hammer polish
+   (seconds, 0 = off)** box, prefilled from `-hammer` (whole seconds, 0 to 600,
+   the same limit as `-hammer`; same effect as `-hammer SEC`). `-nodialog`
+   never opens it.
    - A value outside min..max is **refused** (exit 2), or clamped to the
      nearest edge with `-clamp` (or the window's Clamp box). Round-off slack is
      1e-5 relative, so `-fno 1` is inside a range that starts at 0.9999995.
@@ -155,10 +164,11 @@ Anything else in the folder is skipped with a reason (see "What gets skipped").
    polished lens again and keeps the best. A polished lens that fails the
    checks is not used if its DLS version passed. **Hammer stops on wall time,
    so results vary slightly from PC to PC** (CPU speed and core count) and
-   between runs; without `-hammer` the result is repeatable. In testing a
-   20 s Hammer on the top 3 lowered the merit by 25 to 37% on the Double Gauss
-   set (about 60 s more). The gain depends on the folder (some gain
-   nothing) and the result on the PC, so it stays off by default.
+   between runs; without `-hammer` the result is repeatable. In testing on the
+   Double Gauss set, a 20 s Hammer on the top 3 lowered the final merit by
+   about 25 to 35% (about 60 s more); per lens the gain ranged from about 1%
+   to 35%, and it can change which start wins. The gain depends on the folder
+   (some gain nothing) and the result on the PC, so it stays off by default.
 9. **Validate** the result and write files. The check passes only if EFL and
    F/# are within 1% of target, the field equals the target, track/EFL is
    inside the input range (2% slack), the thinnest glass center is at least 95%
@@ -179,8 +189,19 @@ Anything else in the folder is skipped with a reason (see "What gets skipped").
 
 ## Outputs
 
-Written to `-out <dir>` (default `<folder>\_StartPointFinder\`). Existing outputs
-are refused unless `-force`; an output path equal to an input is always refused.
+Written to `-out <dir>` (default `<folder>\_StartPointFinder\`). `-out` equal to
+the input folder is refused (the results would be read as inputs next time),
+and an output path equal to an input is always refused.
+
+**An earlier result** (`StartPointFinder_result.zmx`) in the output folder is only
+replaced with `-force`. From the ribbon (or with `-ask`) a window asks instead:
+**Replace** / **New folder** (`_StartPointFinder_2`, `_3`, ...; Enter picks this
+one) / **Cancel**. Whenever a run goes ahead, the old output files of that
+folder (the six names below and any temp lenses) are cleared first, so a folder
+never mixes files from two runs. A run that stops with an error or a refusal
+deletes the result/start it had written (the report stays), so it never blocks
+the next run; leftovers without a result (e.g. the report of a refused run)
+never block either.
 
 | File | Contents |
 |------|----------|
@@ -206,6 +227,7 @@ Each skip has a reason and a category; the categories are counted in the
   missing catalog is named)
 - Unphysical first-order data; EFL not positive
 - Field types other than angle / image height / object height with a finite object
+- Zoom / multi-configuration files; files with no lens surfaces
 - Duplicate files and duplicate prescriptions
 - A layout fingerprint or object distance that does not match the kept group
 
@@ -216,26 +238,32 @@ Each skip has a reason and a category; the categories are counted in the
 | `-dir <folder>` | Folder of starting designs. Without it a folder picker opens |
 | `-out <dir>` | Output folder (default `<folder>\_StartPointFinder`) |
 | `-fno N` / `-hfov DEG` | Requested F/# and half field (degrees; `-fov` is the old name). Default: median of inputs |
-| `-efl F` | Requested EFL (optional, default median) |
+| `-efl F` | Requested EFL in mm (optional, default median) |
 | `-clamp` | Clamp out-of-envelope values instead of refusing |
 | `-start best\|nearest\|blend` | Keep the best candidate (default), the nearest input, or the blend |
 | `-layout <fingerprint>` | Use this layout group instead of the biggest (e.g. `13surf/stop6/GAGGAAGGAGA`) |
 | `-weight near\|soft\|equal` | Closeness weights for the blend (default `near`) |
 | `-ask` | Open the F/# and field window even with `-dir` |
 | `-glass nearest\|majority` | Glass pick per position in the blend (default `nearest`) |
-| `-passes K` | Automatic DLS runs per candidate (default 3) |
-| `-hammer SEC` | Optional Hammer time per lens, on the 3 best optimized lenses that pass the checks (default 0 = off). Stops on wall time, so results vary slightly by PC |
-| `-top N\|all` | `-start best`: optimize only the `N` best-screened starts (default 3); `all` = every start |
+| `-passes K` | Automatic DLS runs per candidate (whole number 1..100, default 3) |
+| `-hammer SEC` | Optional Hammer time per lens, on the 3 best optimized lenses that pass the checks (whole seconds 0..600, default 0 = off; also settable in the F/# window). Stops on wall time, so results vary slightly by PC |
+| `-top N\|all` | `-start best`: optimize only the `N` best-screened starts (whole number, default 3); `all` = every start |
 | `-compare reopt\|refocus\|none` | How inputs are scored at the target (default `reopt` = every input is a candidate) |
 | `-min N` | Minimum usable designs in the group (default 2, never below 2) |
-| `-force` | Replace existing outputs |
+| `-force` | Replace an earlier result without asking |
 | `-nopng` | Skip the layout picture |
 | `-nodialog` | Never open the folder picker, the F/# window or the "open result?" prompt |
 | `-quiet` | No PNG auto-open and no "open result?" prompt after a ribbon run |
 
-Exit codes: **0** ok, **1** error, **2** refused (no/bad folder, too few
-usable designs, unknown `-layout`, target outside envelope, outputs exist),
-**3** result written but it failed the envelope check.
+Numbers must be normal numbers (`NaN`, `Infinity` are refused); `-passes`,
+`-hammer`, `-top` and `-min` must be whole numbers in their range (`2.9` is
+refused, not cut to 2).
+
+Exit codes: **0** ok, **1** error (including "no candidate start could be built
+and optimized"), **2** refused or cancelled (no/bad folder, too few usable
+designs, unknown `-layout`, target outside envelope, a result exists without
+`-force`, `-out` = input folder, Cancel), **3** result written but it failed
+the envelope check.
 
 ## Ribbon vs command line
 
@@ -244,7 +272,14 @@ usable designs, unknown `-layout`, target outside envelope, outputs exist),
 - No `-dir` (ribbon): opens a folder picker, then the F/# and field window
   (Cancel = exit 2), attaches to the running OpticStudio and does all work in
   a **new extra system** (`CreateNewSystem`), so the lens you have open is not
-  touched. If attach fails it falls back to standalone.
+  touched. At the end only that system is closed (found by its ID; if it cannot
+  be found, nothing is closed). If attach fails it says why and falls back to
+  standalone.
+- From the ribbon there is no console to read, so **every error or refusal
+  also pops up a message** (with the report path when one was written); a
+  result that failed the final check pops up a warning. Pressing Cancel
+  yourself shows nothing. A folder with more than 200 `.zmx` files asks before
+  reading (the console warns with `-dir`).
 - At the end of a ribbon run the PNG opens (explorer fallback) and a prompt
   asks **"Open the result in the main OpticStudio window now?"** (default
   **No**; it warns when the open lens has unsaved changes). Yes loads
@@ -270,7 +305,11 @@ usable designs, unknown `-layout`, target outside envelope, outputs exist),
 - The distance scales come from the folder's own spread; they do not know how
   hard a given F/# + field combination is for the layout.
 - Wavelengths are not taken from the inputs: everything is evaluated at F d C
-  (visible), for every candidate.
+  (visible), for every candidate. Every candidate also gets the same system
+  settings: **ray aiming off**, no apodization, 20 C / 1 atm without index
+  adjustment, and the result is saved that way. If your inputs use ray aiming
+  (the report says how many do), turn it back on in OpticStudio and
+  re-optimize the result before trusting it at wide field.
 - Asphere terms of own-file starts are not optimized; vignetting factors are
   cleared; Zernike terms are not included in the edge checks or the picture.
 - `-layout` selects a fingerprint; when one fingerprint has designs at two
